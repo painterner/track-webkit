@@ -1,114 +1,185 @@
-project (WebKit)
+cmake_minimum_required(VERSION 2.8.8)
+project(WebKit)
 
-# Qt support is always enabled!
-add_definitions (-DBUILDING_QT__=1)
+# -----------------------------------------------------------------------------
+# Default library type
+# -----------------------------------------------------------------------------
+set(BMALLOC_DIR "${CMAKE_SOURCE_DIR}/Source/bmalloc")
+set(WTF_DIR "${CMAKE_SOURCE_DIR}/Source/WTF")
+set(JAVASCRIPTCORE_DIR "${CMAKE_SOURCE_DIR}/Source/JavaScriptCore")
+set(WEBCORE_DIR "${CMAKE_SOURCE_DIR}/Source/WebCore")
+set(WEBKIT_DIR "${CMAKE_SOURCE_DIR}/Source/WebKit")
+set(WEBKIT2_DIR "${CMAKE_SOURCE_DIR}/Source/WebKit2")
+set(THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/Source/ThirdParty")
 
-# Global switch for KDE support
-OPTION (WEBKIT_USE_KDE_SUPPORT "Compile WebKit with KDE support." ON)
+set(TOOLS_DIR "${CMAKE_SOURCE_DIR}/Tools")
 
-IF (WEBKIT_USE_KDE_SUPPORT)
-    add_definitions (-DBUILDING_KDE__=1)
-ENDIF (WEBKIT_USE_KDE_SUPPORT)
+set(DERIVED_SOURCES_DIR "${CMAKE_BINARY_DIR}/DerivedSources")
+set(DERIVED_SOURCES_JAVASCRIPTCORE_DIR "${CMAKE_BINARY_DIR}/DerivedSources/JavaScriptCore")
+set(DERIVED_SOURCES_WEBCORE_DIR "${CMAKE_BINARY_DIR}/DerivedSources/WebCore")
+set(DERIVED_SOURCES_WEBKITLEGACY_DIR "${CMAKE_BINARY_DIR}/DerivedSources/WebKitLegacy")
+set(DERIVED_SOURCES_WEBKIT2_DIR "${CMAKE_BINARY_DIR}/DerivedSources/WebKit2")
+set(DERIVED_SOURCES_WEBINSPECTORUI_DIR "${CMAKE_BINARY_DIR}/DerivedSources/WebInspectorUI")
+set(DERIVED_SOURCES_WTF_DIR "${CMAKE_BINARY_DIR}/DerivedSources/WTF")
 
-# Global switch for SVG support
-OPTION (WEBKIT_USE_SVG_SUPPORT "Compile WebKit with SVG support." ON)
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/Source/cmake")
 
-IF (WEBKIT_USE_SVG_SUPPORT)
-    add_definitions (-DSVG_SUPPORT=1)
-ENDIF (WEBKIT_USE_SVG_SUPPORT)
+if (NOT DEFINED ENABLE_WEBKIT)
+    set(ENABLE_WEBKIT ON)
+endif ()
 
-# Global switch for XPath support
-OPTION (WEBKIT_USE_XPATH_SUPPORT "Compile WebKit with XPath support." ON)
+if (NOT DEFINED ENABLE_TOOLS AND EXISTS ${TOOLS_DIR})
+    set(ENABLE_TOOLS ON)
+endif ()
 
-IF (WEBKIT_USE_XPATH_SUPPORT)
-    add_definitions (-DXPATH_SUPPORT=1)
-ENDIF (WEBKIT_USE_XPATH_SUPPORT)
+include(WebKitMacros)
+include(WebKitFS)
+include(WebKitHelpers)
+include(WebKitFeatures)
 
-# Global switch for XSLT support
-OPTION (WEBKIT_USE_XSLT_SUPPORT "Compile WebKit with XSLT support." ON)
+# -----------------------------------------------------------------------------
+# Determine which port will be built
+# -----------------------------------------------------------------------------
+set(ALL_PORTS Efl GTK AppleWin WinCairo Mac)
+set(PORT "NOPORT" CACHE STRING "choose which WebKit port to build (one of ${ALL_PORTS})")
 
-IF (WEBKIT_USE_XSLT_SUPPORT)
-    add_definitions (-DXSLT_SUPPORT=1)
-ENDIF (WEBKIT_USE_XSLT_SUPPORT)
+list(FIND ALL_PORTS ${PORT} RET)
+if (${RET} EQUAL -1)
+    message(FATAL_ERROR "Please choose which WebKit port to build (one of ${ALL_PORTS})")
+endif ()
 
-# Global switch for XBL support
-OPTION (WEBKIT_USE_XBL_SUPPORT "Compile WebKit with XBL support." OFF)
+string(TOLOWER ${PORT} WEBKIT_PORT_DIR)
 
-IF (WEBKIT_USE_XBL_SUPPORT)
-    add_definitions (-DXBL_SUPPORT=1)
-ENDIF (WEBKIT_USE_XBL_SUPPORT)
+# -----------------------------------------------------------------------------
+# Find common packages (used by all ports)
+# -----------------------------------------------------------------------------
+find_package(BISON 2.3 REQUIRED)
+if (!APPLE)
+    find_package(FLEX 2.5.34 REQUIRED)
+endif ()
 
-# search packages used by KDE
-IF (WEBKIT_USE_KDE_SUPPORT)
-    find_package (KDE4 REQUIRED)
-    include (KDE4Defaults)
-    include (MacroLibrary)
+# TODO Enforce version requirement for gperf
+find_package(Gperf 3.0.1 REQUIRED)
 
-    # use the KDE modules for finding these
-    find_package (LibXml2 REQUIRED)
-    find_package (LibXslt REQUIRED)
+# TODO Enforce version requirement for perl
+find_package(Perl 5.10.0 REQUIRED)
 
-ELSE (WEBKIT_USE_KDE_SUPPORT)
-    INCLUDE(UsePkgConfig)
+find_package(PythonInterp 2.7.0 REQUIRED)
+find_package(Ruby 1.8.7)
 
-    PKGCONFIG(libxml-2.0 _LibXml2IncDir _LibXml2LinkDir _LibXml2LinkFlags _LibXml2CFlags)
-    SET(LIBXML2_LIBRARIES ${_LibXml2LinkFlags})
-    # I'd like to use the output of --cflags directly but cmake craps out on it ;(
-    SET(LIBXML2_INCLUDE_DIR ${_LibXml2IncDir}/libxml2)
+# -----------------------------------------------------------------------------
+# Determine the target processor
+# -----------------------------------------------------------------------------
+# Use MSVC_CXX_ARCHITECTURE_ID instead of CMAKE_SYSTEM_PROCESSOR when defined,
+# since the later one just resolves to the host processor on Windows.
+if (MSVC_CXX_ARCHITECTURE_ID)
+    string(TOLOWER ${MSVC_CXX_ARCHITECTURE_ID} LOWERCASE_CMAKE_SYSTEM_PROCESSOR)
+else ()
+    string(TOLOWER ${CMAKE_SYSTEM_PROCESSOR} LOWERCASE_CMAKE_SYSTEM_PROCESSOR)
+endif ()
+if (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
+    set(WTF_CPU_ARM 1)
+elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "^aarch64")
+    set(WTF_CPU_ARM64 1)
+elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "^mips")
+    set(WTF_CPU_MIPS 1)
+elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "sh4")
+    set(WTF_CPU_SH4 1)
+elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "(x64|x86_64|amd64)")
+    set(WTF_CPU_X86_64 1)
+elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "(i[3-6]86|x86)")
+    set(WTF_CPU_X86 1)
+elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "ppc")
+    set(WTF_CPU_PPC 1)
+elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64")
+    set(WTF_CPU_PPC64 1)
+elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64le")
+    set(WTF_CPU_PPC64LE 1)
+elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "parisc*")
+    set(WTF_CPU_HPPA 1)
+elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "s390")
+    set(WTF_CPU_S390 1)
+elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "s390x")
+    set(WTF_CPU_S390X 1)
+else ()
+    message(FATAL_ERROR "Unknown CPU '${LOWERCASE_CMAKE_SYSTEM_PROCESSOR}'")
+endif ()
 
-    PKGCONFIG(libxslt _LibXslt2IncDir _LibXslt2LinkDir _LibXslt2LinkFlags _LibXslt2CFlags)
-    SET(LIBXSLT_LIBRARIES ${_LibXslt2LinkFlags})
-    SET(LIBXSLT_INCLUDE_DIR ${_LibXslt2IncDir})
+# -----------------------------------------------------------------------------
+# Determine the operating system
+# -----------------------------------------------------------------------------
+if (UNIX)
+    if (APPLE)
+        set(WTF_OS_MAC_OS_X 1)
+    else ()
+        set(WTF_OS_UNIX 1)
+    endif ()
+elseif (CMAKE_SYSTEM_NAME MATCHES "Windows")
+    set(WTF_OS_WINDOWS 1)
+else ()
+    message(FATAL_ERROR "Unknown OS '${CMAKE_SYSTEM_NAME}'")
+endif ()
 
-    include(CheckLibraryExists)
-    include(FindQt4)
-ENDIF (WEBKIT_USE_KDE_SUPPORT)
+# -----------------------------------------------------------------------------
+# Default library types
+# -----------------------------------------------------------------------------
+option(SHARED_CORE "build JavaScriptCore and WebCore as shared libraries")
 
-# Special option for BuildBot, to disable output colorization (must be done after KDE4Defaults is loaded)
-OPTION (WEBKIT_DO_NOT_USE_COLORFUL_OUTPUT "Do not colorize compilation output." OFF)
+if (SHARED_CORE)
+    set(JavaScriptCore_LIBRARY_TYPE SHARED)
+    set(WebCore_LIBRARY_TYPE SHARED)
+else ()
+    set(JavaScriptCore_LIBRARY_TYPE SHARED)
+    set(WebCore_LIBRARY_TYPE STATIC)
+endif ()
 
-IF (WEBKIT_DO_NOT_USE_COLORFUL_OUTPUT)
-    set(CMAKE_COLOR_MAKEFILE OFF)
-ENDIF (WEBKIT_DO_NOT_USE_COLORFUL_OUTPUT)
+set(WebKit_LIBRARY_TYPE SHARED)
+set(WebKit2_LIBRARY_TYPE SHARED)
+set(WebCoreTestSupport_LIBRARY_TYPE STATIC)
 
-find_package (JPEG REQUIRED)
-find_package (PNG REQUIRED)
+# -----------------------------------------------------------------------------
+# Install JavaScript shell
+# -----------------------------------------------------------------------------
+option(SHOULD_INSTALL_JS_SHELL "generate an installation rule to install the built JavaScript shell")
 
-find_program (BISON_EXECUTABLE bison)
-find_program (GPERF_EXECUTABLE gperf)
+# -----------------------------------------------------------------------------
+# Common options
+#------------------------------------------------------------------------------
+include(OptionsCommon)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-# quick check the libicu is available
-find_path(LIBICU_INCLUDE_DIR unicode/umachine.h )
+# -----------------------------------------------------------------------------
+# Port-specific options
+# -----------------------------------------------------------------------------
+include(Options${PORT})
 
-if (NOT BISON_EXECUTABLE)
-   message(FATAL_ERROR "Could not find bison")
-endif (NOT BISON_EXECUTABLE)
+# -----------------------------------------------------------------------------
+# Enable API unit tests and create a target for the test runner
+# -----------------------------------------------------------------------------
+if (ENABLE_API_TESTS)
+    enable_testing()
+endif ()
 
-if (NOT GPERF_EXECUTABLE)
-   message(FATAL_ERROR "Could not find gperf")
-endif (NOT GPERF_EXECUTABLE)
+# -----------------------------------------------------------------------------
+# Define packaging
+# -----------------------------------------------------------------------------
+include(WebKitPackaging)
 
-if (NOT LIBICU_INCLUDE_DIR)
-   message(FATAL_ERROR "libicu not found, cannot create unity without it")
-endif (NOT LIBICU_INCLUDE_DIR)
+# -----------------------------------------------------------------------------
+# Add module directories
+# -----------------------------------------------------------------------------
+add_subdirectory(Source)
 
-add_definitions (${QT_DEFINITIONS} ${KDE4_DEFINITIONS} -DQT3_SUPPORT -DHAVE_CONFIG_H=1)
-link_directories (${KDE4_LIB_DIR})
-include_directories (${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} ${KDE4_INCLUDES} ${LIBICU_INCLUDE_DIR})
+# -----------------------------------------------------------------------------
+# Add tools
+# -----------------------------------------------------------------------------
+if (ENABLE_TOOLS)
+    add_subdirectory(Tools)
+endif ()
 
-add_definitions (-fpermissive)
-add_definitions (-DUSE_SYSTEM_MALLOC=1)
-
-add_subdirectory (JavaScriptCore)
-add_subdirectory (WebCore)
-IF (WEBKIT_USE_KDE_SUPPORT)
-    add_subdirectory (WebKitTools/DumpRenderTree/DumpRenderTree.qtproj)
-ENDIF (WEBKIT_USE_KDE_SUPPORT)
-
-add_subdirectory (WebKitQt/QtLauncher)
-
-IF (WEBKIT_USE_KDE_SUPPORT)
-    add_subdirectory (WebKitQt/WebKitPart)
-ENDIF (WEBKIT_USE_KDE_SUPPORT)
-
-include_directories (BEFORE ${CMAKE_CURRENT_BINARY_DIR})
+# -----------------------------------------------------------------------------
+# Print the features list last, for maximum visibility.
+# -----------------------------------------------------------------------------
+PRINT_WEBKIT_OPTIONS()
