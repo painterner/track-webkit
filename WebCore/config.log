@@ -1,0 +1,30 @@
+This file contains any messages produced by compilers while
+running configure, to aid debugging if configure makes a mistake.
+
+configure:596: checking host system type
+configure:627: checking for gcc
+configure:740: checking whether the C compiler (gcc  ) works
+configure:756: gcc -o conftest    conftest.c  1>&5
+configure:782: checking whether the C compiler (gcc  ) is a cross-compiler
+configure:787: checking whether we are using GNU C
+configure:796: gcc -E conftest.c
+configure:815: checking whether gcc accepts -g
+configure:856: checking how to run the C preprocessor
+configure:877: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:938: checking for flex
+configure:972: checking for yywrap in -ll
+configure:991: gcc -o conftest -DHAVE_CONFIG_H   conftest.c -ll   1>&5
+/usr/bin/ld: cannot find -ll
+collect2: error: ld returned 1 exit status
+configure: failed program was:
+#line 980 "configure"
+#include "confdefs.h"
+/* Override any gcc2 internal prototype to avoid an error.  */
+/* We use char because int might match the return type of a gcc2
+    builtin and then its argument prototype would still apply.  */
+char yywrap();
+
+int main() {
+yywrap()
+; return 0; }
+configure:1014: checking lex output file root
