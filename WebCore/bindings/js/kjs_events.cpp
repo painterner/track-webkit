@@ -21,12 +21,15 @@
 #include "config.h"
 #include "kjs_events.h"
 
+#include "Chrome.h"
+#include "CString.h"
 #include "Clipboard.h"
 #include "ClipboardEvent.h"
 #include "Document.h"
 #include "Event.h"
 #include "EventNames.h"
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "HTMLImageElement.h"
 #include "HTMLNames.h"
 #include "JSEvent.h"
@@ -35,10 +38,12 @@
 #include "JSMutationEvent.h"
 #include "JSOverflowEvent.h"
 #include "JSWheelEvent.h"
+#include "KURL.h"
 #include "KeyboardEvent.h"
 #include "MouseEvent.h"
 #include "MutationEvent.h"
 #include "OverflowEvent.h"
+#include "Page.h"
 #include "UIEvent.h"
 #include "WheelEvent.h"
 #include "kjs_proxy.h"
@@ -74,7 +79,7 @@ void JSAbstractEventListener::handleEvent(Event* ele, bool isWindowEvent)
     Frame *frame = window->frame();
     if (!frame)
         return;
-    KJSProxy* proxy = frame->jScript();
+    KJSProxy* proxy = frame->scriptProxy();
     if (!proxy)
         return;
 
@@ -126,8 +131,9 @@ void JSAbstractEventListener::handleEvent(Event* ele, bool isWindowEvent)
             int lineNumber = exception->get(exec, "line")->toInt32(exec);
             String sourceURL = exception->get(exec, "sourceURL")->toString(exec);
             if (Interpreter::shouldPrintExceptions())
-                printf("(event handler):%s\n", message.deprecatedString().utf8().data());
-            frame->addMessageToConsole(message, lineNumber, sourceURL);
+                printf("(event handler):%s\n", message.utf8().data());
+            if (Page* page = frame->page())
+                page->chrome()->addMessageToConsole(message, lineNumber, sourceURL);
             exec->clearException();
         } else {
             if (!retval->isUndefinedOrNull() && event->storesResultAsString())
@@ -269,7 +275,7 @@ void JSLazyEventListener::parseCode() const
     Frame *frame = windowObj()->frame();
     KJSProxy *proxy = 0;
     if (frame)
-        proxy = frame->jScript();
+        proxy = frame->scriptProxy();
 
     if (proxy) {
         ScriptInterpreter* interpreter = proxy->interpreter();
@@ -279,7 +285,7 @@ void JSLazyEventListener::parseCode() const
         JSObject* constr = interpreter->builtinFunction();
         List args;
 
-        UString sourceURL(frame->url().url());
+        UString sourceURL(frame->loader()->url().url());
         args.append(eventParameterName());
         args.append(jsString(code));
         listener = constr->construct(exec, args, m_functionName, sourceURL, lineNumber); // ### is globalExec ok ?
@@ -390,7 +396,7 @@ JSValue *DOMEvent::getValueProperty(ExecState *exec, int token) const
   case Bubbles:
     return jsBoolean(event.bubbles());
   case CancelBubble:
-    return jsBoolean(event.getCancelBubble());
+    return jsBoolean(event.cancelBubble());
   case ReturnValue:
     return jsBoolean(!event.defaultPrevented());
   case Cancelable:
@@ -544,14 +550,14 @@ JSValue *Clipboard::getValueProperty(ExecState *exec, int token) const
             return jsStringOrUndefined(clipboard->effectAllowed());
         case Types:
         {
-            DeprecatedStringList qTypes = clipboard->types();
-            if (qTypes.isEmpty())
+            HashSet<String> types = clipboard->types();
+            if (types.isEmpty())
                 return jsNull(); 
             else {
                 List list;
-                for (DeprecatedStringList::Iterator it = qTypes.begin(); it != qTypes.end(); ++it) {
+                HashSet<String>::const_iterator end = types.end();
+                for (HashSet<String>::const_iterator it = types.begin(); it != end; ++it) 
                     list.append(jsString(UString(*it)));
-                }
                 return exec->lexicalInterpreter()->builtinArray()->construct(exec, list);
             }
         }

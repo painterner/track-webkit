@@ -27,11 +27,15 @@
 #include "DOMWindow.h"
 
 #include "cssstyleselector.h"
+#include "Chrome.h"
 #include "CSSComputedStyleDeclaration.h"
 #include "CSSRuleList.h"
 #include "Document.h"
 #include "Element.h"
 #include "Frame.h"
+#include "FrameLoader.h"
+#include "Page.h"
+#include "Screen.h"
 
 namespace WebCore {
 
@@ -56,10 +60,10 @@ Document* DOMWindow::document() const
         return 0;
     
     if (!m_frame->document()) {
-        m_frame->createEmptyDocument();
-        m_frame->begin();
-        m_frame->write("<HTML><BODY>");
-        m_frame->end();
+        m_frame->loader()->createEmptyDocument();
+        m_frame->loader()->begin();
+        m_frame->loader()->write("<HTML><BODY>");
+        m_frame->loader()->end();
     }
     return m_frame->document();
 }
@@ -85,7 +89,7 @@ PassRefPtr<CSSRuleList> DOMWindow::getMatchedCSSRules(Element* elt, const String
 
 double DOMWindow::devicePixelRatio() const
 {
-    return m_frame->view() ? m_frame->view()->scaleFactor() : 1.0;
+    return m_frame->page()->chrome()->scaleFactor();
 }
 
 } // namespace WebCore

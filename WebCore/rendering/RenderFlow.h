@@ -22,8 +22,8 @@
  *
  */
 
-#ifndef RenderFlow_H
-#define RenderFlow_H
+#ifndef RenderFlow_h
+#define RenderFlow_h
 
 #include "RenderContainer.h"
 
@@ -52,61 +52,63 @@ public:
     virtual RenderFlow* continuation() const { return m_continuation; }
     void setContinuation(RenderFlow* c) { m_continuation = c; }
     RenderFlow* continuationBefore(RenderObject* beforeChild);
-    
+
     void addChildWithContinuation(RenderObject* newChild, RenderObject* beforeChild);
     virtual void addChildToFlow(RenderObject* newChild, RenderObject* beforeChild) = 0;
-    virtual void addChild(RenderObject *newChild, RenderObject *beforeChild = 0);
+    virtual void addChild(RenderObject* newChild, RenderObject* beforeChild = 0);
 
-    static RenderFlow* createAnonymousFlow(Document* doc, RenderStyle* style);
+    static RenderFlow* createAnonymousFlow(Document*, RenderStyle*);
 
-    void extractLineBox(InlineFlowBox* lineBox);
-    void attachLineBox(InlineFlowBox* lineBox);
-    void removeLineBox(InlineFlowBox* lineBox);
+    void extractLineBox(InlineFlowBox*);
+    void attachLineBox(InlineFlowBox*);
+    void removeLineBox(InlineFlowBox*);
     void deleteLineBoxes();
     virtual void destroy();
 
     virtual void dirtyLinesFromChangedChild(RenderObject* child);
-    
-    virtual short lineHeight(bool firstLine, bool isRootLineBox=false) const;
-    
+
+    virtual short lineHeight(bool firstLine, bool isRootLineBox = false) const;
+
     InlineFlowBox* firstLineBox() const { return m_firstLineBox; }
     InlineFlowBox* lastLineBox() const { return m_lastLineBox; }
 
     virtual InlineBox* createInlineBox(bool makePlaceHolderBox, bool isRootLineBox, bool isOnlyRun=false);
     virtual void dirtyLineBoxes(bool fullLayout, bool isRootLineBox = false);
-    
-    void paintLines(PaintInfo& i, int _tx, int _ty);
-    bool hitTestLines(NodeInfo& i, int x, int y, int tx, int ty, HitTestAction hitTestAction);
+
+    void paintLines(PaintInfo&, int tx, int ty);
+    bool hitTestLines(const HitTestRequest&, HitTestResult&, int x, int y, int tx, int ty, HitTestAction);
 
     virtual IntRect getAbsoluteRepaintRect();
-    
-    virtual int lowestPosition(bool includeOverflowInterior=true, bool includeSelf=true) const;
-    virtual int rightmostPosition(bool includeOverflowInterior=true, bool includeSelf=true) const;
-    virtual int leftmostPosition(bool includeOverflowInterior=true, bool includeSelf=true) const;
-    
-    virtual IntRect caretRect(int offset, EAffinity affinity = UPSTREAM, int *extraWidthToEndOfLine = 0);
 
-    virtual void addFocusRingRects(GraphicsContext*, int _tx, int _ty);
-    void paintFocusRing(GraphicsContext*, int tx, int ty);
-    void paintOutlineForLine(GraphicsContext*, int tx, int ty, const IntRect &prevLine, const IntRect &thisLine, const IntRect &nextLine);
-    void paintOutlines(GraphicsContext*, int tx, int ty);
+    virtual int lowestPosition(bool includeOverflowInterior = true, bool includeSelf = true) const;
+    virtual int rightmostPosition(bool includeOverflowInterior = true, bool includeSelf = true) const;
+    virtual int leftmostPosition(bool includeOverflowInterior = true, bool includeSelf = true) const;
 
-protected:
+    virtual IntRect caretRect(int offset, EAffinity = UPSTREAM, int* extraWidthToEndOfLine = 0);
+
+    virtual void addFocusRingRects(GraphicsContext*, int tx, int ty);
+    void paintOutlineForLine(GraphicsContext*, int tx, int ty, const IntRect& prevLine, const IntRect& thisLine, const IntRect& nextLine);
+    void paintOutline(GraphicsContext*, int tx, int ty);
+
+    virtual bool hasColumns() const { return false; }
+
+private:
     // An inline can be split with blocks occurring in between the inline content.
     // When this occurs we need a pointer to our next object.  We can basically be
     // split into a sequence of inlines and blocks.  The continuation will either be
     // an anonymous block (that houses other blocks) or it will be an inline flow.
     RenderFlow* m_continuation;
 
+protected:
     // For block flows, each box represents the root inline box for a line in the
     // paragraph.
     // For inline flows, each box represents a portion of that inline.
     InlineFlowBox* m_firstLineBox;
     InlineFlowBox* m_lastLineBox;
-    
+
     mutable short m_lineHeight;
 };
 
 } // namespace WebCore
 
-#endif // RenderFlow_H
+#endif // RenderFlow_h

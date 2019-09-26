@@ -32,14 +32,13 @@ namespace WebCore {
 
 class HTMLElement;
 
-class ApplyStyleCommand : public CompositeEditCommand
-{
+class ApplyStyleCommand : public CompositeEditCommand {
 public:
     enum EPropertyLevel { PropertyDefault, ForceBlockProperties };
 
     ApplyStyleCommand(Document*, CSSStyleDeclaration*, EditAction = EditActionChangeAttributes, EPropertyLevel = PropertyDefault);
     ApplyStyleCommand(Document*, CSSStyleDeclaration*, const Position& start, const Position& end, EditAction = EditActionChangeAttributes, EPropertyLevel = PropertyDefault);
-    ApplyStyleCommand(Document*, Element*, bool = false, EditAction = EditActionChangeAttributes);
+    ApplyStyleCommand(Element*, bool = false, EditAction = EditActionChangeAttributes);
 
     virtual void doApply();
     virtual EditAction editingAction() const;
@@ -49,7 +48,7 @@ public:
 private:
     // style-removal helpers
     bool isHTMLStyleNode(CSSMutableStyleDeclaration*, HTMLElement*);
-    void removeHTMLStyleNode(HTMLElement *);
+    void removeHTMLStyleNode(HTMLElement*);
     void removeHTMLFontStyle(CSSMutableStyleDeclaration*, HTMLElement*);
     void removeCSSStyle(CSSMutableStyleDeclaration*, HTMLElement*);
     void removeBlockStyle(CSSMutableStyleDeclaration*, const Position& start, const Position& end);
@@ -74,7 +73,7 @@ private:
     bool splitTextElementAtEndIfNeeded(const Position& start, const Position& end);
     bool mergeStartWithPreviousIfIdentical(const Position& start, const Position& end);
     bool mergeEndWithNextIfIdentical(const Position& start, const Position& end);
-    void cleanUpEmptyStyleSpans(const Position& start, const Position& end);
+    void cleanupUnstyledAppleStyleSpans(Node* dummySpanAncestor);
 
     void surroundNodeRangeWithElement(Node* start, Node* end, Element* element);
     float computedFontSize(const Node*);

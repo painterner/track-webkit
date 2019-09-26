@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,16 +21,14 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "Attr.h"
-
-#include "SVGHelper.h"
 #include "SVGFEMergeNodeElement.h"
-#include "SVGAnimatedString.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGFEMergeNodeElement::SVGFEMergeNodeElement(const QualifiedName& tagName, Document *doc) : SVGElement(tagName, doc)
+SVGFEMergeNodeElement::SVGFEMergeNodeElement(const QualifiedName& tagName, Document* doc)
+    : SVGElement(tagName, doc)
 {
 }
 
@@ -38,22 +36,19 @@ SVGFEMergeNodeElement::~SVGFEMergeNodeElement()
 {
 }
 
-SVGAnimatedString *SVGFEMergeNodeElement::in1() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedString>(m_in1, dummy);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGFEMergeNodeElement, String, String, string, In1, in1, SVGNames::inAttr.localName(), m_in1)
 
-void SVGFEMergeNodeElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGFEMergeNodeElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::inAttr)
-        in1()->setBaseVal(value.impl());
+        setIn1BaseValue(value);
     else
         SVGElement::parseMappedAttribute(attr);
 }
 
+}
 
-// vim:ts=4:noet
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

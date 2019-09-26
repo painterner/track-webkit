@@ -27,32 +27,38 @@
 
 #include "config.h"
 #include "FrameGdk.h"
-#include "Element.h"
-#include "RenderObject.h"
-#include "RenderWidget.h"
-#include "RenderLayer.h"
-#include "Page.h"
-#include "Document.h"
-#include "DOMWindow.h"
+
+#include "ChromeClientGdk.h"
 #include "DOMImplementation.h"
-#include "BrowserExtensionGdk.h"
+#include "DOMWindow.h"
 #include "Document.h"
-#include "Settings.h"
-#include "Plugin.h"
+#include "EditorClient.h"
+#include "Element.h"
+#include "FrameLoadRequest.h"
+#include "FrameLoader.h"
 #include "FramePrivate.h"
+#include "FrameView.h"
 #include "GraphicsContext.h"
 #include "HTMLDocument.h"
-#include "ResourceLoader.h"
-#include "PlatformMouseEvent.h"
-#include "PlatformKeyboardEvent.h"
-#include "PlatformWheelEvent.h"
-#include "MouseEventWithHitTestResults.h"
-#include "SelectionController.h"
-#include "TypingCommand.h"
-#include "SSLKeyGenerator.h"
+#include "HitTestRequest.h"
+#include "HitTestResult.h"
 #include "KeyboardCodes.h"
+#include "MouseEventWithHitTestResults.h"
+#include "Page.h"
+#include "PlatformKeyboardEvent.h"
+#include "PlatformMouseEvent.h"
+#include "PlatformWheelEvent.h"
+#include "Plugin.h"
+#include "RenderLayer.h"
+#include "RenderObject.h"
+#include "RenderWidget.h"
+#include "ResourceHandle.h"
+#include "ResourceHandleInternal.h"
+#include "SSLKeyGenerator.h"
+#include "SelectionController.h"
+#include "Settings.h"
+#include "TypingCommand.h"
 #include <gdk/gdk.h>
-
 
 // This function loads resources from WebKit
 // This does not belong here and I'm not sure where
@@ -69,7 +75,74 @@ Vector<char> loadResourceIntoArray(const char* resourceName)
 
 namespace WebCore {
 
-static void doScroll(const RenderObject* r, bool isHorizontal, int multiplier)
+FrameGdkClientDefault::FrameGdkClientDefault()
+    : ResourceHandleClient()
+    , m_frame(0)
+    , m_beginCalled(false)
+{
+}
+
+FrameGdkClientDefault::~FrameGdkClientDefault()
+{
+}
+
+void FrameGdkClientDefault::setFrame(const FrameGdk* frame)
+{
+    m_frame = const_cast<FrameGdk*>(frame);
+}
+
+void FrameGdkClientDefault::openURL(const KURL& url)
+{
+    m_frame->loader()->didOpenURL(url);
+    m_beginCalled = false;
+
+    ResourceRequest request(url);
+    RefPtr<ResourceHandle> loader = ResourceHandle::create(request, this, 0);
+}
+
+void FrameGdkClientDefault::submitForm(const String& method, const KURL& url, const FormData* postData)
+{
+    m_beginCalled = false;
+
+    ResourceRequest request(url);
+    request.setHTTPMethod(method);
+    request.setHTTPBody(*postData);
+
+    RefPtr<ResourceHandle> loader = ResourceHandle::create(request, this, 0);
+}
+
+void FrameGdkClientDefault::receivedResponse(ResourceHandle*, PlatformResponse)
+{
+    // no-op
+}
+
+void FrameGdkClientDefault::didReceiveData(ResourceHandle* job, const char* data, int length)
+{
+    if (!m_beginCalled) {
+        m_beginCalled = true;
+
+#if 0  // FIXME: This is from Qt version, need to be removed or Gdk equivalent written
+        // Assign correct mimetype _before_ calling begin()!
+        ResourceHandleInternal* d = job->getInternal();
+        if (d) {
+            ResourceRequest request(m_frame->resourceRequest());
+            request.m_responseMIMEType = d->m_mimetype;
+            m_frame->setResourceRequest(request);
+        }
+#endif
+        m_frame->loader()->begin(job->url());
+    }
+
+    m_frame->loader()->write(data, length);
+}
+
+void FrameGdkClientDefault::receivedAllData(ResourceHandle* job, PlatformData data)
+{
+    m_frame->loader()->end();
+    m_beginCalled = false;
+}
+
+static void doScroll(const RenderObject* r, float deltaX, float deltaY)
 {
     // FIXME: The scrolling done here should be done in the default handlers
     // of the elements rather than here in the part.
@@ -81,24 +154,15 @@ static void doScroll(const RenderObject* r, bool isHorizontal, int multiplier)
     //r->scroll(direction, ScrollByWheel, multiplier);
     if (!r->layer())
         return;
-    int x = r->layer()->scrollXOffset();
-    int y = r->layer()->scrollYOffset();
-    if (isHorizontal)
-        x += multiplier;
-    else
-        y += multiplier;
+
+    int x = r->layer()->scrollXOffset() + (int)deltaX;
+    int y = r->layer()->scrollYOffset() + (int)deltaY;
     r->layer()->scrollToOffset(x, y, true, true);
 }
 
-bool FrameView::isFrameView() const
-{
-    return true;
-}
-
 FrameGdk::FrameGdk(GdkDrawable* gdkdrawable)
-    : Frame(new Page, 0), m_drawable(gdkdrawable)
+    : Frame(new Page(new ChromeClientGdk()), 0, 0), m_drawable(gdkdrawable)
 {
-    d->m_extension = new BrowserExtensionGdk(this);
     Settings* settings = new Settings;
     settings->setAutoLoadImages(true);
     settings->setMinFontSize(5);
@@ -112,49 +176,40 @@ FrameGdk::FrameGdk(GdkDrawable* gdkdrawable)
     settings->setFixedFontName("Courier");
     settings->setStdFontName("Arial");
     setSettings(settings);
-    page()->setMainFrame(this);
     FrameView* view = new FrameView(this);
     setView(view);
     IntRect geom = frameGeometry();
     view->resize(geom.width(), geom.height());
     view->ScrollView::setDrawable(gdkdrawable);
+
+    m_client = new FrameGdkClientDefault();
+    m_client->setFrame(this);
 }
 
-FrameGdk::FrameGdk(Page* page, Element* element)
-    : Frame(page,element)
+FrameGdk::FrameGdk(Page* page, Element* element, PassRefPtr<EditorClient> editorClient)
+    : Frame(page,element, editorClient)
 {
-    d->m_extension = new BrowserExtensionGdk(this);
     Settings* settings = new Settings;
     settings->setAutoLoadImages(true);
     setSettings(settings);
+    m_client = new FrameGdkClientDefault();
+    m_client->setFrame(this);
 }
 
 FrameGdk::~FrameGdk()
 {
+    loader()->cancelAndClear();
 }
 
-bool FrameGdk::openURL(const KURL& url)
-{
-    didOpenURL(url);
-    begin(url);
-    ResourceLoader* job = new ResourceLoader(this, "GET", url);
-    job->start(document()->docLoader());
-    return true;
-}
 
-void FrameGdk::submitForm(const ResourceRequest&)
+void FrameGdk::urlSelected(const FrameLoadRequest& frameLoadRequest, Event*)
 {
-}
+    ResourceRequest request = frameLoadRequest.resourceRequest();
 
-void FrameGdk::urlSelected(const ResourceRequest& request)
-{
-    //need to potentially updateLocationBar(str.ascii()); or notify sys of new url mybe event or callback
-    const KURL url = request.url();
-    printf("------------------> LOADING NEW URL %s \n", url.url().ascii());
-    didOpenURL(url);
-    begin(url);
-    ResourceLoader* job = new ResourceLoader(this, "GET", url);
-    job->start(document()->docLoader());
+    if (!client())
+        return;
+
+    client()->openURL(request.url());
 }
 
 String FrameGdk::userAgent() const
@@ -186,6 +241,7 @@ void FrameGdk::handleGdkEvent(GdkEvent* event)
             GraphicsContext* ctx = new GraphicsContext(cr);
             paint(ctx, IntRect(clip.x, clip.y, clip.width, clip.height));
             delete ctx;
+            cairo_destroy(cr);
             gdk_window_end_paint (event->any.window);
             break;
         }
@@ -195,15 +251,17 @@ void FrameGdk::handleGdkEvent(GdkEvent* event)
             if (wheelEvent.isAccepted()) {
                 return;
             }
-            RenderObject::NodeInfo nodeInfo(true, true);
-            renderer()->layer()->hitTest(nodeInfo, wheelEvent.pos());
-            Node* node = nodeInfo.innerNode();
+
+            HitTestRequest hitTestRequest(true, true);
+            HitTestResult hitTestResult(wheelEvent.pos());
+            renderer()->layer()->hitTest(hitTestRequest, hitTestResult);
+            Node* node = hitTestResult.innerNode();
             if (!node)
                 return;
             //Default to scrolling the page
             //not sure why its null
             //broke anyway when its not null
-            doScroll(renderer(), wheelEvent.isHorizontal(), wheelEvent.delta());
+            doScroll(renderer(), wheelEvent.deltaX(), wheelEvent.deltaY());
             break;
         }
         case GDK_DRAG_ENTER:
@@ -233,7 +291,7 @@ void FrameGdk::handleGdkEvent(GdkEvent* event)
             PlatformKeyboardEvent kevent(event);
             bool handled = false;
             if (!kevent.isKeyUp()) {
-                Node* start = selection().start().node();
+                Node* start = selectionController()->start().node();
                 if (start && start->isContentEditable()) {
                     switch(kevent.WindowsKeyCode()) {
                         case VK_BACK:
@@ -243,16 +301,16 @@ void FrameGdk::handleGdkEvent(GdkEvent* event)
                             TypingCommand::forwardDeleteKeyPressed(document());
                             break;
                         case VK_LEFT:
-                            selection().modify(SelectionController::MOVE, SelectionController::LEFT, CharacterGranularity);
+                            selectionController()->modify(SelectionController::MOVE, SelectionController::LEFT, CharacterGranularity);
                             break;
                         case VK_RIGHT:
-                            selection().modify(SelectionController::MOVE, SelectionController::RIGHT, CharacterGranularity);
+                            selectionController()->modify(SelectionController::MOVE, SelectionController::RIGHT, CharacterGranularity);
                             break;
                         case VK_UP:
-                            selection().modify(SelectionController::MOVE, SelectionController::BACKWARD, ParagraphGranularity);
+                            selectionController()->modify(SelectionController::MOVE, SelectionController::BACKWARD, ParagraphGranularity);
                             break;
                         case VK_DOWN:
-                            selection().modify(SelectionController::MOVE, SelectionController::FORWARD, ParagraphGranularity);
+                            selectionController()->modify(SelectionController::MOVE, SelectionController::FORWARD, ParagraphGranularity);
                             break;
                         default:
                             TypingCommand::insertText(document(), kevent.text(), false);
@@ -302,16 +360,6 @@ void FrameGdk::handleGdkEvent(GdkEvent* event)
         default:
             break;
     }
-}
-
-void FrameGdk::receivedData(ResourceLoader* job, const char* data, int length)
-{
-    write(data, length);
-}
-
-void FrameGdk::receivedAllData(ResourceLoader* job, PlatformData data)
-{
-    end();
 }
 
 void FrameGdk::setFrameGeometry(const IntRect &r)

@@ -20,8 +20,8 @@
  *
  */
 
-#ifndef KXMLCORE_HASH_FUNCTIONS_H
-#define KXMLCORE_HASH_FUNCTIONS_H
+#ifndef WTF_HashFunctions_h
+#define WTF_HashFunctions_h
 
 #include "RefPtr.h"
 #include <stdint.h>
@@ -59,7 +59,7 @@ namespace WTF {
         key ^= (key >> 15);
         key += ~(key << 27);
         key ^= (key >> 31);
-        return key;
+        return static_cast<unsigned>(key);
     }
 
     template<typename T> struct IntHash {
@@ -70,7 +70,17 @@ namespace WTF {
     // pointer identity hash function
 
     template<typename T> struct PtrHash {
-        static unsigned hash(T key) { return IntHash<uintptr_t>::hash(reinterpret_cast<uintptr_t>(key)); }
+        static unsigned hash(T key)
+        {
+#if COMPILER(MSVC)
+#pragma warning(push)
+#pragma warning(disable: 4244) // work around what seems to be a bug in MSVC's conversion warnings
+#endif
+            return IntHash<uintptr_t>::hash(reinterpret_cast<uintptr_t>(key));
+#if COMPILER(MSVC)
+#pragma warning(pop)
+#endif
+        }
         static bool equal(T a, T b) { return a == b; }
     };
     template<typename P> struct PtrHash<RefPtr<P> > {
@@ -102,4 +112,4 @@ using WTF::DefaultHash;
 using WTF::IntHash;
 using WTF::PtrHash;
 
-#endif // KXLMCORE_HASH_FUNCTIONS_H
+#endif // WTF_HashFunctions_h

@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
-                  2006       Alexander Kellett <lypanov@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <wildfox@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
+                  2006 Alexander Kellett <lypanov@kde.org>
 
     This file is part of the KDE project
 
@@ -22,36 +22,33 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGImageElement.h"
 
-#include "Attr.h"
 #include "CSSPropertyNames.h"
-#include "KCanvasRenderingStyle.h"
+#include "RenderSVGContainer.h"
 #include "RenderSVGImage.h"
-#include "SVGAnimatedBoolean.h"
-#include "SVGAnimatedLength.h"
-#include "SVGAnimatedPreserveAspectRatio.h"
-#include "SVGAnimatedString.h"
 #include "SVGDocument.h"
-#include "SVGHelper.h"
+#include "SVGLength.h"
 #include "SVGNames.h"
+#include "SVGPreserveAspectRatio.h"
 #include "SVGSVGElement.h"
 #include "XLinkNames.h"
-#include <kcanvas/RenderSVGContainer.h>
-#include <kcanvas/KCanvasCreator.h>
-#include <kcanvas/KCanvasImage.h>
-#include <kcanvas/KCanvasPath.h>
-#include <wtf/Assertions.h>
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGImageElement::SVGImageElement(const QualifiedName& tagName, Document *doc)
+SVGImageElement::SVGImageElement(const QualifiedName& tagName, Document* doc)
     : SVGStyledTransformableElement(tagName, doc)
     , SVGTests()
     , SVGLangSpace()
     , SVGExternalResourcesRequired()
     , SVGURIReference()
+    , m_x(this, LengthModeWidth)
+    , m_y(this, LengthModeHeight)
+    , m_width(this, LengthModeWidth)
+    , m_height(this, LengthModeHeight)
+    , m_preserveAspectRatio(new SVGPreserveAspectRatio(this))
     , m_imageLoader(this)
 {
 }
@@ -60,46 +57,31 @@ SVGImageElement::~SVGImageElement()
 {
 }
 
-SVGAnimatedLength *SVGImageElement::x() const
-{
-    return lazy_create<SVGAnimatedLength>(m_x, this, LM_WIDTH, viewportElement());
-}
-
-SVGAnimatedLength *SVGImageElement::y() const
-{
-    return lazy_create<SVGAnimatedLength>(m_y, this, LM_HEIGHT, viewportElement());
-}
-
-SVGAnimatedLength *SVGImageElement::width() const
-{
-    return lazy_create<SVGAnimatedLength>(m_width, this, LM_WIDTH, viewportElement());
-}
-
-SVGAnimatedLength *SVGImageElement::height() const
-{
-    return lazy_create<SVGAnimatedLength>(m_height, this, LM_HEIGHT, viewportElement());
-}
-
-SVGAnimatedPreserveAspectRatio *SVGImageElement::preserveAspectRatio() const
-{
-    return lazy_create<SVGAnimatedPreserveAspectRatio>(m_preserveAspectRatio, this);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGImageElement, SVGLength, Length, length, X, x, SVGNames::xAttr.localName(), m_x)
+ANIMATED_PROPERTY_DEFINITIONS(SVGImageElement, SVGLength, Length, length, Y, y, SVGNames::yAttr.localName(), m_y)
+ANIMATED_PROPERTY_DEFINITIONS(SVGImageElement, SVGLength, Length, length, Width, width, SVGNames::widthAttr.localName(), m_width)
+ANIMATED_PROPERTY_DEFINITIONS(SVGImageElement, SVGLength, Length, length, Height, height, SVGNames::heightAttr.localName(), m_height)
+ANIMATED_PROPERTY_DEFINITIONS(SVGImageElement, SVGPreserveAspectRatio*, PreserveAspectRatio, preserveAspectRatio, PreserveAspectRatio, preserveAspectRatio, SVGNames::preserveAspectRatioAttr.localName(), m_preserveAspectRatio.get())
 
 void SVGImageElement::parseMappedAttribute(MappedAttribute *attr)
 {
     const AtomicString& value = attr->value();
     if (attr->name() == SVGNames::xAttr)
-        x()->baseVal()->setValueAsString(value.impl());
+        setXBaseValue(SVGLength(this, LengthModeWidth, value));
     else if (attr->name() == SVGNames::yAttr)
-        y()->baseVal()->setValueAsString(value.impl());
+        setYBaseValue(SVGLength(this, LengthModeHeight, value));
     else if (attr->name() == SVGNames::preserveAspectRatioAttr)
-        preserveAspectRatio()->baseVal()->parsePreserveAspectRatio(value.impl());
+        preserveAspectRatioBaseValue()->parsePreserveAspectRatio(value);
     else if (attr->name() == SVGNames::widthAttr) {
-        width()->baseVal()->setValueAsString(value.impl());
+        setWidthBaseValue(SVGLength(this, LengthModeWidth, value));
         addCSSProperty(attr, CSS_PROP_WIDTH, value);
+        if (width().value() < 0.0)
+            document()->accessSVGExtensions()->reportError("A negative value for image attribute <width> is not allowed");
     } else if (attr->name() == SVGNames::heightAttr) {
-        height()->baseVal()->setValueAsString(value.impl());
+        setHeightBaseValue(SVGLength(this, LengthModeHeight, value));
         addCSSProperty(attr, CSS_PROP_HEIGHT, value);
+        if (height().value() < 0.0)
+            document()->accessSVGExtensions()->reportError("A negative value for image attribute <height> is not allowed");
     } else {
         if (SVGTests::parseMappedAttribute(attr))
             return;
@@ -116,14 +98,20 @@ void SVGImageElement::parseMappedAttribute(MappedAttribute *attr)
     }
 }
 
-RenderObject *SVGImageElement::createRenderer(RenderArena *arena, RenderStyle *style)
+void SVGImageElement::notifyAttributeChange() const
+{
+    if (!ownerDocument()->parsing())
+        rebuildRenderer();
+}
+
+RenderObject* SVGImageElement::createRenderer(RenderArena* arena, RenderStyle* style)
 {
     return new (arena) RenderSVGImage(this);
 }
 
 bool SVGImageElement::haveLoadedRequiredResources()
 {
-    return (!externalResourcesRequired()->baseVal() || m_imageLoader.imageComplete());
+    return (!externalResourcesRequiredBaseValue() || m_imageLoader.imageComplete());
 }
 
 void SVGImageElement::attach()
@@ -133,6 +121,8 @@ void SVGImageElement::attach()
         imageObj->setCachedImage(m_imageLoader.image());
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

@@ -37,12 +37,12 @@ namespace WebCore {
 
 class AtomicString;
 class ContainerNode;
-class DeprecatedStringList;
 class Document;
 class Element;
 class Event;
 class EventListener;
 class IntRect;
+class KeyboardEvent;
 class NamedAttrMap;
 class NodeList;
 class PlatformKeyboardEvent;
@@ -135,9 +135,11 @@ public:
     virtual bool isSVGElement() const { return false; }
 #endif
     virtual bool isStyledElement() const { return false; }
+    virtual bool isFrameOwnerElement() const { return false; }
     virtual bool isAttributeNode() const { return false; }
     virtual bool isTextNode() const { return false; }
     virtual bool isCommentNode() const { return false; }
+    virtual bool isCharacterDataNode() const { return false; }
     virtual bool isDocumentNode() const { return false; }
     virtual bool isEventTargetNode() const { return false; }
     virtual bool isShadowNode() const { return false; }
@@ -181,7 +183,6 @@ public:
     Element* enclosingInlineElement() const;
     Element* rootEditableElement() const;
     
-    bool inSameRootEditableElement(Node*);
     bool inSameContainingBlockFlowElement(Node*);
     
     // Used by the parser. Checks against the DTD, unlike DOM operations like appendChild().
@@ -203,13 +204,14 @@ public:
     virtual void aboutToUnload() { }
 
     // For <link> and <style> elements.
-    virtual void sheetLoaded() { }
+    virtual bool sheetLoaded() { return true; }
 
     bool hasID() const { return m_hasId; }
     bool hasClass() const { return m_hasClass; }
     bool hasStyle() const { return m_hasStyle; }
     bool active() const { return m_active; }
     bool inActiveChain() const { return m_inActiveChain; }
+    bool inDetach() const { return m_inDetach; }
     bool hovered() const { return m_hovered; }
     bool focused() const { return m_focused; }
     bool attached() const { return m_attached; }
@@ -217,7 +219,6 @@ public:
     bool changed() const { return m_changed; }
     bool hasChangedChild() const { return m_hasChangedChild; }
     bool isLink() const { return m_isLink; }
-    bool styleElement() const { return m_styleElement; }
     bool implicitNode() const { return m_implicit; }
     void setHasID(bool b = true) { m_hasId = b; }
     void setHasClass(bool b = true) { m_hasClass = b; }
@@ -231,15 +232,15 @@ public:
     virtual void setActive(bool b = true, bool pause=false) { m_active = b; }
     virtual void setHovered(bool b = true) { m_hovered = b; }
 
-    unsigned short tabIndex() const { return m_tabIndex; }
-    void setTabIndex(unsigned short i) { m_tabIndex = i; }
+    short tabIndex() const { return m_tabIndex; }
+    void setTabIndex(short i) { m_tabIndex = i; }
 
     /**
      * Whether this node can receive the keyboard focus.
      */
     virtual bool supportsFocus() const { return isFocusable(); }
     virtual bool isFocusable() const;
-    virtual bool isKeyboardFocusable() const;
+    virtual bool isKeyboardFocusable(KeyboardEvent*) const;
     virtual bool isMouseFocusable() const;
 
     virtual bool isControl() const { return false; } // Eventually the notion of what is a control will be extensible.
@@ -264,10 +265,11 @@ public:
 
     // Returns the document associated with this node. This method never returns NULL, except in the case 
     // of a DocumentType node that is not used with any Document yet. A Document node returns itself.
-    Document* document() const 
-    { 
+    Document* document() const
+    {
+      ASSERT(this);
       ASSERT(m_document || nodeType() == DOCUMENT_TYPE_NODE && !inDocument());
-      return m_document.get(); 
+      return m_document.get();
     }
     void setDocument(Document*);
 
@@ -323,7 +325,7 @@ public:
     void setRenderer(RenderObject* renderer) { m_renderer = renderer; }
     
     void checkSetPrefix(const AtomicString& prefix, ExceptionCode&);
-    bool isAncestor(const Node*) const;
+    bool isDescendantOf(const Node*) const;
 
     // These two methods are mutually exclusive.  The former is used to do strict error-checking
     // when adding children via the public DOM API (e.g., appendChild()).  The latter is called only when parsing, 
@@ -342,6 +344,10 @@ public:
     virtual int previousOffset(int current) const;
     virtual int nextOffset(int current) const;
     
+    // FIXME: We should try to find a better location for these methods.
+    virtual bool canSelectAll() const { return false; }
+    virtual void selectAll() { }
+
 #ifndef NDEBUG
     virtual void dump(TextStream*, DeprecatedString indent = "") const;
 #endif
@@ -440,8 +446,7 @@ protected:
     typedef HashSet<NodeList*> NodeListSet;
     NodeListSet* m_nodeLists;
 
-    unsigned short m_tabIndex : 15;
-    bool m_hasTabIndex : 1;
+    short m_tabIndex;
 
     bool m_hasId : 1;
     bool m_hasClass : 1;
@@ -457,7 +462,6 @@ protected:
     bool m_active : 1;
     bool m_hovered : 1;
     bool m_inActiveChain : 1;
-    bool m_styleElement : 1; // contains stylesheet text
     bool m_implicit : 1; // implicitly generated by the parser
 
     bool m_inDetach : 1;

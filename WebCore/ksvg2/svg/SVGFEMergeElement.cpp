@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,28 +21,19 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "DeprecatedStringList.h"
-
-#include "Attr.h"
-
-#include <kcanvas/KCanvasFilters.h>
-#include <kcanvas/device/KRenderingDevice.h>
-
-#include "ksvg.h"
-#include "SVGHelper.h"
-#include "SVGRenderStyle.h"
 #include "SVGFEMergeElement.h"
+
 #include "SVGFEMergeNodeElement.h"
-#include "SVGAnimatedEnumeration.h"
-#include "SVGAnimatedString.h"
+#include "SVGResourceFilter.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGFEMergeElement::SVGFEMergeElement(const QualifiedName& tagName, Document *doc) : 
-SVGFilterPrimitiveStandardAttributes(tagName, doc)
+SVGFEMergeElement::SVGFEMergeElement(const QualifiedName& tagName, Document* doc)
+    : SVGFilterPrimitiveStandardAttributes(tagName, doc)
+    , m_filterEffect(0)
 {
-    m_filterEffect = 0;
 }
 
 SVGFEMergeElement::~SVGFEMergeElement()
@@ -50,29 +41,27 @@ SVGFEMergeElement::~SVGFEMergeElement()
     delete m_filterEffect;
 }
 
-KCanvasFEMerge *SVGFEMergeElement::filterEffect() const
+SVGFEMerge* SVGFEMergeElement::filterEffect() const
 {
     if (!m_filterEffect)
-        m_filterEffect = static_cast<KCanvasFEMerge *>(renderingDevice()->createFilterEffect(FE_MERGE));
+        m_filterEffect = static_cast<SVGFEMerge*>(SVGResourceFilter::createFilterEffect(FE_MERGE));
     if (!m_filterEffect)
         return 0;
     setStandardAttributes(m_filterEffect);
 
-    DeprecatedStringList mergeInputs;
-    for(Node *n = firstChild(); n != 0; n = n->nextSibling())
-    {
-        if(n->hasTagName(SVGNames::feMergeNodeTag))
-        {
-            String mergeInput = static_cast<SVGFEMergeNodeElement *>(n)->in1()->baseVal();
-            mergeInputs.append(mergeInput.deprecatedString());
-        }
+    Vector<String> mergeInputs;
+    for (Node* n = firstChild(); n != 0; n = n->nextSibling()) {
+        if (n->hasTagName(SVGNames::feMergeNodeTag))
+            mergeInputs.append(static_cast<SVGFEMergeNodeElement*>(n)->in1());
     }
 
     m_filterEffect->setMergeInputs(mergeInputs);
-
     return m_filterEffect;
 }
 
-// vim:ts=4:noet
+}
+
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

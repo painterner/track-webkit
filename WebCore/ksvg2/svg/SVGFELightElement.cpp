@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
                   2005 Oliver Hunt <ojh16@student.canterbury.ac.nz>
 
     This library is free software; you can redistribute it and/or
@@ -17,30 +17,29 @@
     along with this library; see the file COPYING.LIB.  If not, write to
     the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
     Boston, MA 02111-1307, USA.
- */
+*/
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "DeprecatedStringList.h"
-
-#include "Attr.h"
-
-#include <kcanvas/KCanvasResources.h>
-#include <kcanvas/KCanvasFilters.h>
-#include <kcanvas/device/KRenderingDevice.h>
+#include "SVGFELightElement.h"
 
 #include "SVGNames.h"
-#include "SVGHelper.h"
-#include "SVGRenderStyle.h"
-#include "SVGFELightElement.h"
-#include "SVGAnimatedString.h"
-#include "SVGAnimatedNumber.h"
-#include "SVGAnimatedEnumeration.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGFELightElement::SVGFELightElement(const QualifiedName& tagName, Document *doc) : 
-SVGElement(tagName, doc)
+SVGFELightElement::SVGFELightElement(const QualifiedName& tagName, Document* doc)
+    : SVGElement(tagName, doc)
+    , m_azimuth(0.0)
+    , m_elevation(0.0)
+    , m_x(0.0)
+    , m_y(0.0)
+    , m_z(0.0)
+    , m_pointsAtX(0.0)
+    , m_pointsAtY(0.0)
+    , m_pointsAtZ(0.0)
+    , m_specularExponent(0.0)
+    , m_limitingConeAngle(0.0)
 {
 }
 
@@ -48,92 +47,47 @@ SVGFELightElement::~SVGFELightElement()
 {
 }
 
-SVGAnimatedNumber *SVGFELightElement::azimuth() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_azimuth, dummy);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGFELightElement, double, Number, number, Azimuth, azimuth, SVGNames::azimuthAttr.localName(), m_azimuth)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFELightElement, double, Number, number, Elevation, elevation, SVGNames::elevationAttr.localName(), m_elevation)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFELightElement, double, Number, number, X, x, SVGNames::xAttr.localName(), m_x)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFELightElement, double, Number, number, Y, y, SVGNames::yAttr.localName(), m_y)
 
-SVGAnimatedNumber *SVGFELightElement::elevation() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_elevation, dummy);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGFELightElement, double, Number, number, Z, z, SVGNames::zAttr.localName(), m_z)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFELightElement, double, Number, number, PointsAtX, pointsAtX, SVGNames::pointsAtXAttr.localName(), m_pointsAtX)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFELightElement, double, Number, number, PointsAtY, pointsAtY, SVGNames::pointsAtYAttr.localName(), m_pointsAtY)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFELightElement, double, Number, number, PointsAtZ, pointsAtZ, SVGNames::pointsAtZAttr.localName(), m_pointsAtZ)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFELightElement, double, Number, number, SpecularExponent, specularExponent, SVGNames::specularExponentAttr.localName(), m_specularExponent)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFELightElement, double, Number, number, LimitingConeAngle, limitingConeAngle, SVGNames::limitingConeAngleAttr.localName(), m_limitingConeAngle)
 
-SVGAnimatedNumber *SVGFELightElement::x() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_x, dummy);
-}
-
-SVGAnimatedNumber *SVGFELightElement::y() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_y, dummy);
-}
-
-
-SVGAnimatedNumber *SVGFELightElement::z() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_z, dummy);
-}
-
-SVGAnimatedNumber *SVGFELightElement::pointsAtX() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_pointsAtX, dummy);
-}
-
-SVGAnimatedNumber *SVGFELightElement::pointsAtY() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_pointsAtY, dummy);
-}
-
-SVGAnimatedNumber *SVGFELightElement::pointsAtZ() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_pointsAtZ, dummy);
-}
-
-SVGAnimatedNumber *SVGFELightElement::specularExponent() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_specularExponent, dummy);
-}
-
-SVGAnimatedNumber *SVGFELightElement::limitingConeAngle() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_limitingConeAngle, dummy);
-}
-
-void SVGFELightElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGFELightElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::azimuthAttr)
-        azimuth()->setBaseVal(value.deprecatedString().toDouble());
+        setAzimuthBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::elevationAttr)
-        elevation()->setBaseVal(value.deprecatedString().toDouble());
+        setElevationBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::xAttr)
-        x()->setBaseVal(value.deprecatedString().toDouble());
+        setXBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::yAttr)
-        y()->setBaseVal(value.deprecatedString().toDouble());
+        setYBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::zAttr)
-        z()->setBaseVal(value.deprecatedString().toDouble());
+        setZBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::pointsAtXAttr)
-        pointsAtX()->setBaseVal(value.deprecatedString().toDouble());
+        setPointsAtXBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::pointsAtYAttr)
-        pointsAtY()->setBaseVal(value.deprecatedString().toDouble());
+        setPointsAtYBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::pointsAtZAttr)
-        pointsAtZ()->setBaseVal(value.deprecatedString().toDouble());
+        setPointsAtZBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::specularExponentAttr)
-        specularExponent()->setBaseVal(value.deprecatedString().toDouble());
+        setSpecularExponentBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::limitingConeAngleAttr)
-        limitingConeAngle()->setBaseVal(value.deprecatedString().toDouble());
+        setLimitingConeAngleBaseValue(value.toDouble());
     else
         SVGElement::parseMappedAttribute(attr);
 }
+
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

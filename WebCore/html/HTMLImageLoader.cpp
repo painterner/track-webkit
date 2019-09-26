@@ -55,6 +55,23 @@ HTMLImageLoader::~HTMLImageLoader()
     m_element->document()->removeImage(this);
 }
 
+void HTMLImageLoader::setImage(CachedImage *newImage)
+{
+    CachedImage *oldImage = m_image;
+    if (newImage != oldImage) {
+        setLoadingImage(newImage);
+        m_firedLoad = true;
+        m_imageComplete = true;
+        if (newImage)
+            newImage->ref(this);
+        if (oldImage)
+            oldImage->deref(this);
+    }
+
+    if (RenderImage* renderer = static_cast<RenderImage*>(element()->renderer()))
+        renderer->resetAnimation();
+}
+
 void HTMLImageLoader::setLoadingImage(CachedImage *loadingImage)
 {
     m_firedLoad = false;
@@ -77,8 +94,10 @@ void HTMLImageLoader::updateFromElement()
     CachedImage *newImage = 0;
     if (!attr.isEmpty()) {
         if (m_loadManually) {
+            doc->docLoader()->setAutoLoadImages(false);
             newImage = new CachedImage(doc->docLoader(), parseURL(attr), CachePolicyVerify, 0);
-            doc->docLoader()->m_docObjects.set(newImage->url(), newImage);
+            newImage->setLoading(true);
+            doc->docLoader()->m_docResources.set(newImage->url(), newImage);
         } else
             newImage = doc->docLoader()->requestImage(parseURL(attr));
     }

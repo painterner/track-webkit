@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006 Apple Computer, Inc.
+ * Copyright (C) 2006 Samuel Weinig <sam.weinig@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -20,13 +21,14 @@
 module events {
 
     // Introduced in DOM Level 2:
-    interface [LegacyParent=KJS::DOMEvent, GenerateConstructor] Event {
+    interface [LegacyParent=KJS::DOMEvent, GenerateConstructor, ObjCCustomInternalImpl] Event {
 
         // DOM PhaseType
-        const unsigned short      CAPTURING_PHASE                = 1;
-        const unsigned short      AT_TARGET                      = 2;
-        const unsigned short      BUBBLING_PHASE                 = 3;
+        const unsigned short CAPTURING_PHASE     = 1;
+        const unsigned short AT_TARGET           = 2;
+        const unsigned short BUBBLING_PHASE      = 3;
 
+#if !defined(LANGUAGE_OBJECTIVE_C)
         // Reverse-engineered from Netscape
         const unsigned short MOUSEDOWN           = 1;
         const unsigned short MOUSEUP             = 2;
@@ -44,5 +46,23 @@ module events {
         const unsigned short BLUR                = 8192;
         const unsigned short SELECT              = 16384;
         const unsigned short CHANGE              = 32768;
+#endif
+
+#if !defined(LANGUAGE_JAVASCRIPT)
+        readonly attribute DOMString        type;
+        readonly attribute EventTarget      target;
+        readonly attribute EventTarget      currentTarget;
+        readonly attribute unsigned short   eventPhase;
+        readonly attribute boolean          bubbles;
+        readonly attribute boolean          cancelable;
+        readonly attribute DOMTimeStamp     timeStamp;
+        void               stopPropagation();
+        void               preventDefault();
+        [OldStyleObjC] void initEvent(in DOMString eventTypeArg, 
+                                      in boolean canBubbleArg, 
+                                      in boolean cancelableArg);
+#endif
+
     };
+
 }

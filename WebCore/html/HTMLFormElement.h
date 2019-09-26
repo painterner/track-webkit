@@ -31,6 +31,7 @@
 
 namespace WebCore {
 
+class Event;
 class FormData;
 class HTMLGenericFormElement;
 class HTMLImageElement;
@@ -55,6 +56,9 @@ public:
     String enctype() const { return m_enctype; }
     void setEnctype(const String&);
 
+    String encoding() const { return m_enctype; }
+    void setEncoding(const String& enctype) { setEnctype(enctype); }
+
     String boundary() const { return m_boundary; }
     void setBoundary(const String&);
 
@@ -67,8 +71,9 @@ public:
     void registerImgElement(HTMLImageElement*);
     void removeImgElement(HTMLImageElement*);
 
-    bool prepareSubmit();
-    void submit(bool activateSubmitButton = false);
+    bool prepareSubmit(Event*);
+    void submit();
+    void submit(Event*, bool activateSubmitButton = false);
     void reset();
 
     void setMalformed(bool malformed) { m_malformed = malformed; }
@@ -79,7 +84,7 @@ public:
 
     virtual bool isURLAttribute(Attribute*) const;
     
-    void submitClick();
+    void submitClick(Event*);
     bool formWouldHaveSecureSubmission(const String& url);
 
     String name() const;
@@ -94,7 +99,7 @@ public:
     String method() const;
     void setMethod(const String&);
 
-    String target() const;
+    virtual String target() const;
     void setTarget(const String&);
 
     friend class HTMLFormCollection;
@@ -119,7 +124,7 @@ public:
 
 private:
     void parseEnctype(const String&);
-    bool formData(FormData&) const;
+    PassRefPtr<FormData> formData() const;
 
     unsigned formElementIndex(HTMLGenericFormElement*);
 

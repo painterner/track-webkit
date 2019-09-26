@@ -28,13 +28,13 @@
 
 #include "config.h"
 
-#ifndef KHTML_NO_XBL
+#ifdef XBL_SUPPORT
 
 #include "CachedXBLDocument.h"
 
 #include "Cache.h"
 #include "CachedResourceClientWalker.h"
-#include "Decoder.h"
+#include "TextResourceDecoder.h"
 #include "loader.h"
 #include <wtf/Vector.h>
 
@@ -49,7 +49,7 @@ CachedXBLDocument::CachedXBLDocument(DocLoader* dl, const String &url, CachePoli
     // Load the file
     Cache::loader()->load(dl, this, false);
     m_loading = true;
-    m_decoder = new Decoder;
+    m_decoder = new TextResourceDecoder("application/xml");
 }
 
 CachedXBLDocument::~CachedXBLDocument()
@@ -65,18 +65,9 @@ void CachedXBLDocument::ref(CachedResourceClient *c)
         c->setXBLDocument(m_url, m_document);
 }
 
-void CachedXBLDocument::deref(CachedResourceClient *c)
+void CachedXBLDocument::setEncoding(const String& chs)
 {
-    Cache::flush();
-    CachedResource::deref(c);
-    if (canDelete() && m_free)
-        delete this;
-}
-
-void CachedXBLDocument::setCharset( const DeprecatedString &chs )
-{
-    if (!chs.isEmpty())
-        m_decoder->setEncoding(chs.latin1(), Decoder::EncodingFromHTTPHeader);
+    m_decoder->setEncoding(chs, TextResourceDecoder::EncodingFromHTTPHeader);
 }
 
 void CachedXBLDocument::data(Vector<char>& data, bool )

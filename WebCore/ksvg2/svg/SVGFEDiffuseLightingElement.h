@@ -19,17 +19,15 @@
     Boston, MA 02111-1307, USA.
  */
 
-#ifndef KSVG_SVGFEDiffuseLightingElementImpl_H
-#define KSVG_SVGFEDiffuseLightingElementImpl_H
+#ifndef SVGFEDiffuseLightingElement_H
+#define SVGFEDiffuseLightingElement_H
 #ifdef SVG_SUPPORT
 
 #include "SVGFilterPrimitiveStandardAttributes.h"
 
 namespace WebCore {
-    class KCanvasFEDiffuseLighting;
-    class SVGAnimatedNumber;
-    class SVGAnimatedString;
-    class SVGAnimatedColor;
+    class SVGFEDiffuseLighting;
+    class SVGColor;
     
     class SVGFEDiffuseLightingElement : public SVGFilterPrimitiveStandardAttributes
     {
@@ -38,27 +36,23 @@ namespace WebCore {
         virtual ~SVGFEDiffuseLightingElement();
 
         // 'SVGFEDiffuseLightingElement' functions
-        SVGAnimatedString *in1() const;
-        SVGAnimatedNumber *diffuseConstant() const;
-        SVGAnimatedNumber *surfaceScale() const;
-        SVGAnimatedNumber *kernelUnitLengthX() const;
-        SVGAnimatedNumber *kernelUnitLengthY() const;
-        SVGAnimatedColor  *lightingColor() const;
-
         // Derived from: 'Element'
         virtual void parseMappedAttribute(MappedAttribute *attr);
 
-        virtual KCanvasFEDiffuseLighting *filterEffect() const;
+        virtual SVGFilterEffect *filterEffect() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedString> m_in1;
-        mutable RefPtr<SVGAnimatedNumber> m_diffuseConstant;
-        mutable RefPtr<SVGAnimatedNumber> m_surfaceScale;
-        mutable RefPtr<SVGAnimatedColor>  m_lightingColor;
-        mutable RefPtr<SVGAnimatedNumber> m_kernelUnitLengthX;
-        mutable RefPtr<SVGAnimatedNumber> m_kernelUnitLengthY;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEDiffuseLightingElement, String, String, In1, in1)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEDiffuseLightingElement, double, double, DiffuseConstant, diffuseConstant)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEDiffuseLightingElement, double, double, SurfaceScale, surfaceScale)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEDiffuseLightingElement, SVGColor*, RefPtr<SVGColor>, LightingColor, lightingColor)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEDiffuseLightingElement, double, double, KernelUnitLengthX, kernelUnitLengthX)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEDiffuseLightingElement, double, double, KernelUnitLengthY, kernelUnitLengthY)
         //need other properties here...
-        mutable KCanvasFEDiffuseLighting *m_filterEffect;
+        mutable SVGFEDiffuseLighting *m_filterEffect;
         
         //light management
         void updateLights() const;

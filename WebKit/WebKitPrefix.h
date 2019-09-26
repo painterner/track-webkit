@@ -48,18 +48,33 @@
 
 #ifdef __cplusplus
 
+#include <algorithm> // needed for exception_defines.h
 #include <cstddef>
 #include <new>
 
-#else
+#endif
 
 #import <ApplicationServices/ApplicationServices.h>
 #import <Carbon/Carbon.h>
 
 #ifdef __OBJC__
 #import <Cocoa/Cocoa.h>
+#if MAC_OS_X_VERSION_MAX_ALLOWED <= MAC_OS_X_VERSION_10_4
+#define BUILDING_ON_TIGER 1
+#endif
 #endif
 
 #include <JavaScriptCore/Platform.h>
 
+#ifdef __cplusplus
+#include <wtf/FastMalloc.h>
 #endif
+
+/* Work around bug with C++ library that screws up Objective-C++ when exception support is disabled. */
+#undef try
+#undef catch
+
+#define USING_WEBCORE_CUT 1
+#define USING_WEBCORE_COPY 1
+//#define USING_WEBCORE_PASTE 1
+#define USING_WEBCORE_DELETE 1

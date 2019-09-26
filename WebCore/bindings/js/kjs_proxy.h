@@ -30,7 +30,6 @@ namespace KJS {
 
 namespace WebCore {
 
-class DeprecatedString;
 class Event;
 class EventListener;
 class Frame;
@@ -40,7 +39,6 @@ class String;
 class KJSProxy {
 public:
     KJSProxy(Frame*);
-    ~KJSProxy();
     KJS::JSValue* evaluate(const String& filename, int baseLine, const String& code, Node*);
     void clear();
     EventListener* createHTMLEventHandler(const String& functionName, const String& code, Node*);
@@ -57,7 +55,7 @@ public:
 
 private:
     RefPtr<KJS::ScriptInterpreter> m_script;
-    Frame *m_frame;
+    Frame* m_frame;
     int m_handlerLineno;
 };
 

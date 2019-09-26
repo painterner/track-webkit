@@ -28,8 +28,10 @@
 
 #import <WebCore/WebCoreFrameBridge.h>
 
-@class WebPageBridge;
-@class WebCoreRenderPart;
+namespace WebCore {
+    class Page;
+}
+
 @class WebFrame;
 @class WebFrameView;
 
@@ -37,9 +39,11 @@
 
 @interface WebFrameBridge : WebCoreFrameBridge <WebCoreFrameBridge>
 {
+@public
     WebFrame *_frame;
 
-    WebCoreKeyboardUIMode _keyboardUIMode;
+@private
+    WebCore::KeyboardUIMode _keyboardUIMode;
     BOOL _keyboardUIModeAccessed;
     BOOL _doingClientRedirect;
     BOOL _inNextKeyViewOutsideWebFrameViews;
@@ -48,13 +52,12 @@
     NSDictionary *lastDashboardRegions;
 }
 
-- (id)initMainFrameWithPage:(WebPageBridge *)page frameName:(NSString *)name view:(WebFrameView *)view;
-
+- (id)initMainFrameWithPage:(WebCore::Page*)page frameName:(NSString *)name frameView:(WebFrameView *)frameView;
 - (void)close;
 
-- (void)receivedData:(NSData *)data textEncodingName:(NSString *)textEncodingName;
-- (BOOL)inNextKeyViewOutsideWebFrameViews;
-
 - (WebFrame *)webFrame;
+
+- (BOOL)inNextKeyViewOutsideWebFrameViews;
+- (NSView *)nextValidKeyViewOutsideWebFrameViews;
 
 @end

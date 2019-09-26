@@ -30,20 +30,20 @@
 namespace WebCore {
 
 class Frame;
-class HTMLElement;
+class HTMLFrameOwnerElement;
 
 class RenderPart : public RenderWidget {
 public:
-    RenderPart(HTMLElement*);
+    RenderPart(HTMLFrameOwnerElement*);
     virtual ~RenderPart();
     
     virtual const char* renderName() const { return "RenderPart"; }
 
-    void setWidget(Widget*);
+    virtual void setWidget(Widget*);
 
     // FIXME: This should not be necessary.
     // Remove this once WebKit knows to properly schedule layouts using WebCore when objects resize.
-    void updateWidgetPosition();
+    virtual void updateWidgetPosition();
 
     bool hasFallbackContent() const { return m_hasFallbackContent; }
 
@@ -56,7 +56,6 @@ private:
     virtual void deleteWidget();
 
     Frame* m_frame;
-    bool m_disconnectOwnerElementWhenDestroyed;
 };
 
 }

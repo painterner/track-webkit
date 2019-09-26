@@ -25,15 +25,14 @@
 #define StringImpl_h
 
 #include "Shared.h"
+#include <wtf/unicode/Unicode.h>
 #include <kjs/identifier.h>
 #include <wtf/Forward.h>
-#include <wtf/Noncopyable.h>
 #include <wtf/Vector.h>
-#include <unicode/umachine.h>
 #include <limits.h>
 
-#if __APPLE__
-#include <CoreFoundation/CoreFoundation.h>
+#if PLATFORM(CF)
+typedef const struct __CFString * CFStringRef;
 #endif
 
 #ifdef __OBJC__
@@ -48,7 +47,7 @@ struct UCharBufferTranslator;
 struct CStringTranslator;
 struct Length;
 
-class StringImpl : public Shared<StringImpl>, Noncopyable {
+class StringImpl : public Shared<StringImpl> {
 private:
     struct WithOneRef { };
     StringImpl(WithOneRef) : m_length(0), m_data(0), m_hash(0), m_inTable(false) { ref(); }
@@ -65,23 +64,29 @@ public:
     StringImpl(const KJS::UString&);
     ~StringImpl();
 
+    static StringImpl* newUninitialized(size_t length, UChar*& characterBuffer);
+    static StringImpl* adopt(Vector<UChar>&);
+
     const UChar* characters() const { return m_data; }
     unsigned length() const { return m_length; }
     
-    UChar* charactersWithNullTermination();
+    const UChar* charactersWithNullTermination();
     
     unsigned hash() const { if (m_hash == 0) m_hash = computeHash(m_data, m_length); return m_hash; }
     static unsigned computeHash(const UChar*, unsigned len);
     static unsigned computeHash(const char*);
     
+    void append(const UChar*, unsigned length);
     void append(const StringImpl*);
-    void append(char);
     void append(UChar);
+    void append(char);
+
+    void insert(const UChar*, unsigned length, unsigned pos);
     void insert(const StringImpl*, unsigned pos);
+
     void truncate(int len);
     void remove(unsigned pos, int len = 1);
 
-    StringImpl* split(unsigned pos);
     StringImpl* copy() const { return new StringImpl(m_data, m_length); }
 
     StringImpl* substring(unsigned pos, unsigned len = UINT_MAX);
@@ -93,21 +98,28 @@ public:
     bool containsOnlyWhitespace() const;
     bool containsOnlyWhitespace(unsigned from, unsigned len) const;
 
-    // ignores trailing garbage, unlike DeprecatedString
-    int toInt(bool* ok = 0) const;
+    int toInt(bool* ok = 0) const; // ignores trailing garbage, unlike DeprecatedString
+    double toDouble(bool* ok = 0) const;
 
     Length* toCoordsArray(int& len) const;
     Length* toLengthArray(int& len) const;
     bool isLower() const;
     StringImpl* lower() const;
     StringImpl* upper() const;
+    StringImpl* secure(UChar aChar) const;
     StringImpl* capitalize(UChar previousCharacter) const;
     StringImpl* foldCase() const;
+
+    StringImpl* stripWhiteSpace() const;
+    StringImpl* simplifyWhiteSpace() const;
 
     int find(const char*, int index = 0, bool caseSensitive = true) const;
     int find(UChar, int index = 0) const;
     int find(const StringImpl*, int index, bool caseSensitive = true) const;
 
+    int reverseFind(UChar, int index) const;
+    int reverseFind(const StringImpl*, int index, bool caseSensitive = true) const;
+    
     bool startsWith(const StringImpl* m_data, bool caseSensitive = true) const { return find(m_data, 0, caseSensitive) == 0; }
     bool endsWith(const StringImpl*, bool caseSensitive = true) const;
 
@@ -120,13 +132,17 @@ public:
 
     Vector<char> ascii() const;
 
-#if __APPLE__
+#if PLATFORM(CF)
     StringImpl(CFStringRef);
     CFStringRef createCFString() const;
 #endif
 #ifdef __OBJC__
     StringImpl(NSString*);
     operator NSString*() const;
+#endif
+#if PLATFORM(SYMBIAN)
+    StringImpl(const TDesC&);
+    TPtrC des() const;
 #endif
 
     StringImpl(const DeprecatedString&);

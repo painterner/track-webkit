@@ -31,13 +31,15 @@
 #include "WebDataSource.h"
 
 #pragma warning(push, 0)
-#include "ResourceLoaderClient.h"
+#include "SubresourceLoaderClient.h"
 #include "FrameWin.h"
 #include "PlatformString.h"
+#include "WebFrameLoaderClient.h"
 #pragma warning(pop)
 
 namespace WebCore {
     class Frame;
+    struct WindowFeatures;
 }
 
 typedef enum {
@@ -52,7 +54,7 @@ typedef enum {
     WebFrameLoadTypeReplace
 } WebFrameLoadType;
 
-class WebFrame : public IWebFrame, public WebCore::ResourceLoaderClient, public WebCore::FrameWinClient
+class WebFrame : public IWebFrame, public WebCore::SubresourceLoaderClient, public WebCore::FrameWinClient
 {
 public:
     static WebFrame* createInstance();
@@ -129,14 +131,11 @@ public:
         /* [out] */ int *frameCount,
         /* [retval][out] */ IWebFrame ***frames);
 
-    // ResourceLoaderClient
-    virtual void receivedRedirect(WebCore::ResourceLoader*, const WebCore::KURL&);
-    virtual void receivedResponse(WebCore::ResourceLoader*, WebCore::PlatformResponse);
-    virtual void receivedData(WebCore::ResourceLoader*, const char*, int);
-    virtual void receivedAllData(WebCore::ResourceLoader*);
-    virtual void receivedAllData(WebCore::ResourceLoader*, WebCore::PlatformData);
+    // ResourceHandleClient
+    virtual void didReceiveData(WebCore::ResourceHandle*, const char*, int);
 
     // FrameWinClient
+    virtual void createNewWindow(const WebCore::ResourceRequest&, const WebCore::WindowFeatures&, WebCore::Frame*& newFrame);
     virtual void openURL(const WebCore::DeprecatedString&, bool lockHistory);
     virtual void submitForm(const WebCore::String& method, const WebCore::KURL&, const WebCore::FormData*);
     virtual void setTitle(const WebCore::String& title);
@@ -158,6 +157,7 @@ protected:
     class WebFramePrivate;
     WebFramePrivate*    d;
     ULONG               m_refCount;
+    WebFrameLoaderClient m_frameLoaderClient;
     IWebDataSource*      m_dataSource;
     IWebDataSource*      m_provisionalDataSource;
     WebFrameLoadType    m_loadType;

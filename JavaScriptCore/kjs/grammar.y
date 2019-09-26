@@ -63,6 +63,20 @@ static Node *makeFunctionCallNode(Node *func, ArgumentsNode *args);
 static Node *makeTypeOfNode(Node *expr);
 static Node *makeDeleteNode(Node *expr);
 
+#if COMPILER(MSVC)
+
+#pragma warning(disable: 4065)
+#pragma warning(disable: 4244)
+#pragma warning(disable: 4702)
+
+// At least some of the time, the declarations of malloc and free that bison
+// generates are causing warnings. A way to avoid this is to explicitly define
+// the macros so that bison doesn't try to declare malloc and free.
+#define YYMALLOC malloc
+#define YYFREE free
+
+#endif
+
 %}
 
 %union {
@@ -97,7 +111,6 @@ static Node *makeDeleteNode(Node *expr);
 
 /* literals */
 %token NULLTOKEN TRUETOKEN FALSETOKEN
-%token STRING NUMBER
 
 /* keywords */
 %token BREAK CASE DEFAULT FOR NEW VAR CONST CONTINUE
@@ -204,7 +217,7 @@ Literal:
   | DIVEQUAL /* regexp with /= */       {
                                             Lexer *l = Lexer::curr();
                                             if (!l->scanRegExp()) YYABORT;
-                                            $$ = new RegExpNode(UString('=') + l->pattern, l->flags);
+                                            $$ = new RegExpNode("=" + l->pattern, l->flags);
                                         }
 ;
 
@@ -239,7 +252,8 @@ PrimaryExprNoBrace:
   | Literal
   | ArrayLiteral
   | IDENT                               { $$ = new ResolveNode(*$1); }
-  | '(' Expr ')'                        { $$ = $2->isResolveNode() ? $2 : new GroupNode($2); }
+  | '(' Expr ')'                        { $$ = ($2->isResolveNode() || $2->isGroupNode()) ?
+                                            $2 : new GroupNode($2); }
 ;
 
 ArrayLiteral:

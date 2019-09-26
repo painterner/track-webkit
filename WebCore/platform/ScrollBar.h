@@ -23,56 +23,53 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef ScrollBar_h
-#define ScrollBar_h
+#ifndef Scrollbar_h
+#define Scrollbar_h
+
+#include "Shared.h"
+#include "ScrollTypes.h"
 
 namespace WebCore {
 
 class GraphicsContext;
 class IntRect;
-class ScrollBar;
+class Scrollbar;
+class PlatformMouseEvent;
 
-enum ScrollDirection {
-    ScrollUp,
-    ScrollDown,
-    ScrollLeft,
-    ScrollRight
-};
+// These match the numbers we use over in WebKit (WebFrameView.m).
+#define LINE_STEP   40
+#define PAGE_KEEP   40
 
-enum ScrollGranularity {
-    ScrollByLine,
-    ScrollByPage,
-    ScrollByDocument,
-    ScrollByWheel
-};
+enum ScrollbarControlSize { RegularScrollbar, SmallScrollbar, MiniScrollbar };
 
-enum ScrollBarOrientation { HorizontalScrollBar, VerticalScrollBar };
-
-class ScrollBarClient {
+class ScrollbarClient {
 public:
-    virtual ~ScrollBarClient() {}
-    virtual void valueChanged(ScrollBar*) = 0;
+    virtual ~ScrollbarClient() {}
+    virtual void valueChanged(Scrollbar*) = 0;
+
+    // Used to obtain a window clip rect.
+    virtual IntRect windowClipRect() const = 0;
 };
 
-class ScrollBar {
+class Scrollbar : public Shared<Scrollbar> {
 protected:
-    ScrollBar(ScrollBarClient*, ScrollBarOrientation);
+    Scrollbar(ScrollbarClient*, ScrollbarOrientation, ScrollbarControlSize);
 
 public:
-    virtual ~ScrollBar() {}
+    virtual ~Scrollbar() {}
 
     virtual bool isWidget() const = 0;
 
-    ScrollBarOrientation orientation() const { return m_orientation; }
+    ScrollbarOrientation orientation() const { return m_orientation; }
     int value() const { return m_currentPos; } 
     
-    virtual void setScrollBarValue(int) = 0;
-    virtual void setKnobProportion(int visibleSize, int totalSize) = 0;
+    ScrollbarControlSize controlSize() const { return m_controlSize; }
 
     void setSteps(int lineStep, int pageStep);
     
     bool setValue(int);
-    
+    void setProportion(int visibleSize, int totalSize);
+
     bool scroll(ScrollDirection, ScrollGranularity, float multiplier = 1.0);
     
     virtual int width() const = 0;
@@ -81,20 +78,28 @@ public:
     virtual void setEnabled(bool) = 0;
     virtual void paint(GraphicsContext*, const IntRect& damageRect) = 0;
 
-    static bool hasPlatformScrollBars() {
-        // To use the platform's built-in scrollbars by default add to this ifdef.
-#if PLATFORM(MAC)
+    static bool hasPlatformScrollbars() {
+        // To use the platform's built-in scrollbars by default, return true.  We may
+        // support styled engine scrollbars someday, and some platforms may wish to not
+        // implement a platform scrollbar at all by default.  That's what this method is for.
         return true;
-#else
-        return false;  // The engine will create scrollbars (so the RenderTheme will need to support scrollbar painting).
-#endif
     }
 
-protected:
-    ScrollBarClient* client() const { return m_client; }
+    // These methods are used for platform scrollbars to give :hover feedback.  They will not get called
+    // when the mouse went down in a scrollbar, since it is assumed the scrollbar will start
+    // grabbing all events in that case anyway.
+    virtual bool handleMouseMoveEvent(const PlatformMouseEvent&) { return false; }
+    virtual bool handleMouseOutEvent(const PlatformMouseEvent&) { return false; }
 
-    ScrollBarClient* m_client;
-    ScrollBarOrientation m_orientation;
+protected:
+    virtual void updateThumbPosition() = 0;
+    virtual void updateThumbProportion() = 0;
+
+    ScrollbarClient* client() const { return m_client; }
+
+    ScrollbarClient* m_client;
+    ScrollbarOrientation m_orientation;
+    ScrollbarControlSize m_controlSize;
     int m_visibleSize;
     int m_totalSize;
     int m_currentPos;

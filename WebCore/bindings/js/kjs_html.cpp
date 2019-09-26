@@ -25,39 +25,22 @@
 #include "DocLoader.h"
 #include "EventNames.h"
 #include "Frame.h"
-#include "HTMLAppletElement.h"
-#include "HTMLAreaElement.h"
-#include "HTMLBRElement.h"
-#include "HTMLBaseFontElement.h"
-#include "HTMLBlockquoteElement.h"
+#include "FrameLoader.h"
+#include "FrameView.h"
+#include "HTMLAnchorElement.h"
 #include "HTMLBodyElement.h"
 #include "HTMLDocument.h"
 #include "HTMLEmbedElement.h"
-#include "HTMLFieldSetElement.h"
-#include "HTMLFontElement.h"
 #include "HTMLFormElement.h"
+#include "HTMLFrameElement.h"
 #include "HTMLFrameSetElement.h"
-#include "HTMLHRElement.h"
-#include "HTMLHeadingElement.h"
-#include "HTMLHtmlElement.h"
 #include "HTMLIFrameElement.h"
 #include "HTMLImageElement.h"
-#include "HTMLIsIndexElement.h"
-#include "HTMLLIElement.h"
 #include "HTMLLabelElement.h"
-#include "HTMLLegendElement.h"
-#include "HTMLMapElement.h"
-#include "HTMLMenuElement.h"
-#include "HTMLModElement.h"
 #include "HTMLNames.h"
 #include "HTMLObjectElement.h"
 #include "HTMLOptionElement.h"
 #include "HTMLOptionsCollection.h"
-#include "HTMLParagraphElement.h"
-#include "HTMLParamElement.h"
-#include "HTMLPreElement.h"
-#include "HTMLQuoteElement.h"
-#include "HTMLScriptElement.h"
 #include "HTMLSelectElement.h"
 #include "HTMLTableCaptionElement.h"
 #include "HTMLTableCellElement.h"
@@ -65,7 +48,6 @@
 #include "HTMLTableElement.h"
 #include "HTMLTableRowElement.h"
 #include "HTMLTableSectionElement.h"
-#include "JSHTMLImageElement.h"
 #include "JSHTMLOptionsCollection.h"
 #include "NameNodeList.h"
 #include "RenderLayer.h"
@@ -218,12 +200,12 @@ JSValue *JSHTMLDocument::namedItemGetter(ExecState* exec, JSObject* originalObje
   HTMLDocument &doc = *static_cast<HTMLDocument*>(thisObj->impl());
 
   String name = propertyName;
-  RefPtr<WebCore::HTMLCollection> collection = doc.documentNamedItems(name);
+  RefPtr<HTMLCollection> collection = doc.documentNamedItems(name);
 
   if (collection->length() == 1) {
-    WebCore::Node* node = collection->firstItem();
+    Node* node = collection->firstItem();
     Frame *frame;
-    if (node->hasTagName(iframeTag) && (frame = static_cast<WebCore::HTMLIFrameElement*>(node)->contentFrame()))
+    if (node->hasTagName(iframeTag) && (frame = static_cast<HTMLIFrameElement*>(node)->contentFrame()))
       return Window::retrieve(frame);
     return toJS(exec, node);
   }
@@ -251,6 +233,8 @@ JSValue *JSHTMLDocument::getValueProperty(ExecState* exec, int token) const
   case Body:
     return toJS(exec, body);
   case Location:
+    if (!frame)
+      return jsNull();
     if (Window* win = Window::retrieveWindow(frame))
       return win->location();
     return jsUndefined();
@@ -352,25 +336,22 @@ void JSHTMLDocument::putValueProperty(ExecState* exec, int token, JSValue *value
   case Cookie:
     doc.setCookie(value->toString(exec));
     break;
-  case Location: {
-    Frame *frame = doc.frame();
-    if (frame)
-    {
+  case Location:
+    if (Frame* frame = doc.frame()) {
       DeprecatedString str = value->toString(exec);
 
       // When assigning location, IE and Mozilla both resolve the URL
       // relative to the frame where the JavaScript is executing not
       // the target frame.
-      Frame *activePart = static_cast<ScriptInterpreter*>( exec->dynamicInterpreter() )->frame();
-      if (activePart)
-        str = activePart->document()->completeURL(str);
+      Frame* activeFrame = static_cast<ScriptInterpreter*>( exec->dynamicInterpreter() )->frame();
+      if (activeFrame)
+        str = activeFrame->document()->completeURL(str);
 
       // We want a new history item if this JS was called via a user gesture
       bool userGesture = static_cast<ScriptInterpreter*>(exec->dynamicInterpreter())->wasRunByUserGesture();
-      frame->scheduleLocationChange(str, activePart->referrer(), !userGesture);
+      frame->loader()->scheduleLocationChange(str, activeFrame->loader()->outgoingReferrer(), !userGesture);
     }
     break;
-  }
   case BgColor:
     if (bodyElement)
       bodyElement->setBgColor(value->toString(exec));
@@ -452,7 +433,7 @@ const ClassInfo JSHTMLElement::tr_info = { "HTMLTableRowElement", &JSHTMLElement
 
 const ClassInfo* JSHTMLElement::classInfo() const
 {
-    static HashMap<WebCore::AtomicStringImpl*, const ClassInfo*> classInfoMap;
+    static HashMap<AtomicStringImpl*, const ClassInfo*> classInfoMap;
     if (classInfoMap.isEmpty()) {
         classInfoMap.set(captionTag.localName().impl(), &caption_info);
         classInfoMap.set(colTag.localName().impl(), &col_info);
@@ -496,7 +477,7 @@ const JSHTMLElement::Accessors JSHTMLElement::marquee_accessors = { &JSHTMLEleme
 
 const JSHTMLElement::Accessors* JSHTMLElement::accessors() const
 {
-    static HashMap<WebCore::AtomicStringImpl*, const Accessors*> accessorMap;
+    static HashMap<AtomicStringImpl*, const Accessors*> accessorMap;
     if (accessorMap.isEmpty()) {
         accessorMap.add(captionTag.localName().impl(), &caption_accessors);
         accessorMap.add(colTag.localName().impl(), &col_accessors);
@@ -550,6 +531,7 @@ const JSHTMLElement::Accessors* JSHTMLElement::accessors() const
   length        KJS::JSHTMLElement::SelectLength  DontDelete
   form          KJS::JSHTMLElement::SelectForm    DontDelete|ReadOnly
   options       KJS::JSHTMLElement::SelectOptions DontDelete|ReadOnly
+  item          KJS::JSHTMLElement::SelectItem    DontDelete|Function 1
   namedItem     KJS::JSHTMLElement::SelectNamedItem       DontDelete|Function 1
   disabled      KJS::JSHTMLElement::SelectDisabled        DontDelete
   multiple      KJS::JSHTMLElement::SelectMultiple        DontDelete
@@ -812,7 +794,7 @@ bool JSHTMLElement::implementsCall() const
     HTMLElement* element = static_cast<HTMLElement*>(impl());
     if (element->hasTagName(embedTag) || element->hasTagName(objectTag) || element->hasTagName(appletTag)) {
         Document* doc = element->document();
-        KJSProxy *proxy = doc->frame()->jScript();
+        KJSProxy *proxy = doc->frame()->scriptProxy();
         ExecState* exec = proxy->interpreter()->globalExec();
         if (JSValue *runtimeObject = getRuntimeObject(exec, element))
             return static_cast<JSObject*>(runtimeObject)->implementsCall();
@@ -890,33 +872,6 @@ JSValue *JSHTMLElement::embedGetter(ExecState* exec, int token) const
     }
     return jsUndefined();
 }
-
-#ifdef FIXME
-    HTMLAreaElement& area = *static_cast<HTMLAreaElement*>(impl());
-    switch (token) {
-        case AreaAccessKey:       return jsString(area.accessKey());
-        case AreaAlt:             return jsString(area.alt());
-        case AreaCoords:          return jsString(area.coords());
-        case AreaHref:            return jsString(area.href());
-        case AreaHash:            return jsString('#'+KURL(area.href().deprecatedString()).ref());
-        case AreaHost:            return jsString(KURL(area.href().deprecatedString()).host());
-        case AreaHostName: {
-            KURL url(area.href().deprecatedString());
-            if (url.port()==0)
-                return jsString(url.host());
-            else
-                return jsString(url.host() + ":" + DeprecatedString::number(url.port()));
-        }
-        case AreaPathName:        return jsString(KURL(area.href().deprecatedString()).path());
-        case AreaPort:            return jsString(DeprecatedString::number(KURL(area.href().deprecatedString()).port()));
-        case AreaProtocol:        return jsString(KURL(area.href().deprecatedString()).protocol()+":");
-        case AreaSearch:          return jsString(KURL(area.href().deprecatedString()).query());
-        case AreaNoHref:          return jsBoolean(area.noHref());
-        case AreaShape:           return jsString(area.shape());
-        case AreaTabIndex:        return jsNumber(area.tabIndex());
-        case AreaTarget:          return jsString(area.target());
-    }
-#endif
 
 JSValue *JSHTMLElement::tableGetter(ExecState* exec, int token) const
 {
@@ -1039,8 +994,8 @@ JSValue *JSHTMLElement::frameGetter(ExecState* exec, int token) const
         case FrameMarginWidth:     return jsString(frameElement.marginWidth());
         case FrameName:            return jsString(frameElement.name());
         case FrameNoResize:        return jsBoolean(frameElement.noResize());
-        case FrameWidth:           return jsNumber(frameElement.frameWidth());
-        case FrameHeight:          return jsNumber(frameElement.frameHeight());
+        case FrameWidth:           return jsNumber(frameElement.width());
+        case FrameHeight:          return jsNumber(frameElement.height());
         case FrameScrolling:       return jsString(frameElement.scrolling());
         case FrameSrc:
         case FrameLocation:        return jsString(frameElement.src());
@@ -1204,6 +1159,9 @@ JSValue *HTMLElementFunction::callAsFunction(ExecState* exec, JSObject* thisObj,
         else if (id == JSHTMLElement::SelectFocus) {
             select.focus();
             return jsUndefined();
+        }
+        else if (id == JSHTMLElement::SelectItem) {
+            return toJS(exec, select.item(args[0]->toUInt32(exec)));
         }
         else if (id == JSHTMLElement::SelectNamedItem) {
             return toJS(exec, select.namedItem(Identifier(args[0]->toString(exec))));
@@ -1699,12 +1657,14 @@ JSValue *JSHTMLCollection::callAsFunction(ExecState* exec, JSObject* , const Lis
 
 JSValue *JSHTMLCollection::getNamedItems(ExecState* exec, const Identifier &propertyName) const
 {
-    DeprecatedValueList< RefPtr<WebCore::Node> > namedItems = m_impl->namedItems(propertyName);
+    Vector<RefPtr<Node> > namedItems;
+    
+    m_impl->namedItems(propertyName, namedItems);
 
     if (namedItems.isEmpty())
         return jsUndefined();
 
-    if (namedItems.count() == 1)
+    if (namedItems.size() == 1)
         return toJS(exec, namedItems[0].get());
 
     return new DOMNamedNodesCollection(exec, namedItems);
@@ -1717,10 +1677,16 @@ JSValue* JSHTMLCollectionProtoFunc::callAsFunction(ExecState* exec, JSObject* th
   HTMLCollection &coll = *static_cast<JSHTMLCollection*>(thisObj)->impl();
 
   switch (id) {
-  case JSHTMLCollection::Item:
-    return toJS(exec,coll.item(args[0]->toUInt32(exec)));
   case JSHTMLCollection::Tags:
     return toJS(exec, coll.base()->getElementsByTagName(args[0]->toString(exec)).get());
+  case JSHTMLCollection::Item:
+    {
+        bool ok;
+        uint32_t index = args[0]->toUInt32(exec, ok);
+        if (ok)
+            return toJS(exec, coll.item(index));
+    }
+    // Fall through
   case JSHTMLCollection::NamedItem:
     return static_cast<JSHTMLCollection*>(thisObj)->getNamedItems(exec, Identifier(args[0]->toString(exec)));
   default:

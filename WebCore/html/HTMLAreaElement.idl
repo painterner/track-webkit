@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006 Apple Computer, Inc.
+ * Copyright (C) 2006 Samuel Weinig <sam.weinig@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -28,7 +29,7 @@ module html {
         attribute DOMString shape;
         attribute long tabIndex;
         attribute DOMString target;
-        
+
         // IE Extensions
         readonly attribute DOMString hash;
         readonly attribute DOMString host;
@@ -37,6 +38,11 @@ module html {
         readonly attribute DOMString port;
         readonly attribute DOMString protocol;
         readonly attribute DOMString search;
+
+#if defined(LANGUAGE_OBJECTIVE_C)
+        // Objective-C extension:
+        readonly attribute URL absoluteLinkURL;
+#endif
     };
 
 }

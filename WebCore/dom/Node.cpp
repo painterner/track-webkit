@@ -25,18 +25,19 @@
 #include "config.h"
 #include "Node.h"
 
+#include "CString.h"
 #include "ChildNodeList.h"
 #include "DOMImplementation.h"
 #include "Document.h"
 #include "ExceptionCode.h"
 #include "Frame.h"
-#include "NamedAttrMap.h"
-#include "Text.h"
-#include "htmlediting.h"
 #include "HTMLNames.h"
-#include "kjs_binding.h"
+#include "NamedAttrMap.h"
 #include "RenderObject.h"
+#include "Text.h"
 #include "TextStream.h"
+#include "htmlediting.h"
+#include "kjs_binding.h"
 
 namespace WebCore {
 
@@ -121,7 +122,6 @@ Node::Node(Document *doc)
       m_active(false),
       m_hovered(false),
       m_inActiveChain(false),
-      m_styleElement(false),
       m_implicit(false),
       m_inDetach(false)
 {
@@ -130,11 +130,12 @@ Node::Node(Document *doc)
 #endif
 }
 
-void Node::setDocument(Document *doc)
+void Node::setDocument(Document* doc)
 {
-    if (inDocument())
+    if (inDocument() || m_document == doc)
         return;
-    
+
+    KJS::ScriptInterpreter::updateDOMNodeDocument(this, m_document.get(), doc);
     m_document = doc;
 }
 
@@ -363,7 +364,7 @@ bool Node::isFocusable() const
     return false;
 }
 
-bool Node::isKeyboardFocusable() const
+bool Node::isKeyboardFocusable(KeyboardEvent*) const
 {
     return isFocusable();
 }
@@ -441,20 +442,20 @@ Node *Node::childNode(unsigned /*index*/) const
 Node *Node::traverseNextNode(const Node *stayWithin) const
 {
     if (firstChild()) {
-        assert(!stayWithin || firstChild()->isAncestor(stayWithin));
+        assert(!stayWithin || firstChild()->isDescendantOf(stayWithin));
         return firstChild();
     }
     if (this == stayWithin)
         return 0;
     if (nextSibling()) {
-        assert(!stayWithin || nextSibling()->isAncestor(stayWithin));
+        assert(!stayWithin || nextSibling()->isDescendantOf(stayWithin));
         return nextSibling();
     }
     const Node *n = this;
     while (n && !n->nextSibling() && (!stayWithin || n->parentNode() != stayWithin))
         n = n->parentNode();
     if (n) {
-        assert(!stayWithin || !n->nextSibling() || n->nextSibling()->isAncestor(stayWithin));
+        assert(!stayWithin || !n->nextSibling() || n->nextSibling()->isDescendantOf(stayWithin));
         return n->nextSibling();
     }
     return 0;
@@ -465,14 +466,14 @@ Node *Node::traverseNextSibling(const Node *stayWithin) const
     if (this == stayWithin)
         return 0;
     if (nextSibling()) {
-        assert(!stayWithin || nextSibling()->isAncestor(stayWithin));
+        assert(!stayWithin || nextSibling()->isDescendantOf(stayWithin));
         return nextSibling();
     }
     const Node *n = this;
     while (n && !n->nextSibling() && (!stayWithin || n->parentNode() != stayWithin))
         n = n->parentNode();
     if (n) {
-        assert(!stayWithin || !n->nextSibling() || n->nextSibling()->isAncestor(stayWithin));
+        assert(!stayWithin || !n->nextSibling() || n->nextSibling()->isDescendantOf(stayWithin));
         return n->nextSibling();
     }
     return 0;
@@ -494,20 +495,20 @@ Node *Node::traversePreviousNode(const Node *stayWithin) const
 Node *Node::traversePreviousNodePostOrder(const Node *stayWithin) const
 {
     if (lastChild()) {
-        assert(!stayWithin || lastChild()->isAncestor(stayWithin));
+        assert(!stayWithin || lastChild()->isDescendantOf(stayWithin));
         return lastChild();
     }
     if (this == stayWithin)
         return 0;
     if (previousSibling()) {
-        assert(!stayWithin || previousSibling()->isAncestor(stayWithin));
+        assert(!stayWithin || previousSibling()->isDescendantOf(stayWithin));
         return previousSibling();
     }
     const Node *n = this;
     while (n && !n->previousSibling() && (!stayWithin || n->parentNode() != stayWithin))
         n = n->parentNode();
     if (n) {
-        assert(!stayWithin || !n->previousSibling() || n->previousSibling()->isAncestor(stayWithin));
+        assert(!stayWithin || !n->previousSibling() || n->previousSibling()->isDescendantOf(stayWithin));
         return n->previousSibling();
     }
     return 0;
@@ -583,7 +584,7 @@ void Node::checkAddChild(Node *newChild, ExceptionCode& ec)
     // newChild node, or if the node to append is one of this node's ancestors.
 
     // check for ancestor/same node
-    if (newChild == this || isAncestor(newChild)) {
+    if (newChild == this || isDescendantOf(newChild)) {
         ec = HIERARCHY_REQUEST_ERR;
         return;
     }
@@ -604,15 +605,12 @@ void Node::checkAddChild(Node *newChild, ExceptionCode& ec)
     }
     
     // change the document pointer of newChild and all of its children to be the new document
-    if (shouldAdoptChild) {
-        for (Node* node = newChild; node; node = node->traverseNextNode(newChild)) {
-            KJS::ScriptInterpreter::updateDOMNodeDocument(node, node->document(), document());
+    if (shouldAdoptChild)
+        for (Node* node = newChild; node; node = node->traverseNextNode(newChild))
             node->setDocument(document());
-        }
-    }
 }
 
-bool Node::isAncestor(const Node *other) const
+bool Node::isDescendantOf(const Node *other) const
 {
     // Return true if other is an ancestor of this, otherwise false
     if (!other)
@@ -640,7 +638,7 @@ Node::StyleChange Node::diff( RenderStyle *s1, RenderStyle *s2 ) const
     EDisplay display2 = s2 ? s2->display() : NONE;
     bool fl2 = s2 && s2->hasPseudoStyle(RenderStyle::FIRST_LETTER);
         
-    if (display1 != display2 || fl1 != fl2)
+    if (display1 != display2 || fl1 != fl2 || (s1 && s2 && !s1->contentDataEquivalent(s2)))
         ch = Detach;
     else if (!s1 || !s2)
         ch = Inherit;
@@ -674,27 +672,22 @@ Node::StyleChange Node::diff( RenderStyle *s1, RenderStyle *s2 ) const
 }
 
 #ifndef NDEBUG
-void Node::dump(TextStream *stream, DeprecatedString ind) const
+void Node::dump(TextStream* stream, DeprecatedString ind) const
 {
-    // ### implement dump() for all appropriate subclasses
-
     if (m_hasId) { *stream << " hasId"; }
     if (m_hasClass) { *stream << " hasClass"; }
     if (m_hasStyle) { *stream << " hasStyle"; }
     if (m_specified) { *stream << " specified"; }
     if (m_focused) { *stream << " focused"; }
     if (m_active) { *stream << " active"; }
-    if (m_styleElement) { *stream << " styleElement"; }
     if (m_implicit) { *stream << " implicit"; }
 
     *stream << " tabIndex=" << m_tabIndex;
     *stream << endl;
 
-    Node *child = firstChild();
-    while(child) {
-        *stream << ind << child->nodeName().deprecatedString().ascii() << ": ";
-        child->dump(stream,ind+"  ");
-        child = child->nextSibling();
+    for (Node* child = firstChild(); child; child = child->nextSibling()) {
+        *stream << ind << child->nodeName() << ": ";
+        child->dump(stream, ind + "  ");
     }
 }
 #endif
@@ -714,13 +707,14 @@ void Node::willRemove()
 void Node::detach()
 {
     m_inDetach = true;
-//    assert(m_attached);
 
     if (renderer())
         renderer()->destroy();
     setRenderer(0);
 
     Document* doc = document();
+    if (m_focused)
+        doc->focusedNodeDetached(this);
     if (m_hovered)
         doc->hoveredNodeDetached(this);
     if (m_inActiveChain)
@@ -896,27 +890,13 @@ void Node::createRendererIfNeeded()
 #endif
         ) {
         RenderStyle* style = styleForRenderer(parentRenderer);
-#ifndef KHTML_NO_XBL
-        bool resolveStyle = false;
-        if (document()->bindingManager()->loadBindings(this, style->bindingURIs(), true, &resolveStyle) && 
-            rendererIsNeeded(style)) {
-            if (resolveStyle) {
-                style->deref(document()->renderArena());
-                style = styleForRenderer(parentRenderer);
-            }
-#else
         if (rendererIsNeeded(style)) {
-#endif
             setRenderer(createRenderer(document()->renderArena(), style));
             if (renderer()) {
                 renderer()->setStyle(style);
                 parentRenderer->addChild(renderer(), nextRenderer());
             }
-#ifndef KHTML_NO_XBL
-        } // avoid confusing the change log code parser by having two close braces to match the two open braces above
-#else
         }
-#endif
         style->deref(document()->renderArena());
     }
 }
@@ -1070,11 +1050,6 @@ Element* Node::rootEditableElement() const
             break;
     }
     return result;
-}
-
-bool Node::inSameRootEditableElement(Node *n)
-{
-    return n ? rootEditableElement() == n->rootEditableElement() : false;
 }
 
 bool Node::inSameContainingBlockFlowElement(Node *n)
@@ -1423,10 +1398,10 @@ bool Node::offsetInCharacters() const
 
 #ifndef NDEBUG
 
-static void appendAttributeDesc(const Node *node, String &string, const QualifiedName& name, DeprecatedString attrDesc)
+static void appendAttributeDesc(const Node* node, String& string, const QualifiedName& name, const char* attrDesc)
 {
     if (node->isElementNode()) {
-        String attr = static_cast<const Element *>(node)->getAttribute(name);
+        String attr = static_cast<const Element*>(node)->getAttribute(name);
         if (!attr.isEmpty()) {
             string += attrDesc;
             string += attr;
@@ -1439,15 +1414,15 @@ void Node::showNode(const char* prefix) const
     if (!prefix)
         prefix = "";
     if (isTextNode()) {
-        DeprecatedString value = nodeValue().deprecatedString();
+        String value = nodeValue();
         value.replace('\\', "\\\\");
         value.replace('\n', "\\n");
-        fprintf(stderr, "%s%s\t%p \"%s\"\n", prefix, nodeName().deprecatedString().utf8().data(), this, value.utf8().data());
+        fprintf(stderr, "%s%s\t%p \"%s\"\n", prefix, nodeName().utf8().data(), this, value.utf8().data());
     } else {
         String attrs = "";
         appendAttributeDesc(this, attrs, classAttr, " CLASS=");
         appendAttributeDesc(this, attrs, styleAttr, " STYLE=");
-        fprintf(stderr, "%s%s\t%p%s\n", prefix, nodeName().deprecatedString().utf8().data(), this, attrs.deprecatedString().ascii());
+        fprintf(stderr, "%s%s\t%p%s\n", prefix, nodeName().utf8().data(), this, attrs.utf8().data());
     }
 }
 
@@ -1476,7 +1451,7 @@ void Node::showTreeAndMark(const Node* markedNode1, const char* markedLabel1, co
     }
 }
 
-void Node::formatForDebugger(char *buffer, unsigned length) const
+void Node::formatForDebugger(char* buffer, unsigned length) const
 {
     String result;
     String s;
@@ -1487,7 +1462,7 @@ void Node::formatForDebugger(char *buffer, unsigned length) const
     else
         result += s;
           
-    strncpy(buffer, result.deprecatedString().latin1(), length - 1);
+    strncpy(buffer, result.utf8().data(), length - 1);
 }
 
 #endif

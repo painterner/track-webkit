@@ -74,14 +74,13 @@ void HTMLScriptElement::parseMappedAttribute(MappedAttribute *attr)
             return;
 
         // FIXME: Evaluate scripts in viewless documents.
-        // See http://bugzilla.opendarwin.org/show_bug.cgi?id=5727
+        // See http://bugs.webkit.org/show_bug.cgi?id=5727
         if (!document()->frame())
             return;
     
         const AtomicString& url = attr->value();
         if (!url.isEmpty()) {
-            DeprecatedString charset = getAttribute(charsetAttr).deprecatedString();
-            m_cachedScript = document()->docLoader()->requestScript(url, charset);
+            m_cachedScript = document()->docLoader()->requestScript(url, getAttribute(charsetAttr));
             m_cachedScript->ref(this);
         }
     } else if (attrName == onloadAttr)
@@ -110,14 +109,13 @@ void HTMLScriptElement::insertedIntoDocument()
     
     // FIXME: Eventually we'd like to evaluate scripts which are inserted into a 
     // viewless document but this'll do for now.
-    // See http://bugzilla.opendarwin.org/show_bug.cgi?id=5727
+    // See http://bugs.webkit.org/show_bug.cgi?id=5727
     if (!document()->frame())
         return;
     
     const AtomicString& url = getAttribute(srcAttr);
     if (!url.isEmpty()) {
-        DeprecatedString charset = getAttribute(charsetAttr).deprecatedString();
-        m_cachedScript = document()->docLoader()->requestScript(url, charset);
+        m_cachedScript = document()->docLoader()->requestScript(url, getAttribute(charsetAttr));
         m_cachedScript->ref(this);
         return;
     }
@@ -146,6 +144,10 @@ void HTMLScriptElement::notifyFinished(CachedResource* o)
 
     assert(cs == m_cachedScript);
 
+    // Evaluating the script could lead to a garbage collection which
+    // can delete the script element so we need to protect it.
+    RefPtr<HTMLScriptElement> protect(this);
+    
     if (cs->errorOccurred())
         dispatchHTMLEvent(errorEvent, true, false);
     else {
@@ -164,7 +166,7 @@ void HTMLScriptElement::evaluateScript(const String& URL, const String& script)
     
     Frame* frame = document()->frame();
     if (frame) {
-        KJSProxy* proxy = frame->jScript();
+        KJSProxy* proxy = frame->scriptProxy();
         if (proxy) {
             m_evaluated = true;
             proxy->evaluate(URL, 0, script, 0);

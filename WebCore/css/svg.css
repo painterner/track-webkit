@@ -34,7 +34,7 @@
     to the bounds of the initial viewport.
 */
 svg:root {
-    overflow: visible !important
+    overflow: hidden !important
 }
 
 svg {
@@ -48,4 +48,8 @@ svg, symbol, marker, pattern {
 
 text, foreignObject {
     display: block !important
+}
+
+text, tspan {
+   white-space: nowrap !important
 }

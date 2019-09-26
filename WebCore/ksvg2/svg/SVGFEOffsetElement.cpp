@@ -21,28 +21,22 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "DeprecatedStringList.h"
+#include "SVGFEOffsetElement.h"
 
 #include "Attr.h"
-
-#include <kcanvas/KCanvasResources.h>
-#include <kcanvas/KCanvasFilters.h>
-#include <kcanvas/device/KRenderingDevice.h>
-#include <kcanvas/device/KRenderingPaintServerGradient.h>
-
-#include "SVGHelper.h"
 #include "SVGRenderStyle.h"
-#include "SVGFEOffsetElement.h"
-#include "SVGAnimatedNumber.h"
-#include "SVGAnimatedString.h"
+#include "SVGResourceFilter.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGFEOffsetElement::SVGFEOffsetElement(const QualifiedName& tagName, Document *doc) : 
-SVGFilterPrimitiveStandardAttributes(tagName, doc)
+SVGFEOffsetElement::SVGFEOffsetElement(const QualifiedName& tagName, Document* doc)
+    : SVGFilterPrimitiveStandardAttributes(tagName, doc)
+    , m_dx(0.0)
+    , m_dy(0.0)
+    , m_filterEffect(0)
 {
-    m_filterEffect = 0;
 }
 
 SVGFEOffsetElement::~SVGFEOffsetElement()
@@ -50,50 +44,38 @@ SVGFEOffsetElement::~SVGFEOffsetElement()
     delete m_filterEffect;
 }
 
-SVGAnimatedString *SVGFEOffsetElement::in1() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedString>(m_in1, dummy);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGFEOffsetElement, String, String, string, In1, in1, SVGNames::inAttr.localName(), m_in1)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFEOffsetElement, double, Number, number, Dx, dx, SVGNames::dxAttr.localName(), m_dx)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFEOffsetElement, double, Number, number, Dy, dy, SVGNames::dyAttr.localName(), m_dy)
 
-SVGAnimatedNumber *SVGFEOffsetElement::dx() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_dx, dummy);
-}
-
-SVGAnimatedNumber *SVGFEOffsetElement::dy() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_dy, dummy);
-}
-
-void SVGFEOffsetElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGFEOffsetElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::dxAttr)
-        dx()->setBaseVal(value.deprecatedString().toDouble());
+        setDxBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::dyAttr)
-        dy()->setBaseVal(value.deprecatedString().toDouble());
+        setDyBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::inAttr)
-        in1()->setBaseVal(value.impl());
+        setIn1BaseValue(value);
     else
         SVGFilterPrimitiveStandardAttributes::parseMappedAttribute(attr);
 }
 
-KCanvasFEOffset *SVGFEOffsetElement::filterEffect() const
+SVGFEOffset* SVGFEOffsetElement::filterEffect() const
 {
     if (!m_filterEffect)
-        m_filterEffect = static_cast<KCanvasFEOffset *>(renderingDevice()->createFilterEffect(FE_OFFSET));
+        m_filterEffect = static_cast<SVGFEOffset*>(SVGResourceFilter::createFilterEffect(FE_OFFSET));
     if (!m_filterEffect)
         return 0;
-    m_filterEffect->setIn(String(in1()->baseVal()).deprecatedString());
+    m_filterEffect->setIn(in1());
     setStandardAttributes(m_filterEffect);
-    m_filterEffect->setDx(dx()->baseVal());
-    m_filterEffect->setDy(dy()->baseVal());
+    m_filterEffect->setDx(dx());
+    m_filterEffect->setDy(dy());
     return m_filterEffect;
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

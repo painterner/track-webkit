@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
                   2004, 2005 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
@@ -20,76 +20,227 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGList_H
-#define KSVG_SVGList_H
+#ifndef SVGList_H
+#define SVGList_H
+
 #ifdef SVG_SUPPORT
 
-#include "DOMList.h"
-#include <ksvg2/svg/SVGStyledElement.h>
+#include <wtf/Vector.h>
+
+#include "Shared.h"
+#include "SVGListTraits.h"
+#include "ExceptionCode.h"
 
 namespace WebCore {
 
-    template<class T>
-    class SVGList : public DOMList<T> {
+    template<typename Item>
+    struct SVGListTypeOperations
+    {
+        static Item nullItem()
+        {
+            return SVGListTraits<UsesDefaultInitializer<Item>::value, Item>::nullItem();
+        }
+    };
+
+    template<typename Item>
+    class SVGList : public Shared<SVGList<Item> >
+    {
+    private:
+        typedef SVGListTypeOperations<Item> TypeOperations;
+
     public:
-        SVGList(const SVGStyledElement *context = 0)
-        : DOMList<T>(), m_context(context) {}
+        SVGList() { }
+        virtual ~SVGList() { m_vector.clear(); }
 
-        void clear()
+        unsigned int numberOfItems() const { return m_vector.size(); }
+        void clear(ExceptionCode &) { m_vector.clear(); }
+
+        Item initialize(Item newItem, ExceptionCode& ec)
         {
-            DOMList<T>::clear();
-
-            if(m_context)
-                m_context->notifyAttributeChange();
+            clear(ec);
+            return appendItem(newItem, ec);
         }
 
-        T *insertItemBefore(T *newItem, unsigned int index)
+        Item getFirst() const
         {
-            T *ret = DOMList<T>::insertItemBefore(newItem, index);
-
-            if(m_context)
-                m_context->notifyAttributeChange();
-
-            return ret;
+            ExceptionCode ec = 0;
+            return getItem(0, ec);
         }
 
-        T *replaceItem(T *newItem, unsigned int index)
+        Item getLast() const
         {
-            T *ret = DOMList<T>::replaceItem(newItem, index);
-
-            if(m_context)
-                m_context->notifyAttributeChange();
-
-            return ret;
+            ExceptionCode ec = 0;
+            return getItem(m_vector.size() - 1, ec);
         }
 
-        T *removeItem(unsigned int index)
+        Item getItem(unsigned int index, ExceptionCode& ec)
         {
-            T *ret = DOMList<T>::removeItem(index);
+            if (index >= m_vector.size()) {
+                ec = INDEX_SIZE_ERR;
+                return TypeOperations::nullItem();
+            }
 
-            if(m_context)
-                m_context->notifyAttributeChange();
-
-            return ret;
+            return m_vector.at(index);
         }
 
-        T *appendItem(T *newItem)
+        const Item getItem(unsigned int index, ExceptionCode& ec) const
         {
-            T *ret = DOMList<T>::appendItem(newItem);
+            if (index >= m_vector.size()) {
+                ec = INDEX_SIZE_ERR;
+                return TypeOperations::nullItem();
+            }
 
-            if(m_context)
-                m_context->notifyAttributeChange();
-
-            return ret;
+            return m_vector[index];
         }
 
-    protected:
-        const SVGStyledElement *m_context;
+        Item insertItemBefore(Item newItem, unsigned int index, ExceptionCode&)
+        {
+            m_vector.insert(index, newItem);
+            return newItem;
+        }
+
+        Item replaceItem(Item newItem, unsigned int index, ExceptionCode& ec)
+        {
+            if (index >= m_vector.size()) {
+                ec = INDEX_SIZE_ERR;
+                return TypeOperations::nullItem();
+            }
+
+            m_vector[index] = newItem;
+            return newItem;
+        }
+
+        Item removeItem(unsigned int index, ExceptionCode& ec)
+        {
+            if (index >= m_vector.size()) {
+                ec = INDEX_SIZE_ERR;
+                return TypeOperations::nullItem();
+            }
+
+            Item item = m_vector[index];
+            m_vector.remove(index);
+            return item;
+        }
+
+        Item appendItem(Item newItem, ExceptionCode&)
+        {
+            m_vector.append(newItem);
+            return newItem;
+        }
+
+    private:
+        Vector<Item> m_vector;
+    };
+
+    template<typename Item>
+    class SVGPODListItem : public Shared<SVGPODListItem<Item> >
+    {
+    public:
+        SVGPODListItem() : m_item() { }
+        SVGPODListItem(const Item& item) : m_item(item) { }
+
+        operator Item&() { return m_item; }
+        operator const Item&() const { return m_item; }
+
+        // Updating facilities, used by JSSVGPODTypeWrapperCreatorForList
+        Item value() const { return m_item; }
+        void setValue(Item newItem) { m_item = newItem; }
+
+    private:
+        Item m_item;
+    };
+
+    template<typename Item>
+    class SVGPODList : public SVGList<RefPtr<SVGPODListItem<Item> > >
+    {
+    public:
+        SVGPODList() : SVGList<RefPtr<SVGPODListItem<Item> > >() { }
+
+        Item initialize(Item newItem, ExceptionCode& ec)
+        {
+            SVGPODListItem<Item>* ptr(SVGList<RefPtr<SVGPODListItem<Item> > >::initialize(new SVGPODListItem<Item>(newItem), ec).get());
+            if (!ptr)
+                return Item();
+
+            return static_cast<const Item&>(*ptr); 
+        }
+
+        Item getFirst() const
+        {
+            SVGPODListItem<Item>* ptr(SVGList<RefPtr<SVGPODListItem<Item> > >::getFirst().get());
+            if (!ptr)
+                return Item();
+
+            return static_cast<const Item&>(*ptr);
+        }
+
+        Item getLast() const
+        {
+            SVGPODListItem<Item>* ptr(SVGList<RefPtr<SVGPODListItem<Item> > >::getLast().get());
+            if (!ptr)
+                return Item();
+
+            return static_cast<const Item&>(*ptr); 
+        }
+
+        Item getItem(unsigned int index, ExceptionCode& ec)
+        {
+            SVGPODListItem<Item>* ptr(SVGList<RefPtr<SVGPODListItem<Item> > >::getItem(index, ec).get());
+            if (!ptr)
+                return Item();
+
+            return static_cast<const Item&>(*ptr);
+        }
+
+        const Item getItem(unsigned int index, ExceptionCode& ec) const
+        {
+            SVGPODListItem<Item>* ptr(SVGList<RefPtr<SVGPODListItem<Item> > >::getItem(index, ec).get());
+             if (!ptr)
+                return Item();
+
+            return static_cast<const Item&>(*ptr);
+        }
+
+        Item insertItemBefore(Item newItem, unsigned int index, ExceptionCode& ec)
+        {
+            SVGPODListItem<Item>* ptr(SVGList<RefPtr<SVGPODListItem<Item> > >::insertItemBefore(new SVGPODListItem<Item>(newItem), index, ec).get());
+            if (!ptr)
+                return Item();
+
+            return static_cast<const Item&>(*ptr); 
+        }
+
+        Item replaceItem(Item newItem, unsigned int index, ExceptionCode& ec)
+        {
+            SVGPODListItem<Item>* ptr(SVGList<RefPtr<SVGPODListItem<Item> > >::replaceItem(new SVGPODListItem<Item>(newItem), index, ec).get());
+            if (!ptr)
+                return Item();
+
+            return static_cast<const Item&>(*ptr);
+        }
+
+        Item removeItem(unsigned int index, ExceptionCode& ec)
+        {
+            SVGPODListItem<Item>* ptr(SVGList<RefPtr<SVGPODListItem<Item> > >::removeItem(index, ec).get());
+            if (!ptr)
+                return Item();
+
+            return static_cast<const Item&>(*ptr); 
+        }
+
+        Item appendItem(Item newItem, ExceptionCode& ec)
+        {
+            SVGPODListItem<Item>* ptr(SVGList<RefPtr<SVGPODListItem<Item> > >::appendItem(new SVGPODListItem<Item>(newItem), ec).get());
+            if (!ptr)
+                return Item();
+
+            return static_cast<const Item&>(*ptr); 
+        }
     };
 
 } // namespace WebCore
 
 #endif // SVG_SUPPORT
-#endif // KSVG_SVGList_H
+#endif // SVGList_H
 
 // vim:ts=4:noet

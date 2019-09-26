@@ -33,13 +33,14 @@
 #include "WebBackForwardList.h"
 
 #pragma warning( push, 0 )
-#include "ResourceLoaderClient.h"
-#include "FrameWin.h"
 #include "Document.h"
+#include "EventHandler.h"
 #include "FrameView.h"
+#include "FrameWin.h"
 #include "IntRect.h"
 #include "PlatformKeyboardEvent.h"
 #include "PlatformMouseEvent.h"
+#include "ResourceHandleClient.h"
 #include "SelectionController.h"
 #include "TypingCommand.h"
 #pragma warning(pop)
@@ -69,6 +70,10 @@ WebView::WebView()
 {
     SetRectEmpty(&m_frame);
 
+    // set to impossible point so we always get the first mouse pos
+    m_lastMousePos.x = -1;
+    m_lastMousePos.y = -1;
+
     m_mainFrame = WebFrame::createInstance();
     m_backForwardList = WebBackForwardList::createInstance();
 
@@ -96,28 +101,36 @@ WebView* WebView::createInstance()
     return instance;
 }
 
-void WebView::mouseMoved(WPARAM wParam, LPARAM lParam)
+void WebView::mouseMoved(UINT message, WPARAM wParam, LPARAM lParam)
 {
-    PlatformMouseEvent mouseEvent(m_viewWindow, wParam, lParam, 0);
-    m_mainFrame->impl()->view()->handleMouseMoveEvent(mouseEvent);
+    // don't send mouse move messages if the mouse hasn't moved.
+    if (LOWORD(lParam) != m_lastMousePos.x ||
+        HIWORD(lParam) != m_lastMousePos.y)
+    {
+        m_lastMousePos.x = LOWORD(lParam);
+        m_lastMousePos.y = HIWORD(lParam);
+
+        PlatformMouseEvent mouseEvent(m_viewWindow, message, wParam, lParam);
+        m_mainFrame->impl()->eventHandler()->handleMouseMoveEvent(mouseEvent);
+    }
 }
 
-void WebView::mouseDown(WPARAM wParam, LPARAM lParam)
+void WebView::mouseDown(UINT message, WPARAM wParam, LPARAM lParam)
 {
-    PlatformMouseEvent mouseEvent(m_viewWindow, wParam, lParam, 1);
-    m_mainFrame->impl()->view()->handleMousePressEvent(mouseEvent);
+    PlatformMouseEvent mouseEvent(m_viewWindow, message, wParam, lParam);
+    m_mainFrame->impl()->eventHandler()->handleMousePressEvent(mouseEvent);
 }
 
-void WebView::mouseUp(WPARAM wParam, LPARAM lParam)
+void WebView::mouseUp(UINT message, WPARAM wParam, LPARAM lParam)
 {
-    PlatformMouseEvent mouseEvent(m_viewWindow, wParam, lParam, 1);
-    m_mainFrame->impl()->view()->handleMouseReleaseEvent(mouseEvent);
+    PlatformMouseEvent mouseEvent(m_viewWindow, message, wParam, lParam);
+    m_mainFrame->impl()->eventHandler()->handleMouseReleaseEvent(mouseEvent);
 }
 
-void WebView::mouseDoubleClick(WPARAM wParam, LPARAM lParam)
+void WebView::mouseDoubleClick(UINT message, WPARAM wParam, LPARAM lParam)
 {
-    PlatformMouseEvent mouseEvent(m_viewWindow, wParam, lParam, 2);
-    m_mainFrame->impl()->view()->handleMouseReleaseEvent(mouseEvent);
+    PlatformMouseEvent mouseEvent(m_viewWindow, message, wParam, lParam);
+    m_mainFrame->impl()->eventHandler()->handleMouseReleaseEvent(mouseEvent);
 }
 
 bool WebView::keyPress(WPARAM wParam, LPARAM lParam)
@@ -127,7 +140,7 @@ bool WebView::keyPress(WPARAM wParam, LPARAM lParam)
     FrameWin* frame = static_cast<FrameWin*>(m_mainFrame->impl());
     bool handled = frame->keyPress(keyEvent);
     if (!handled && !keyEvent.isKeyUp()) {
-        Node* start = frame->selection().start().node();
+        Node* start = frame->selectionController()->start().node();
         if (start && start->isContentEditable()) {
             switch(keyEvent.WindowsKeyCode()) {
             case VK_BACK:
@@ -137,16 +150,16 @@ bool WebView::keyPress(WPARAM wParam, LPARAM lParam)
                 TypingCommand::forwardDeleteKeyPressed(frame->document());
                 break;
             case VK_LEFT:
-                frame->selection().modify(SelectionController::MOVE, SelectionController::LEFT, CharacterGranularity);
+                frame->selectionController()->modify(SelectionController::MOVE, SelectionController::LEFT, CharacterGranularity);
                 break;
             case VK_RIGHT:
-                frame->selection().modify(SelectionController::MOVE, SelectionController::RIGHT, CharacterGranularity);
+                frame->selectionController()->modify(SelectionController::MOVE, SelectionController::RIGHT, CharacterGranularity);
                 break;
             case VK_UP:
-                frame->selection().modify(SelectionController::MOVE, SelectionController::BACKWARD, ParagraphGranularity);
+                frame->selectionController()->modify(SelectionController::MOVE, SelectionController::BACKWARD, ParagraphGranularity);
                 break;
             case VK_DOWN:
-                frame->selection().modify(SelectionController::MOVE, SelectionController::FORWARD, ParagraphGranularity);
+                frame->selectionController()->modify(SelectionController::MOVE, SelectionController::FORWARD, ParagraphGranularity);
                 break;
             case VK_RETURN:
                 if (start->isContentRichlyEditable())
@@ -220,7 +233,7 @@ static LRESULT CALLBACK WebViewWndProc(HWND hWnd, UINT message, WPARAM wParam, L
             break;
         case WM_MOUSEMOVE:
             if (webView)
-                webView->mouseMoved(wParam, lParam);
+                webView->mouseMoved(message, wParam, lParam);
             break;
         case WM_LBUTTONDOWN:
             // Make ourselves the focused window before doing anything else
@@ -231,19 +244,19 @@ static LRESULT CALLBACK WebViewWndProc(HWND hWnd, UINT message, WPARAM wParam, L
         case WM_MBUTTONDOWN:
         case WM_RBUTTONDOWN:
             if (webView)
-                webView->mouseDown(wParam, lParam);
+                webView->mouseDown(message, wParam, lParam);
             break;
         case WM_LBUTTONUP:
         case WM_MBUTTONUP:
         case WM_RBUTTONUP:
             if (webView)
-                webView->mouseUp(wParam, lParam);
+                webView->mouseUp(message, wParam, lParam);
             break;
         case WM_LBUTTONDBLCLK:
         case WM_MBUTTONDBLCLK:
         case WM_RBUTTONDBLCLK:
             if (webView)
-                webView->mouseDoubleClick(wParam, lParam);
+                webView->mouseDoubleClick(message, wParam, lParam);
             break;
         case WM_HSCROLL: {
             if (mainFrameImpl) {
@@ -832,14 +845,16 @@ HRESULT STDMETHODCALLTYPE WebView::takeStringURLFrom(
 HRESULT STDMETHODCALLTYPE WebView::stopLoading( 
         /* [in] */ IUnknown* /*sender*/)
 {
-    DebugBreak();
+    if (m_mainFrame)
+        m_mainFrame->stopLoading();
     return E_NOTIMPL;
 }
     
 HRESULT STDMETHODCALLTYPE WebView::reload( 
         /* [in] */ IUnknown* /*sender*/)
 {
-    DebugBreak();
+    if (m_mainFrame)
+        m_mainFrame->reload();
     return E_NOTIMPL;
 }
     

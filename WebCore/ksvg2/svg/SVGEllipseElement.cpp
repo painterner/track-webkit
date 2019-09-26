@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <wildfox@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,91 +21,83 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "Attr.h"
-
-#include "SVGNames.h"
-#include "SVGHelper.h"
 #include "SVGEllipseElement.h"
-#include "SVGAnimatedLength.h"
 
-#include <kcanvas/KCanvasCreator.h>
+#include "FloatPoint.h"
+#include "SVGLength.h"
+#include "SVGNames.h"
 
 namespace WebCore {
 
-SVGEllipseElement::SVGEllipseElement(const QualifiedName& tagName, Document *doc)
-: SVGStyledTransformableElement(tagName, doc), SVGTests(), SVGLangSpace(), SVGExternalResourcesRequired()
+SVGEllipseElement::SVGEllipseElement(const QualifiedName& tagName, Document* doc)
+    : SVGStyledTransformableElement(tagName, doc)
+    , SVGTests()
+    , SVGLangSpace()
+    , SVGExternalResourcesRequired()
+    , m_cx(this, LengthModeWidth)
+    , m_cy(this, LengthModeHeight)
+    , m_rx(this, LengthModeWidth)
+    , m_ry(this, LengthModeHeight)
 {
-}
+}    
 
 SVGEllipseElement::~SVGEllipseElement()
 {
 }
 
-SVGAnimatedLength *SVGEllipseElement::cx() const
-{
-    return lazy_create<SVGAnimatedLength>(m_cx, this, LM_WIDTH, viewportElement());
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGEllipseElement, SVGLength, Length, length, Cx, cx, SVGNames::cxAttr.localName(), m_cx)
+ANIMATED_PROPERTY_DEFINITIONS(SVGEllipseElement, SVGLength, Length, length, Cy, cy, SVGNames::cyAttr.localName(), m_cy)
+ANIMATED_PROPERTY_DEFINITIONS(SVGEllipseElement, SVGLength, Length, length, Rx, rx, SVGNames::rxAttr.localName(), m_rx)
+ANIMATED_PROPERTY_DEFINITIONS(SVGEllipseElement, SVGLength, Length, length, Ry, ry, SVGNames::ryAttr.localName(), m_ry)
 
-SVGAnimatedLength *SVGEllipseElement::cy() const
-{
-    return lazy_create<SVGAnimatedLength>(m_cy, this, LM_HEIGHT, viewportElement());
-}
-
-SVGAnimatedLength *SVGEllipseElement::rx() const
-{
-    return lazy_create<SVGAnimatedLength>(m_rx, this, LM_WIDTH, viewportElement());
-}
-
-SVGAnimatedLength *SVGEllipseElement::ry() const
-{
-    return lazy_create<SVGAnimatedLength>(m_ry, this, LM_HEIGHT, viewportElement());
-}
-
-void SVGEllipseElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGEllipseElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const AtomicString& value = attr->value();
     if (attr->name() == SVGNames::cxAttr)
-        cx()->baseVal()->setValueAsString(value.impl());
-    if (attr->name() == SVGNames::cyAttr)
-        cy()->baseVal()->setValueAsString(value.impl());
-    if (attr->name() == SVGNames::rxAttr)
-        rx()->baseVal()->setValueAsString(value.impl());
-    if (attr->name() == SVGNames::ryAttr)
-        ry()->baseVal()->setValueAsString(value.impl());
-    else
-    {
-        if(SVGTests::parseMappedAttribute(attr)) return;
-        if(SVGLangSpace::parseMappedAttribute(attr)) return;
-        if(SVGExternalResourcesRequired::parseMappedAttribute(attr)) return;
+        setCxBaseValue(SVGLength(this, LengthModeWidth, value));
+    else if (attr->name() == SVGNames::cyAttr)
+        setCyBaseValue(SVGLength(this, LengthModeHeight, value));
+    else if (attr->name() == SVGNames::rxAttr) {
+        setRxBaseValue(SVGLength(this, LengthModeWidth, value));
+        if (rx().value() < 0.0)
+            document()->accessSVGExtensions()->reportError("A negative value for ellipse <rx> is not allowed");
+    } else if (attr->name() == SVGNames::ryAttr) {
+        setRyBaseValue(SVGLength(this, LengthModeHeight, value));
+        if (ry().value() < 0.0)
+            document()->accessSVGExtensions()->reportError("A negative value for ellipse <ry> is not allowed");
+    } else {
+        if (SVGTests::parseMappedAttribute(attr))
+            return;
+        if (SVGLangSpace::parseMappedAttribute(attr))
+            return;
+        if (SVGExternalResourcesRequired::parseMappedAttribute(attr))
+            return;
         SVGStyledTransformableElement::parseMappedAttribute(attr);
     }
 }
 
-KCanvasPath* SVGEllipseElement::toPathData() const
+void SVGEllipseElement::notifyAttributeChange() const
 {
-    float _cx = cx()->baseVal()->value(), _cy = cy()->baseVal()->value();
-    float _rx = rx()->baseVal()->value(), _ry = ry()->baseVal()->value();
-
-    return KCanvasCreator::self()->createEllipse(_cx, _cy, _rx, _ry);
+    if (!ownerDocument()->parsing())
+        rebuildRenderer();
 }
 
-const SVGStyledElement *SVGEllipseElement::pushAttributeContext(const SVGStyledElement *context)
+Path SVGEllipseElement::toPathData() const
 {
-    // All attribute's contexts are equal (so just take the one from 'cx').
-    const SVGStyledElement *restore = cx()->baseVal()->context();
-
-    cx()->baseVal()->setContext(context);
-    cy()->baseVal()->setContext(context);
-    rx()->baseVal()->setContext(context);
-    ry()->baseVal()->setContext(context);
-
-    SVGStyledElement::pushAttributeContext(context);
-    return restore;
+    return Path::createEllipse(FloatPoint(cx().value(), cy().value()),
+                               rx().value(), ry().value());
+}
+ 
+bool SVGEllipseElement::hasRelativeValues() const
+{
+    return (cx().isRelative() || cy().isRelative() ||
+            rx().isRelative() || ry().isRelative());
 }
 
 }
 
-// vim:ts=4:noet
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

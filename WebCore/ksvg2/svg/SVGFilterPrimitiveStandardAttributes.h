@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <wildfox@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,16 +20,15 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGFilterPrimitiveStandardAttributesImpl_H
-#define KSVG_SVGFilterPrimitiveStandardAttributesImpl_H
+#ifndef SVGFilterPrimitiveStandardAttributes_H
+#define SVGFilterPrimitiveStandardAttributes_H
+
 #ifdef SVG_SUPPORT
 
 #include "SVGStyledElement.h"
 
 namespace WebCore {
-    class KCanvasFilterEffect;
-    class SVGAnimatedLength;
-    class SVGAnimatedString;
+    class SVGFilterEffect;
 
     class SVGFilterPrimitiveStandardAttributes : public SVGStyledElement
     {
@@ -40,25 +39,22 @@ namespace WebCore {
         virtual bool isFilterEffect() const { return true; }
 
         // 'SVGFilterPrimitiveStandardAttributes' functions
-        SVGAnimatedLength *x() const;
-        SVGAnimatedLength *y() const;
-        SVGAnimatedLength *width() const;
-        SVGAnimatedLength *height() const;
-        SVGAnimatedString *result() const;
-
         virtual void parseMappedAttribute(MappedAttribute *attr);
 
-        virtual KCanvasFilterEffect *filterEffect() const = 0;
+        virtual SVGFilterEffect* filterEffect() const = 0;
 
     protected:
-        void setStandardAttributes(KCanvasFilterEffect *filterEffect) const;
+        void setStandardAttributes(SVGFilterEffect* filterEffect) const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedLength> m_x;
-        mutable RefPtr<SVGAnimatedLength> m_y;
-        mutable RefPtr<SVGAnimatedLength> m_width;
-        mutable RefPtr<SVGAnimatedLength> m_height;
-        mutable RefPtr<SVGAnimatedString> m_result;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFilterPrimitiveStandardAttributes, SVGLength, SVGLength, X, x)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFilterPrimitiveStandardAttributes, SVGLength, SVGLength, Y, y)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFilterPrimitiveStandardAttributes, SVGLength, SVGLength, Width, width)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFilterPrimitiveStandardAttributes, SVGLength, SVGLength, Height, height)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFilterPrimitiveStandardAttributes, String, String, Result, result)
     };
 
 } // namespace WebCore

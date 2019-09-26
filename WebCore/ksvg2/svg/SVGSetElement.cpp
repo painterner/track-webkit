@@ -23,7 +23,7 @@
 #include "config.h"
 #ifdef SVG_SUPPORT
 #include "SVGSetElement.h"
-#include "KSVGTimeScheduler.h"
+#include "TimeScheduler.h"
 #include "Document.h"
 #include "SVGDocumentExtensions.h"
 #include "SVGSVGElement.h"
@@ -39,36 +39,28 @@ SVGSetElement::~SVGSetElement()
 {
 }
 
-void SVGSetElement::handleTimerEvent(double timePercentage)
+bool SVGSetElement::updateCurrentValue(double timePercentage)
 {
-    // Start condition.
-    if (!m_connected) {    
-        ownerSVGElement()->timeScheduler()->connectIntervalTimer(this);
-        m_connected = true;
-        return;
-    }
-
-    // Calculations...
-    if (timePercentage >= 1.0)
-        timePercentage = 1.0;
-
-    // Commit change now...
     if (m_savedTo.isEmpty()) {
-        String attr(targetAttribute());
-        m_savedTo = attr.deprecatedString();
-        setTargetAttribute(String(m_to).impl());
+        m_savedTo = targetAttribute();
+        setTargetAttribute(m_to);
     }
+    return false;
+}
 
-    // End condition.
-    if (timePercentage == 1.0) {
-        ownerSVGElement()->timeScheduler()->disconnectIntervalTimer(this);
-        m_connected = false;
+bool SVGSetElement::handleStartCondition()
+{
+    return true;
+}
 
-        if (!isFrozen())
-            setTargetAttribute(String(m_savedTo).impl());
-
-        m_savedTo = DeprecatedString();
-    }
+void SVGSetElement::handleEndCondition()
+{
+    disconnectTimer();
+    
+    if (!isFrozen())
+        setTargetAttribute(m_savedTo);
+    
+    m_savedTo = String();
 }
 
 }

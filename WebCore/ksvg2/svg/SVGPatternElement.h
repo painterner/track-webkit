@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006, 2007 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,34 +20,34 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGPatternElementImpl_H
-#define KSVG_SVGPatternElementImpl_H
+#ifndef SVGPatternElement_H
+#define SVGPatternElement_H
+
 #ifdef SVG_SUPPORT
 
-#include "SVGTests.h"
-#include "SVGLangSpace.h"
-#include "SVGURIReference.h"
-#include "SVGFitToViewBox.h"
-#include "SVGStyledLocatableElement.h"
+#include "SVGPaintServerPattern.h"
 #include "SVGExternalResourcesRequired.h"
+#include "SVGFitToViewBox.h"
+#include "SVGLangSpace.h"
+#include "SVGStyledElement.h"
+#include "SVGTests.h"
+#include "SVGURIReference.h"
 
-#include <kcanvas/device/KRenderingPaintServerPattern.h>
-
-class KCanvasImage;
 
 namespace WebCore
 {
-    class SVGAnimatedLength;
+    struct PatternAttributes;
+ 
+    class SVGLength;
     class SVGPatternElement;
-    class SVGAnimatedEnumeration;
-    class SVGAnimatedTransformList;
-    class SVGPatternElement : public SVGStyledLocatableElement,
-                                  public SVGURIReference,
-                                  public SVGTests,
-                                  public SVGLangSpace,
-                                  public SVGExternalResourcesRequired,
-                                  public SVGFitToViewBox,
-                                  public KCanvasResourceListener
+    class SVGTransformList;
+
+    class SVGPatternElement : public SVGStyledElement,
+                              public SVGURIReference,
+                              public SVGTests,
+                              public SVGLangSpace,
+                              public SVGExternalResourcesRequired,
+                              public SVGFitToViewBox
     {
     public:
         SVGPatternElement(const QualifiedName&, Document*);
@@ -56,50 +56,41 @@ namespace WebCore
         virtual bool isValid() const { return SVGTests::isValid(); }
 
         // 'SVGPatternElement' functions
-        SVGAnimatedEnumeration *patternUnits() const;
-        SVGAnimatedEnumeration *patternContentUnits() const;
-        SVGAnimatedTransformList *patternTransform() const;
+        virtual void parseMappedAttribute(MappedAttribute*);
 
-        SVGAnimatedLength *x() const;
-        SVGAnimatedLength *y() const;
+        const SVGStyledElement* pushAttributeContext(const SVGStyledElement*);
 
-        SVGAnimatedLength *width() const;
-        SVGAnimatedLength *height() const;
-
-        virtual void parseMappedAttribute(MappedAttribute *attr);
-
-        const SVGStyledElement *pushAttributeContext(const SVGStyledElement *context);
-
-        virtual void resourceNotification() const;
         virtual void notifyAttributeChange() const;
 
-        virtual bool rendererIsNeeded(RenderStyle *style) { return StyledElement::rendererIsNeeded(style); }
-        virtual RenderObject *createRenderer(RenderArena *arena, RenderStyle *style);
-        virtual KRenderingPaintServerPattern *canvasResource();
+        virtual bool rendererIsNeeded(RenderStyle* style) { return StyledElement::rendererIsNeeded(style); }
+        virtual RenderObject* createRenderer(RenderArena*, RenderStyle*);
+        virtual SVGResource* canvasResource();
 
-        // 'virtual SVGLocatable' functions
-        virtual SVGMatrix *getCTM() const;
+        virtual void insertedIntoDocument();
 
     protected:
-        mutable RefPtr<SVGAnimatedLength> m_x;
-        mutable RefPtr<SVGAnimatedLength> m_y;
-        mutable RefPtr<SVGAnimatedLength> m_width;
-        mutable RefPtr<SVGAnimatedLength> m_height;
-        
-        mutable RefPtr<SVGAnimatedEnumeration> m_patternUnits;
-        mutable RefPtr<SVGAnimatedEnumeration> m_patternContentUnits;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGURIReference, String, Href, href)
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired)
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGFitToViewBox, FloatRect, ViewBox, viewBox)
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGFitToViewBox, SVGPreserveAspectRatio*, PreserveAspectRatio, preserveAspectRatio)
 
-        mutable RefPtr<SVGAnimatedTransformList> m_patternTransform;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGPatternElement, SVGLength, SVGLength, X, x)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGPatternElement, SVGLength, SVGLength, Y, y)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGPatternElement, SVGLength, SVGLength, Width, width)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGPatternElement, SVGLength, SVGLength, Height, height)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGPatternElement, int, int, PatternUnits, patternUnits)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGPatternElement, int, int, PatternContentUnits, patternContentUnits)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGPatternElement, SVGTransformList*, RefPtr<SVGTransformList>, PatternTransform, patternTransform)
 
-        mutable KCanvasImage *m_tile;
-        mutable bool m_ignoreAttributeChanges;
-        mutable KRenderingPaintServerPattern *m_paintServer;
-        
+        mutable RefPtr<SVGPaintServerPattern> m_resource;
+
+        virtual const SVGElement* contextElement() const { return this; }
+
     private:
-        // notifyAttributeChange helpers:
-        void fillAttributesFromReferencePattern(const SVGPatternElement *target, KCanvasMatrix &patternTransformMatrix) const;
-        void drawPatternContentIntoTile(const SVGPatternElement *target, const IntSize &newSize, KCanvasMatrix patternTransformMatrix) const;
-        void notifyClientsToRepaint() const;
+        friend class SVGPaintServerPattern;
+        void buildPattern(const FloatRect& targetRect) const;
+
+        PatternAttributes collectPatternProperties() const;
     };
 
 } // namespace WebCore

@@ -21,16 +21,18 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "SVGMatrix.h"
+
+#include "AffineTransform.h"
 #include "SVGTransform.h"
 #include "SVGSVGElement.h"
 #include "SVGTransformList.h"
 
 using namespace WebCore;
 
-SVGTransformList::SVGTransformList(const SVGStyledElement *context)
-: SVGList<SVGTransform>(context)
+SVGTransformList::SVGTransformList()
+    : SVGList<RefPtr<SVGTransform> >()
 {
 }
 
@@ -38,43 +40,38 @@ SVGTransformList::~SVGTransformList()
 {
 }
 
-SVGTransform *SVGTransformList::createSVGTransformFromMatrix(SVGMatrix *matrix) const
+RefPtr<SVGTransform> SVGTransformList::createSVGTransformFromMatrix(const AffineTransform& matrix) const
 {
     return SVGSVGElement::createSVGTransformFromMatrix(matrix);
 }
 
-SVGTransform *SVGTransformList::consolidate()
+RefPtr<SVGTransform> SVGTransformList::consolidate()
 {
-    SVGTransform *obj = concatenate();
-    if(!obj)
+    SVGTransform* obj = concatenate();
+    if (!obj)
         return 0;
 
-    // Disable notifications here...
-    const SVGStyledElement *savedContext = m_context;
-
-    m_context = 0;
-    SVGTransform *ret = initialize(obj);
-    m_context = savedContext;
-    
-    return ret;
+    ExceptionCode ec = 0;
+    return initialize(obj, ec);
 }
 
-SVGTransform *SVGTransformList::concatenate() const
+SVGTransform* SVGTransformList::concatenate() const
 {
     unsigned int length = numberOfItems();
-    if(!length)
+    if (!length)
         return 0;
         
-    SVGTransform *obj = SVGSVGElement::createSVGTransform();
-    SVGMatrix *matrix = SVGSVGElement::createSVGMatrix();
+    SVGTransform* obj = SVGSVGElement::createSVGTransform();
+    AffineTransform matrix;
 
-    for(unsigned int i = 0; i < length; i++)
-        matrix->multiply(getItem(i)->matrix());
+    ExceptionCode ec = 0;
+    for (unsigned int i = 0; i < length; i++)
+        matrix = getItem(i, ec)->matrix() * matrix;
 
     obj->setMatrix(matrix);
     return obj;
 }
 
-// vim:ts=4:noet
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

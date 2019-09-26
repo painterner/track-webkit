@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006, 2007 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,8 +20,8 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGColorImpl_H
-#define KSVG_SVGColorImpl_H
+#ifndef SVGColor_H
+#define SVGColor_H
 #ifdef SVG_SUPPORT
 
 #include "CSSValue.h"
@@ -29,16 +29,17 @@
 #include "PlatformString.h"
 
 namespace WebCore {
-    class RGBColor;
+   
     typedef int ExceptionCode;
-    
+ 
     class SVGColor : public CSSValue {
     public:
         SVGColor();
         SVGColor(const String& rgbColor);
+        SVGColor(const Color& c);
         SVGColor(unsigned short colorType);
         virtual ~SVGColor();
-        
+
         enum SVGColorType {
             SVG_COLORTYPE_UNKNOWN                   = 0,
             SVG_COLORTYPE_RGBCOLOR                  = 1,
@@ -50,6 +51,8 @@ namespace WebCore {
         unsigned short colorType() const;
 
         unsigned rgbColor() const;
+        
+        static Color colorFromRGBColorString(const String&);
 
         void setRGBColor(const String& rgbColor) { ExceptionCode ignored = 0; setRGBColor(rgbColor, ignored); }
         void setRGBColor(const String& rgbColor, ExceptionCode&);
@@ -61,15 +64,16 @@ namespace WebCore {
         // Helpers
         const Color& color() const;
 
+        virtual bool isSVGColor() const { return true; }
+
     private:
         Color m_color;
         unsigned short m_colorType;
-        String m_rgbColor;
     };
 
 } // namespace WebCore
 
 #endif // SVG_SUPPORT
-#endif // KSVG_SVGColorImpl_H
+#endif // SVGColor_H
 
 // vim:ts=4:noet

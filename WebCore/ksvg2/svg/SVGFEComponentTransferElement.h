@@ -25,11 +25,10 @@
 #ifdef SVG_SUPPORT
 
 #include "SVGFilterPrimitiveStandardAttributes.h"
-#include "KCanvasFilters.h"
+#include "SVGFEComponentTransfer.h"
 
 namespace WebCore
 {
-    class SVGAnimatedString;
 
     class SVGFEComponentTransferElement : public SVGFilterPrimitiveStandardAttributes
     {
@@ -38,16 +37,17 @@ namespace WebCore
         virtual ~SVGFEComponentTransferElement();
 
         // 'SVGFEComponentTransferElement' functions
-        SVGAnimatedString *in1() const;
-
         // Derived from: 'Element'
         virtual void parseMappedAttribute(MappedAttribute *attr);
 
-        virtual KCanvasFEComponentTransfer *filterEffect() const;
+        virtual SVGFEComponentTransfer *filterEffect() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedString> m_in1;
-        mutable KCanvasFEComponentTransfer *m_filterEffect;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEComponentTransferElement, String, String, In1, in1)
+        mutable SVGFEComponentTransfer *m_filterEffect;
     };
 
 } // namespace WebCore

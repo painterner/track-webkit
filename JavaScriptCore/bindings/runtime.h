@@ -28,7 +28,7 @@
 
 #include "value.h"
 
-#include <CoreFoundation/CFDictionary.h>
+#include <wtf/HashMap.h>
 
 namespace KJS  {
 
@@ -110,12 +110,12 @@ class Class
 public:
     virtual const char *name() const = 0;
     
-    virtual MethodList methodsNamed(const char *name, Instance*) const = 0;
+    virtual MethodList methodsNamed(const Identifier&, Instance*) const = 0;
     
     virtual Constructor *constructorAt(int i) const = 0;
     virtual int numConstructors() const = 0;
     
-    virtual Field *fieldNamed(const char *name, Instance*) const = 0;
+    virtual Field *fieldNamed(const Identifier&, Instance*) const = 0;
 
     virtual JSValue* fallbackObject(ExecState*, Instance*, const Identifier&) { return jsUndefined(); }
     
@@ -131,6 +131,9 @@ public:
         JavaLanguage,
         ObjectiveCLanguage,
         CLanguage
+#if PLATFORM(QT)
+        , QtLanguage
+#endif
     } BindingLanguage;
 
     Instance();
@@ -139,7 +142,6 @@ public:
     static KJSDidExecuteFunctionPtr didExecuteFunction();
     
     static Instance* createBindingForLanguageInstance(BindingLanguage, void* nativeInstance, const RootObject* = 0);
-    static void* createLanguageInstanceForValue(ExecState*, BindingLanguage, JSObject* value, const RootObject* origin, const RootObject* current);
     static JSObject* createRuntimeObject(BindingLanguage, void* nativeInstance, const RootObject* = 0);
 
     void ref() { _refCount++; }
@@ -172,13 +174,13 @@ public:
     
     virtual JSValue* valueOf() const { return jsString(getClass()->name()); }
     
-    void setExecutionContext(const RootObject *r) { _executionContext = r; }
-    const RootObject *executionContext() const { return _executionContext; }
+    void setRootObject(const RootObject* r) { _rootObject = r; }
+    const RootObject* rootObject() const { return _rootObject; }
     
     virtual ~Instance() {}
 
 protected:
-    const RootObject* _executionContext;
+    const RootObject* _rootObject;
     unsigned _refCount;
 
 private:
@@ -197,14 +199,10 @@ public:
 
 const char *signatureForParameters(const List&);
 
-void deleteMethodList(CFAllocatorRef, const void* value);
-void deleteMethod(CFAllocatorRef, const void* value);
-void deleteField(CFAllocatorRef, const void* value);
-
-const CFDictionaryValueCallBacks MethodListDictionaryValueCallBacks = { 0, 0, &deleteMethodList, 0 , 0 };
-const CFDictionaryValueCallBacks MethodDictionaryValueCallBacks = { 0, 0, &deleteMethod, 0 , 0 };
-const CFDictionaryValueCallBacks FieldDictionaryValueCallBacks = { 0, 0, &deleteField, 0 , 0 };
-
+typedef HashMap<RefPtr<UString::Rep>, MethodList*> MethodListMap;
+typedef HashMap<RefPtr<UString::Rep>, Method*> MethodMap; 
+typedef HashMap<RefPtr<UString::Rep>, Field*> FieldMap; 
+    
 } // namespace Bindings
 
 } // namespace KJS

@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,76 +21,62 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGGradientElement.h"
 
-#include "Attr.h"
-#include "Document.h"
+#include "cssstyleselector.h"
+#include "RenderPath.h"
 #include "RenderView.h"
-#include "SVGAnimatedEnumeration.h"
-#include "SVGAnimatedNumber.h"
-#include "SVGAnimatedTransformList.h"
-#include "SVGHelper.h"
 #include "SVGNames.h"
-#include "SVGRenderStyle.h"
 #include "SVGStopElement.h"
 #include "SVGTransformList.h"
 #include "SVGTransformable.h"
-#include "cssstyleselector.h"
-#include "ksvg.h"
-#include <kcanvas/device/KRenderingDevice.h>
-#include <kcanvas/device/KRenderingPaintServerGradient.h>
+#include "SVGUnitTypes.h"
+#include "SVGPaintServerLinearGradient.h"
+#include "SVGPaintServerRadialGradient.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGGradientElement::SVGGradientElement(const QualifiedName& tagName, Document *doc) : SVGStyledElement(tagName, doc), SVGURIReference(), SVGExternalResourcesRequired()
+SVGGradientElement::SVGGradientElement(const QualifiedName& tagName, Document* doc)
+    : SVGStyledElement(tagName, doc)
+    , SVGURIReference()
+    , SVGExternalResourcesRequired()
+    , m_spreadMethod(0)
+    , m_gradientUnits(SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX)
+    , m_gradientTransform(new SVGTransformList)
 {
-    m_resource = 0;
 }
 
 SVGGradientElement::~SVGGradientElement()
 {
-    delete m_resource;
 }
 
-SVGAnimatedEnumeration *SVGGradientElement::gradientUnits() const
-{
-    if (!m_gradientUnits) {
-        lazy_create<SVGAnimatedEnumeration>(m_gradientUnits, this);
-        m_gradientUnits->setBaseVal(SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
-    }
-    
-    return m_gradientUnits.get();
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGGradientElement, int, Enumeration, enumeration, GradientUnits, gradientUnits, SVGNames::gradientUnitsAttr.localName(), m_gradientUnits)
+ANIMATED_PROPERTY_DEFINITIONS(SVGGradientElement, SVGTransformList*, TransformList, transformList, GradientTransform, gradientTransform, SVGNames::gradientTransformAttr.localName(), m_gradientTransform.get())
+ANIMATED_PROPERTY_DEFINITIONS(SVGGradientElement, int, Enumeration, enumeration, SpreadMethod, spreadMethod, SVGNames::spreadMethodAttr.localName(), m_spreadMethod)
 
-SVGAnimatedTransformList *SVGGradientElement::gradientTransform() const
-{
-    return lazy_create<SVGAnimatedTransformList>(m_gradientTransform, this);
-}
-
-SVGAnimatedEnumeration *SVGGradientElement::spreadMethod() const
-{
-    return lazy_create<SVGAnimatedEnumeration>(m_spreadMethod, this);
-}
-
-void SVGGradientElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGGradientElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::gradientUnitsAttr) {
-        if(value == "userSpaceOnUse")
-            gradientUnits()->setBaseVal(SVG_UNIT_TYPE_USERSPACEONUSE);
-        else if(value == "objectBoundingBox")
-            gradientUnits()->setBaseVal(SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
+        if (value == "userSpaceOnUse")
+            setGradientUnitsBaseValue(SVGUnitTypes::SVG_UNIT_TYPE_USERSPACEONUSE);
+        else if (value == "objectBoundingBox")
+            setGradientUnitsBaseValue(SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
     } else if (attr->name() == SVGNames::gradientTransformAttr) {
-        SVGTransformList *gradientTransforms = gradientTransform()->baseVal();
-        SVGTransformable::parseTransformAttribute(gradientTransforms, attr->value());
+        SVGTransformList* gradientTransforms = gradientTransformBaseValue();
+        if (!SVGTransformable::parseTransformAttribute(gradientTransforms, attr->value())) {
+            ExceptionCode ec = 0;
+            gradientTransforms->clear(ec);
+        }
     } else if (attr->name() == SVGNames::spreadMethodAttr) {
-        if(value == "reflect")
-            spreadMethod()->setBaseVal(SVG_SPREADMETHOD_REFLECT);
-        else if(value == "repeat")
-            spreadMethod()->setBaseVal(SVG_SPREADMETHOD_REPEAT);
-        else if(value == "pad")
-            spreadMethod()->setBaseVal(SVG_SPREADMETHOD_PAD);
+        if (value == "reflect")
+            setSpreadMethodBaseValue(SVG_SPREADMETHOD_REFLECT);
+        else if (value == "repeat")
+            setSpreadMethodBaseValue(SVG_SPREADMETHOD_REPEAT);
+        else if (value == "pad")
+            setSpreadMethodBaseValue(SVG_SPREADMETHOD_PAD);
     } else {
         if (SVGURIReference::parseMappedAttribute(attr))
             return;
@@ -103,66 +89,62 @@ void SVGGradientElement::parseMappedAttribute(MappedAttribute *attr)
 
 void SVGGradientElement::notifyAttributeChange() const
 {
-    if(ownerDocument()->parsing() || !attached())
+    if (!m_resource || !attached() || ownerDocument()->parsing())
         return;
 
-    // Update clients of this gradient resource...
-    buildGradient(m_resource);
-    
-    m_resource->invalidate();  // should this be added to build gradient?
-    
-    const KCanvasItemList &clients = m_resource->clients();
-    for(KCanvasItemList::ConstIterator it = clients.begin(); it != clients.end(); ++it)
-    {
-        const RenderPath *current = (*it);
-        SVGStyledElement *styled = (current ? static_cast<SVGStyledElement *>(current->element()) : 0);
-        if(styled)
-            styled->setChanged(true);
-    }
+    m_resource->invalidate();
+    m_resource->repaintClients();
 }
 
-KRenderingPaintServerGradient *SVGGradientElement::canvasResource()
+SVGResource* SVGGradientElement::canvasResource()
 {
     if (!m_resource) {
-        KRenderingPaintServer *temp = renderingDevice()->createPaintServer(gradientType());
-        m_resource = static_cast<KRenderingPaintServerGradient *>(temp);
-        m_resource->setListener(this);
-        buildGradient(m_resource);
+        if (gradientType() == LinearGradientPaintServer)
+            m_resource = new SVGPaintServerLinearGradient(this);
+        else
+            m_resource = new SVGPaintServerRadialGradient(this);
     }
-    return m_resource;
+
+    return m_resource.get();
 }
 
-void SVGGradientElement::resourceNotification() const
+Vector<SVGGradientStop> SVGGradientElement::buildStops() const
 {
-    // We're referenced by a "client", build the gradient now...
-    buildGradient(m_resource);
-}
+    Vector<SVGGradientStop> stops;
 
-void SVGGradientElement::rebuildStops() const
-{
-    if (m_resource && !ownerDocument()->parsing()) {
-        Vector<KCGradientStop> stops;
-         // FIXME: Manual style resolution is a hack
-        RenderStyle* gradientStyle = const_cast<SVGGradientElement*>(this)->styleForRenderer(parent()->renderer());
-        for (Node *n = firstChild(); n; n = n->nextSibling()) {
-            SVGElement *element = svg_dynamic_cast(n);
-            if (element && element->isGradientStop()) {
-                SVGStopElement *stop = static_cast<SVGStopElement *>(element);
-                float stopOffset = stop->offset()->baseVal();
+    // FIXME: Manual style resolution is a hack
+    RenderStyle* gradientStyle = const_cast<SVGGradientElement*>(this)->styleForRenderer(parent()->renderer());
+    for (Node* n = firstChild(); n; n = n->nextSibling()) {
+        SVGElement* element = svg_dynamic_cast(n);
+        if (element && element->isGradientStop()) {
+            SVGStopElement* stop = static_cast<SVGStopElement*>(element);
+            float stopOffset = stop->offset();
                 
-                RenderStyle *stopStyle = document()->styleSelector()->styleForElement(stop, gradientStyle);
-                Color c = stopStyle->svgStyle()->stopColor();
-                float opacity = stopStyle->svgStyle()->stopOpacity();
+            RenderStyle* stopStyle = document()->styleSelector()->styleForElement(stop, gradientStyle);
+            Color c = stopStyle->svgStyle()->stopColor();
+            float opacity = stopStyle->svgStyle()->stopOpacity();
                 
-                stops.append(makeGradientStop(stopOffset, makeRGBA(c.red(), c.green(), c.blue(), int(opacity * 255.))));
-                stopStyle->deref(view()->renderArena());
-            }
+            stops.append(makeGradientStop(stopOffset, makeRGBA(c.red(), c.green(), c.blue(), int(opacity * 255.))));
+            stopStyle->deref(view()->renderArena());
         }
-        gradientStyle->deref(view()->renderArena());
-        m_resource->setGradientStops(stops);
     }
+
+    gradientStyle->deref(view()->renderArena());
+    return stops;
 }
 
-// vim:ts=4:noet
+void SVGGradientElement::insertedIntoDocument()
+{
+    SVGElement::insertedIntoDocument();
+    SVGDocumentExtensions* extensions = document()->accessSVGExtensions();
+
+    String resourceId = SVGURIReference::getTarget(id());
+    if (extensions->isPendingResource(resourceId))
+        SVGResource::repaintClients(extensions->removePendingResource(resourceId));
+}
+
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

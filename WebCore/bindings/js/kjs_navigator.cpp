@@ -27,9 +27,12 @@
 #include "AtomicString.h"
 #include "CookieJar.h"
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "Language.h"
 #include "PlugInInfoStore.h"
+#include "Settings.h"
 
+#ifndef WEBCORE_NAVIGATOR_PLATFORM
 #if PLATFORM(MAC) && PLATFORM(PPC)
 #define WEBCORE_NAVIGATOR_PLATFORM "MacPPC"
 #elif PLATFORM(MAC) && PLATFORM(X86)
@@ -39,6 +42,7 @@
 #else
 #define WEBCORE_NAVIGATOR_PLATFORM ""
 #endif
+#endif // ifndef WEBCORE_NAVIGATOR_PLATFORM
 
 using namespace WebCore;
 
@@ -161,17 +165,18 @@ bool Navigator::getOwnPropertySlot(ExecState *exec, const Identifier& propertyNa
   return getStaticPropertySlot<NavigatorFunc, Navigator, JSObject>(exec, &NavigatorTable, this, propertyName, slot);
 }
 
-JSValue *Navigator::getValueProperty(ExecState *exec, int token) const
+JSValue* Navigator::getValueProperty(ExecState* exec, int token) const
 {
-  String userAgent = m_frame->userAgent();
   switch (token) {
   case AppCodeName:
     return jsString("Mozilla");
   case AppName:
     return jsString("Netscape");
-  case AppVersion:
-    // We assume the string is something like Mozilla/version (properties)
+  case AppVersion: {
+    // Version is everything in the user agent string past the "Mozilla/" prefix.
+    const String userAgent = m_frame->loader()->userAgent();
     return jsString(userAgent.substring(userAgent.find('/') + 1));
+  }
   case Product:
     return jsString("Gecko");
   case ProductSub:
@@ -183,7 +188,7 @@ JSValue *Navigator::getValueProperty(ExecState *exec, int token) const
   case Language:
     return jsString(defaultLanguage());
   case UserAgent:
-    return jsString(userAgent);
+    return jsString(m_frame->loader()->userAgent());
   case Platform:
     return jsString(WEBCORE_NAVIGATOR_PLATFORM);
   case _Plugins:
@@ -492,7 +497,7 @@ JSValue *MimeType::getValueProperty(ExecState *exec, int token) const
     case EnabledPlugin: {
         ScriptInterpreter *interpreter = static_cast<ScriptInterpreter *>(exec->dynamicInterpreter());
         Frame *frame = interpreter->frame();
-        if (frame && frame->pluginsEnabled())
+        if (frame && frame->settings()->arePluginsEnabled())
             return new Plugin(exec, m_info->plugin);
         else
             return jsUndefined();
@@ -519,7 +524,7 @@ JSValue *NavigatorFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const
     return throwError(exec, TypeError);
   Navigator *nav = static_cast<Navigator *>(thisObj);
   // javaEnabled()
-  return jsBoolean(nav->frame()->javaEnabled());
+  return jsBoolean(nav->frame()->settings()->isJavaEnabled());
 }
 
 } // namespace

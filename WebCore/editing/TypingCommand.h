@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2005, 2006 Apple Computer, Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,21 +41,21 @@ public:
         InsertParagraphSeparatorInQuotedContent
     };
 
-    TypingCommand(Document *document, ETypingCommand, const String &text = "", bool selectInsertedText = false, TextGranularity granularity = CharacterGranularity);
+    TypingCommand(Document*, ETypingCommand, const String& text = "", bool selectInsertedText = false, TextGranularity = CharacterGranularity);
 
-    static void deleteKeyPressed(Document *, bool smartDelete = false, TextGranularity granularity = CharacterGranularity);
-    static void forwardDeleteKeyPressed(Document *, bool smartDelete = false, TextGranularity granularity = CharacterGranularity);
-    static void insertText(Document *, const String &, bool selectInsertedText = false);
-    static void insertLineBreak(Document *);
-    static void insertParagraphSeparator(Document *);
-    static void insertParagraphSeparatorInQuotedContent(Document *);
-    static bool isOpenForMoreTypingCommand(const EditCommandPtr &);
-    static void closeTyping(const EditCommandPtr &);
+    static void deleteKeyPressed(Document*, bool smartDelete = false, TextGranularity = CharacterGranularity);
+    static void forwardDeleteKeyPressed(Document*, bool smartDelete = false, TextGranularity = CharacterGranularity);
+    static void insertText(Document*, const String&, bool selectInsertedText = false);
+    static void insertLineBreak(Document*);
+    static void insertParagraphSeparator(Document*);
+    static void insertParagraphSeparatorInQuotedContent(Document*);
+    static bool isOpenForMoreTypingCommand(const EditCommand*);
+    static void closeTyping(EditCommand*);
     
     virtual void doApply();
     virtual EditAction editingAction() const;
 
-    bool openForMoreTyping() const { return m_openForMoreTyping; }
+    bool isOpenForMoreTyping() const { return m_openForMoreTyping; }
     void closeTyping() { m_openForMoreTyping = false; }
 
     void insertText(const String &text, bool selectInsertedText);
@@ -66,10 +66,10 @@ public:
     void deleteKeyPressed(TextGranularity);
     void forwardDeleteKeyPressed(TextGranularity);
 
+private:
     bool smartDelete() { return m_smartDelete; }
     void setSmartDelete(bool smartDelete) { m_smartDelete = smartDelete; }
-
-private:
+    
     virtual bool isTypingCommand() const;
     virtual bool preservesTypingStyle() const;
 
@@ -87,4 +87,4 @@ private:
 
 } // namespace WebCore
 
-#endif // __typing_command_h__
+#endif // typing_command_h__

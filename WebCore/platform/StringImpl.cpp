@@ -28,24 +28,33 @@
 #include "StringImpl.h"
 
 #include "AtomicString.h"
+#include "CString.h"
+#include "CharacterNames.h"
 #include "DeprecatedString.h"
 #include "Length.h"
 #include "StringHash.h"
+#include "TextBreakIterator.h"
+#include "TextEncoding.h"
+#include <kjs/dtoa.h>
 #include <kjs/identifier.h>
 #include <wtf/Assertions.h>
-#include <unicode/ubrk.h>
-#include <unicode/ustring.h>
-#include <assert.h>
+#include <wtf/unicode/Unicode.h>
 
 using namespace WTF;
+using namespace Unicode;
 
 using KJS::Identifier;
 using KJS::UString;
 
 namespace WebCore {
 
-const UChar nonBreakingSpace = 0xA0;
-
+static inline bool isSpace(UChar c)
+{
+    // Use isspace() for basic Latin-1.
+    // This will include newlines, which aren't included in unicode DirWS.
+    return c <= 0x7F ? isspace(c) : direction(c) == WhiteSpaceNeutral;
+}    
+    
 static inline UChar* newUCharVector(unsigned n)
 {
     return static_cast<UChar*>(fastMalloc(sizeof(UChar) * n));
@@ -125,7 +134,7 @@ StringImpl::~StringImpl()
     deleteUCharVector(m_data);
 }
 
-UChar* StringImpl::charactersWithNullTermination()
+const UChar* StringImpl::charactersWithNullTermination()
 {
     if (m_hasTerminatingNullCharacter)
         return m_data;
@@ -137,20 +146,25 @@ UChar* StringImpl::charactersWithNullTermination()
     return m_data;
 }
 
-void StringImpl::append(const StringImpl* str)
+void StringImpl::append(const UChar* str, unsigned length)
 {
-    assert(!m_inTable);
-    if(str && str->m_length != 0)
-    {
-        int newlen = m_length+str->m_length;
+    ASSERT(!m_inTable);
+    if (str && length != 0) {
+        int newlen = m_length + length;
         UChar* c = newUCharVector(newlen);
         memcpy(c, m_data, m_length * sizeof(UChar));
-        memcpy(c + m_length, str->m_data, str->m_length * sizeof(UChar));
+        memcpy(c + m_length, str, length * sizeof(UChar));
         deleteUCharVector(m_data);
         m_data = c;
         m_length = newlen;
         m_hasTerminatingNullCharacter = false;
     }
+}
+
+void StringImpl::append(const StringImpl* str)
+{
+    if (str)
+        append(str->m_data, str->m_length);
 }
 
 void StringImpl::append(char c)
@@ -160,7 +174,7 @@ void StringImpl::append(char c)
 
 void StringImpl::append(UChar c)
 {
-    assert(!m_inTable);
+    ASSERT(!m_inTable);
     UChar* nc = newUCharVector(m_length + 1);
     memcpy(nc, m_data, m_length * sizeof(UChar));
     nc[m_length] = c;
@@ -170,19 +184,20 @@ void StringImpl::append(UChar c)
     m_hasTerminatingNullCharacter = false;
 }
 
-void StringImpl::insert(const StringImpl* str, unsigned pos)
+void StringImpl::insert(const UChar* str, unsigned length, unsigned pos)
 {
-    assert(!m_inTable);
+    ASSERT(!m_inTable);
     if (pos >= m_length) {
-        append(str);
+        append(str, length);
         return;
     }
-    if (str && str->m_length != 0) {
-        int newlen = m_length + str->m_length;
+
+    if (str && length != 0) {
+        size_t newlen = m_length + length;
         UChar* c = newUCharVector(newlen);
         memcpy(c, m_data, pos * sizeof(UChar));
-        memcpy(c + pos, str->m_data, str->m_length * sizeof(UChar));
-        memcpy(c + pos + str->m_length, m_data + pos, (m_length - pos) * sizeof(UChar));
+        memcpy(c + pos, str, length * sizeof(UChar));
+        memcpy(c + pos + length, m_data + pos, (m_length - pos) * sizeof(UChar));
         deleteUCharVector(m_data);
         m_data = c;
         m_length = newlen;
@@ -190,9 +205,15 @@ void StringImpl::insert(const StringImpl* str, unsigned pos)
     }
 }
 
+void StringImpl::insert(const StringImpl* str, unsigned pos)
+{
+    if (str)
+        insert(str->m_data, str->m_length, pos);
+}
+
 void StringImpl::truncate(int len)
 {
-    assert(!m_inTable);
+    ASSERT(!m_inTable);
     if (len >= (int)m_length)
         return;
     int nl = len < 1 ? 1 : len;
@@ -206,7 +227,7 @@ void StringImpl::truncate(int len)
 
 void StringImpl::remove(unsigned pos, int len)
 {
-    assert(!m_inTable);
+    ASSERT(!m_inTable);
     if (len <= 0)
         return;
     if (pos >= m_length)
@@ -222,20 +243,6 @@ void StringImpl::remove(unsigned pos, int len)
     m_data = c;
     m_length = newLen;
     m_hasTerminatingNullCharacter = false;
-}
-
-StringImpl* StringImpl::split(unsigned pos)
-{
-    assert(!m_inTable);
-    if( pos >=m_length ) return new StringImpl();
-
-    unsigned newLen = m_length-pos;
-    UChar* c = newUCharVector(newLen);
-    memcpy(c, m_data + pos, newLen * sizeof(UChar));
-
-    StringImpl* str = new StringImpl(m_data + pos, newLen);
-    truncate(pos);
-    return str;
 }
 
 bool StringImpl::containsOnlyWhitespace() const
@@ -271,18 +278,18 @@ static Length parseLength(const UChar* m_data, unsigned int m_length)
         return Length(1, Relative);
 
     unsigned i = 0;
-    while (i < m_length && DeprecatedChar(m_data[i]).isSpace())
+    while (i < m_length && isSpace(m_data[i]))
         ++i;
     if (i < m_length && (m_data[i] == '+' || m_data[i] == '-'))
         ++i;
-    while (i < m_length && u_isdigit(m_data[i]))
+    while (i < m_length && Unicode::isDigit(m_data[i]))
         ++i;
 
     bool ok;
     int r = DeprecatedConstString(reinterpret_cast<const DeprecatedChar*>(m_data), i).string().toInt(&ok);
 
     /* Skip over any remaining digits, we are not that accurate (5.5% => 5%) */
-    while (i < m_length && (u_isdigit(m_data[i]) || m_data[i] == '.'))
+    while (i < m_length && (Unicode::isDigit(m_data[i]) || m_data[i] == '.'))
         ++i;
 
     /* IE Quirk: Skip any whitespace (20 % => 20%) */
@@ -293,7 +300,7 @@ static Length parseLength(const UChar* m_data, unsigned int m_length)
         if (i < m_length) {
             UChar next = m_data[i];
             if (next == '%')
-                return Length(r, Percent);
+                return Length(static_cast<double>(r), Percent);
             if (next == '*')
                 return Length(r, Relative);
         }
@@ -390,9 +397,9 @@ bool StringImpl::isLower() const
         return allLower;
 
     // Do a slower check for the other cases.
-    UBool allLower2 = true;
+    bool allLower2 = true;
     for (unsigned i = 0; i < m_length; i++)
-        allLower2 &= u_islower(m_data[i]);
+        allLower2 &= Unicode::isLower(m_data[i]);
     return allLower2;
 }
 
@@ -418,9 +425,9 @@ StringImpl* StringImpl::lower() const
     if (!(ored & ~0x7F))
         return c;
 
-    UErrorCode status = U_ZERO_ERROR;
-    int32_t realLength = u_strToLower(data, length, m_data, length, "", &status);
-    if (U_SUCCESS(status) && realLength == length)
+    bool error;
+    int32_t realLength = Unicode::toLower(data, length, m_data, m_length, &error);
+    if (!error && realLength == length)
         return c;
 
     if (realLength > length) {
@@ -432,9 +439,8 @@ StringImpl* StringImpl::lower() const
     c->m_data = data;
     c->m_length = length;
 
-    status = U_ZERO_ERROR;
-    u_strToLower(data, length, m_data, m_length, "", &status);
-    if (U_FAILURE(status)) {
+    Unicode::toLower(data, length, m_data, m_length, &error);
+    if (error) {
         c->ref();
         c->deref();
         return copy();
@@ -447,17 +453,29 @@ StringImpl* StringImpl::upper() const
     StringImpl* c = new StringImpl;
     if (!m_length)
         return c;
-    UErrorCode status = U_ZERO_ERROR;
-    int32_t length = u_strToUpper(0, 0, m_data, m_length, "", &status);
+    bool error;
+    int32_t length = Unicode::toUpper(0, 0, m_data, m_length, &error);
     c->m_data = newUCharVector(length);
     c->m_length = length;
-    status = U_ZERO_ERROR;
-    u_strToUpper(c->m_data, length, m_data, m_length, "", &status);
-    if (U_FAILURE(status)) {
+    Unicode::toUpper(c->m_data, length, m_data, m_length, &error);
+    if (error) {
         c->ref();
         c->deref();
         return copy();
     }
+    return c;
+}
+
+StringImpl* StringImpl::secure(UChar aChar) const
+{
+    int length = m_length;
+    UChar* data = newUCharVector(length);
+    for (int i = 0; i < length; ++i)
+        data[i] = aChar;
+
+    StringImpl* c = new StringImpl;
+    c->m_data = data;
+    c->m_length = length;
     return c;
 }
 
@@ -466,13 +484,12 @@ StringImpl* StringImpl::foldCase() const
     StringImpl* c = new StringImpl;
     if (!m_length)
         return c;
-    UErrorCode status = U_ZERO_ERROR;
-    int32_t length = u_strFoldCase(0, 0, m_data, m_length, U_FOLD_CASE_DEFAULT, &status);
+    bool error;
+    int32_t length = Unicode::foldCase(0, 0, m_data, m_length, &error);
     c->m_data = newUCharVector(length);
     c->m_length = length;
-    status = U_ZERO_ERROR;
-    u_strFoldCase(c->m_data, length, m_data, m_length, U_FOLD_CASE_DEFAULT, &status);
-    if (U_FAILURE(status)) {
+    Unicode::foldCase(c->m_data, length, m_data, m_length, &error);
+    if (error) {
         c->ref();
         c->deref();
         return copy();
@@ -480,27 +497,65 @@ StringImpl* StringImpl::foldCase() const
     return c;
 }
 
-static UBreakIterator* getWordBreakIterator(const UChar* string, int length)
+StringImpl* StringImpl::stripWhiteSpace() const
 {
-    // The locale is currently ignored when determining character cluster breaks.
-    // This may change in the future, according to Deborah Goldsmith.
-    static bool createdIterator = false;
-    static UBreakIterator* iterator;
-    UErrorCode status;
-    if (!createdIterator) {
-        status = U_ZERO_ERROR;
-        iterator = ubrk_open(UBRK_WORD, "en_us", 0, 0, &status);
-        createdIterator = true;
+    StringImpl* c = new StringImpl;
+    if (!m_length)
+        return c;
+
+    unsigned start = 0;
+    unsigned end = m_length - 1;
+    
+    // skip white space from start
+    while (start <= end && isSpace(m_data[start])) 
+        start++;
+    
+    // only white space
+    if (start > end) 
+        return c;
+
+    // skip white space from end
+    while (end && isSpace(m_data[end]))         
+        end--;
+    
+    int length = end - start + 1;
+    c->m_data = newUCharVector(length);
+    c->m_length = length;
+    memcpy(c->m_data, m_data + start, length * sizeof(UChar));
+    
+    return c;
+}
+
+StringImpl* StringImpl::simplifyWhiteSpace() const
+{
+    StringImpl* c = new StringImpl;
+    if (!m_length)
+        return c;
+    
+    c->m_data = newUCharVector(m_length);
+    const UChar *from = m_data;
+    const UChar *fromend = from + m_length;
+    int outc = 0;
+    
+    UChar *to = c->m_data;
+    
+    while (true) {
+        while (from != fromend && isSpace(*from))
+            from++;
+        while (from != fromend && !isSpace(*from))
+            to[outc++] = *from++;
+        if (from != fromend)
+            to[outc++] = ' ';
+        else
+            break;
     }
-    if (!iterator)
-        return 0;
-
-    status = U_ZERO_ERROR;
-    ubrk_setText(iterator, reinterpret_cast<const ::UChar*>(string), length, &status);
-    if (U_FAILURE(status))
-        return 0;
-
-    return iterator;
+    
+    if (outc > 0 && to[outc - 1] == ' ')
+        outc--;
+    
+    c->m_length = outc;
+    
+    return c;
 }
 
 StringImpl* StringImpl::capitalize(UChar previous) const
@@ -508,36 +563,37 @@ StringImpl* StringImpl::capitalize(UChar previous) const
     StringImpl* capitalizedString = new StringImpl;
     if (!m_length)
         return capitalizedString;
-    
+
     UChar* stringWithPrevious = newUCharVector(m_length + 1);
-    stringWithPrevious[0] = previous;
+    stringWithPrevious[0] = previous == noBreakSpace ? ' ' : previous;
     for (unsigned i = 1; i < m_length + 1; i++) {
         // Replace &nbsp with a real space since ICU no longer treats &nbsp as a word separator.
-        if (m_data[i - 1] == nonBreakingSpace)
+        if (m_data[i - 1] == noBreakSpace)
             stringWithPrevious[i] = ' ';
         else
             stringWithPrevious[i] = m_data[i - 1];
     }
 
-    UBreakIterator* boundary = getWordBreakIterator(stringWithPrevious, m_length + 1);
+    TextBreakIterator* boundary = wordBreakIterator(stringWithPrevious, m_length + 1);
     if (!boundary) {
         deleteUCharVector(stringWithPrevious);
         return capitalizedString;
     }
-    
+
     capitalizedString->m_data = newUCharVector(m_length);
     capitalizedString->m_length = m_length;
-    
+
     int32_t endOfWord;
-    int32_t startOfWord = ubrk_first(boundary);
-    for (endOfWord = ubrk_next(boundary); endOfWord != UBRK_DONE; startOfWord = endOfWord, endOfWord = ubrk_next(boundary)) {
+    int32_t startOfWord = textBreakFirst(boundary);
+    for (endOfWord = textBreakNext(boundary); endOfWord != TextBreakDone; startOfWord = endOfWord, endOfWord = textBreakNext(boundary)) {
         if (startOfWord != 0) // Ignore first char of previous string
-            capitalizedString->m_data[startOfWord - 1] = u_totitle(stringWithPrevious[startOfWord]);
+            capitalizedString->m_data[startOfWord - 1] = m_data[startOfWord - 1] == noBreakSpace ? noBreakSpace : toTitleCase(stringWithPrevious[startOfWord]);
         for (int i = startOfWord + 1; i < endOfWord; i++)
-            capitalizedString->m_data[i - 1] = stringWithPrevious[i];
+            capitalizedString->m_data[i - 1] = m_data[i - 1];
     }
-    
+
     deleteUCharVector(stringWithPrevious);
+
     return capitalizedString;
 }
 
@@ -547,7 +603,7 @@ int StringImpl::toInt(bool* ok) const
 
     // Allow leading spaces.
     for (; i != m_length; ++i)
-        if (!DeprecatedChar(m_data[i]).isSpace())
+        if (!isSpace(m_data[i]))
             break;
     
     // Allow sign.
@@ -556,10 +612,25 @@ int StringImpl::toInt(bool* ok) const
     
     // Allow digits.
     for (; i != m_length; ++i)
-        if (!u_isdigit(m_data[i]))
+        if (!Unicode::isDigit(m_data[i]))
             break;
     
     return DeprecatedConstString(reinterpret_cast<const DeprecatedChar*>(m_data), i).string().toInt(ok);
+}
+
+double StringImpl::toDouble(bool* ok) const
+{
+    if (!m_length) {
+        if (ok)
+            *ok = false;
+        return 0;
+    }
+    char *end;
+    CString latin1String = Latin1Encoding().encode(characters(), length());
+    double val = kjs_strtod(latin1String, &end);
+    if (ok)
+        *ok = end == 0 || *end == '\0';
+    return val;
 }
 
 static bool equal(const UChar* a, const char* b, int length)
@@ -578,7 +649,7 @@ static bool equalIgnoringCase(const UChar* a, const char* b, int length)
     ASSERT(length >= 0);
     while (length--) {
         unsigned char bc = *b++;
-        if (u_foldCase(*a++, U_FOLD_CASE_DEFAULT) != u_foldCase(bc, U_FOLD_CASE_DEFAULT))
+        if (foldCase(*a++) != foldCase(bc))
             return false;
     }
     return true;
@@ -587,7 +658,7 @@ static bool equalIgnoringCase(const UChar* a, const char* b, int length)
 static inline bool equalIgnoringCase(const UChar* a, const UChar* b, int length)
 {
     ASSERT(length >= 0);
-    return u_memcasecmp(a, b, length, U_FOLD_CASE_DEFAULT) == 0;
+    return umemcasecmp(a, b, length) == 0;
 }
 
 // This function should be as fast as possible, every little bit helps.
@@ -620,10 +691,9 @@ int StringImpl::find(const char* chs, int index, bool caseSensitive) const
                 return m_length - chsLength - n + 1;
         } while (--n);
     } else {
-        UChar lc = u_foldCase(*chs, U_FOLD_CASE_DEFAULT);
+        UChar lc = Unicode::foldCase(*chs);
         do {
-            if (u_foldCase(*++ptr, U_FOLD_CASE_DEFAULT) == lc
-                    && equalIgnoringCase(ptr + 1, chsPlusOne, chsLengthMinusOne))
+            if (Unicode::foldCase(*++ptr) == lc && equalIgnoringCase(ptr + 1, chsPlusOne, chsLengthMinusOne))
                 return m_length - chsLength - n + 1;
         } while (--n);
     }
@@ -705,6 +775,81 @@ int StringImpl::find(const StringImpl* str, int index, bool caseSensitive) const
     }
 }
 
+int StringImpl::reverseFind(const UChar c, int index) const
+{
+    if (index >= (int)m_length)
+        return -1;
+
+    if (index < 0)
+        index += m_length;
+    while (1) {
+        if (m_data[index] == c)
+            return index;
+        if (index == 0)
+            return -1;
+        index--;
+    }
+}
+
+int StringImpl::reverseFind(const StringImpl* str, int index, bool caseSensitive) const
+{
+    // FIXME, use the first character algorithm
+    /*
+     See StringImpl::find() for explanations.
+     */
+    ASSERT(str);
+    int lthis = m_length;
+    if (index < 0)
+        index += lthis;
+    
+    int lstr = str->m_length;
+    int delta = lthis - lstr;
+    if ( index < 0 || index > lthis || delta < 0 )
+        return -1;
+    if ( index > delta )
+        index = delta;
+    
+    const UChar *uthis = m_data;
+    const UChar *ustr = str->m_data;
+    unsigned hthis = 0;
+    unsigned hstr = 0;
+    int i;
+    if (caseSensitive) {
+        for ( i = 0; i < lstr; i++ ) {
+            hthis += uthis[index + i];
+            hstr += ustr[i];
+        }
+        i = index;
+        while (1) {
+            if (hthis == hstr && memcmp(uthis + i, ustr, lstr * sizeof(UChar)) == 0)
+                return i;
+            if (i == 0)
+                return -1;
+            i--;
+            hthis -= uthis[i + lstr];
+            hthis += uthis[i];
+        }
+    } else {
+        for (i = 0; i < lstr; i++) {
+            hthis += tolower(uthis[index + i]);
+            hstr += tolower(ustr[i]);
+        }
+        i = index;
+        while (1) {
+            if (hthis == hstr && equalIgnoringCase(uthis + i, ustr, lstr) )
+                return i;
+            if (i == 0)
+                return -1;
+            i--;
+            hthis -= tolower(uthis[i + lstr]);
+            hthis += tolower(uthis[i]);
+        }
+    }
+    
+    // Should never get here.
+    return -1;
+}
+
 bool StringImpl::endsWith(const StringImpl* m_data, bool caseSensitive) const
 {
     ASSERT(m_data);
@@ -748,16 +893,49 @@ StringImpl* StringImpl::replace(unsigned index, unsigned len, const StringImpl* 
     return m_data;
 }
 
-StringImpl* StringImpl::replace(UChar pattern, const StringImpl* str)
+StringImpl* StringImpl::replace(UChar pattern, const StringImpl* replacement)
 {
-    int slen = str ? str->length() : 0;
-    int index = 0;
-    StringImpl* result = this;
-    while ((index = result->find(pattern, index)) >= 0) {
-        result = result->replace(index, 1, str);
-        index += slen;
+    if (!replacement)
+        return this;
+        
+    int repStrLength = replacement->length();
+    int srcSegmentStart = 0;
+    int matchCount = 0;
+    
+    // Count the matches
+    while ((srcSegmentStart = find(pattern, srcSegmentStart)) >= 0) {
+        ++matchCount;
+        ++srcSegmentStart;
     }
-    return result;
+    
+    // If we have 0 matches, we don't have to do any more work
+    if (!matchCount)
+        return this;
+    
+    // Create the new StringImpl;
+    StringImpl* dst = new StringImpl();
+    dst->m_length = m_length - matchCount + (matchCount * repStrLength);
+    dst->m_data = newUCharVector(dst->m_length);
+    
+    // Construct the new data
+    int srcSegmentEnd;
+    int srcSegmentLength;
+    srcSegmentStart = 0;
+    int dstOffset = 0;
+    
+    while ((srcSegmentEnd = find(pattern, srcSegmentStart)) >= 0) {
+        srcSegmentLength = srcSegmentEnd - srcSegmentStart;
+        memcpy(dst->m_data + dstOffset, m_data + srcSegmentStart, srcSegmentLength * sizeof(UChar));
+        dstOffset += srcSegmentLength;
+        memcpy(dst->m_data + dstOffset, replacement->m_data, repStrLength * sizeof(UChar));
+        dstOffset += repStrLength;
+        srcSegmentStart = srcSegmentEnd + 1;
+    }
+
+    srcSegmentLength = m_length - srcSegmentStart;
+    memcpy(dst->m_data + dstOffset, m_data + srcSegmentStart, srcSegmentLength * sizeof(UChar));
+    
+    return dst;
 }
 
 bool equal(const StringImpl* a, const StringImpl* b)
@@ -787,7 +965,7 @@ bool equal(const StringImpl* a, const char* b)
 
 bool equalIgnoringCase(const StringImpl* a, const StringImpl* b)
 {
-    return CaseInsensitiveHash::equal(a, b);
+    return CaseInsensitiveHash<StringImpl*>::equal(a, b);
 }
 
 bool equalIgnoringCase(const StringImpl* a, const char* b)
@@ -816,7 +994,7 @@ bool equalIgnoringCase(const StringImpl* a, const char* b)
         equal = true;
         for (unsigned i = 0; i != length; ++i) {
             unsigned char bc = b[i];
-            equal &= u_foldCase(as[i], U_FOLD_CASE_DEFAULT) == u_foldCase(bc, U_FOLD_CASE_DEFAULT);
+            equal &= foldCase(as[i]) == foldCase(bc);
         }
     }
 
@@ -941,6 +1119,28 @@ StringImpl::StringImpl(const Identifier& str)
 StringImpl::StringImpl(const UString& str)
 {
     init(reinterpret_cast<const UChar*>(str.data()), str.size());
+}
+
+StringImpl* StringImpl::newUninitialized(size_t length, UChar*& characterBuffer)
+{
+    StringImpl* result = new StringImpl;
+    result->m_length = length;
+    if (length)
+        result->m_data = newUCharVector(length);
+    characterBuffer = result->m_data;
+    return result;
+}
+
+StringImpl* StringImpl::adopt(Vector<UChar>& buffer)
+{
+    size_t size = buffer.size();
+    UChar* data = buffer.releaseBuffer();
+    data = static_cast<UChar*>(fastRealloc(data, size * sizeof(UChar)));
+
+    StringImpl* result = new StringImpl;
+    result->m_length = size;
+    result->m_data = data;
+    return result;
 }
 
 } // namespace WebCore

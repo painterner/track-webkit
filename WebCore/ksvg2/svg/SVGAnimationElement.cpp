@@ -1,6 +1,7 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
+    Copyright (C) 2007 Eric Seidel <eric@webkit.org>
 
     This file is part of the KDE project
 
@@ -24,72 +25,64 @@
 #ifdef SVG_SUPPORT
 #include "SVGAnimationElement.h"
 
-#include "Attr.h"
 #include "CSSPropertyNames.h"
 #include "Document.h"
-#include "DOMImplementation.h"
-#include "ksvgcssproperties.h"
-#include "KSVGTimeScheduler.h"
-#include "PlatformString.h"
-#include "SVGDocumentExtensions.h"
-#include "SVGHelper.h"
-#include "SVGStyledElement.h"
+#include "TimeScheduler.h"
 #include "SVGSVGElement.h"
 #include "SVGURIReference.h"
 #include "XLinkNames.h"
+#include "ksvgcssproperties.h"
 #include <float.h>
 #include <math.h>
 #include <wtf/Vector.h>
+#include <wtf/MathExtras.h>
 
-using namespace WebCore;
 using namespace std;
 
-SVGAnimationElement::SVGAnimationElement(const QualifiedName& tagName, Document *doc)
-: SVGElement(tagName, doc), SVGTests(), SVGExternalResourcesRequired()
+namespace WebCore {
+
+SVGAnimationElement::SVGAnimationElement(const QualifiedName& tagName, Document* doc)
+    : SVGElement(tagName, doc)
+    , SVGTests()
+    , SVGExternalResourcesRequired()
+    , m_targetElement(0)
+    , m_connectedToTimer(false)
+    , m_currentTime(0.0)
+    , m_simpleDuration(0.0)
+    , m_fill(FILL_REMOVE)
+    , m_restart(RESTART_ALWAYS)
+    , m_calcMode(CALCMODE_LINEAR)
+    , m_additive(ADDITIVE_REPLACE)
+    , m_accumulate(ACCUMULATE_NONE)
+    , m_attributeType(ATTRIBUTETYPE_AUTO)
+    , m_max(0.0)
+    , m_min(0.0)
+    , m_end(0.0)
+    , m_begin(0.0)
+    , m_repetitions(0)
+    , m_repeatCount(0)
 {
-    m_connected = false;
 
-    m_targetElement = 0;
-    
-    m_currentTime = 0.0;
-    m_simpleDuration = 0.0;
-
-    // Initialize shared properties...
-    m_end = 0.0;
-    m_min = 0.0;
-    m_max = 0.0;
-    m_begin = 0.0;
-
-    m_repeations = 0;
-    m_repeatCount = 0;
-
-    m_fill = FILL_REMOVE;
-    m_restart = RESTART_ALWAYS;
-    m_calcMode = CALCMODE_LINEAR;
-    m_additive = ADDITIVE_REPLACE;
-    m_accumulate = ACCUMULATE_NONE;
-    m_attributeType = ATTRIBUTETYPE_AUTO;
 }
 
 SVGAnimationElement::~SVGAnimationElement()
 {
 }
 
-SVGElement *SVGAnimationElement::targetElement() const
+bool SVGAnimationElement::hasValidTarget() const
 {
-    if (!m_targetElement)
-    {
-        if (!m_href.isEmpty())
-        {
-            String targetId = SVGURIReference::getTarget(m_href);
-            Element *element = ownerDocument()->getElementById(targetId.impl());
+    return targetElement();
+}
+
+SVGElement* SVGAnimationElement::targetElement() const
+{
+    if (!m_targetElement) {
+        if (!m_href.isEmpty()) {
+            Element* element = ownerDocument()->getElementById(SVGURIReference::getTarget(m_href));
             m_targetElement = svg_dynamic_cast(element);
-        }
-        else if (parentNode())
-        {
-            Node *target = parentNode();
-            while(target != 0)
-            {
+        } else if (parentNode()) {
+            Node* target = parentNode();
+            while (target) {
                 if (target->nodeType() != ELEMENT_NODE)
                     target = target->parentNode();
                 else
@@ -117,62 +110,55 @@ double SVGAnimationElement::getCurrentTime() const
     return m_currentTime;
 }
 
-double SVGAnimationElement::getSimpleDuration() const
+double SVGAnimationElement::getSimpleDuration(ExceptionCode&) const
 {
     return m_simpleDuration;
 }
 
-void SVGAnimationElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGAnimationElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name().matches(XLinkNames::hrefAttr))
-        m_href = value.deprecatedString();
+        m_href = value;
     else if (attr->name() == SVGNames::attributeNameAttr)
-        m_attributeName = value.deprecatedString();
-    else if (attr->name() == SVGNames::attributeTypeAttr)
-    {
+        m_attributeName = value;
+    else if (attr->name() == SVGNames::attributeTypeAttr) {
         if (value == "CSS")
             m_attributeType = ATTRIBUTETYPE_CSS;
         else if (value == "XML")
             m_attributeType = ATTRIBUTETYPE_XML;
         else if (value == "auto")
             m_attributeType = ATTRIBUTETYPE_AUTO;
-    }
-    else if (attr->name() == SVGNames::beginAttr || attr->name() == SVGNames::endAttr)
-    {
-        // Create list
-        RefPtr<SVGStringList> temp = new SVGStringList();
+    } else if (attr->name() == SVGNames::beginAttr || attr->name() == SVGNames::endAttr) {
+        RefPtr<SVGStringList> valueList = new SVGStringList();
+        valueList->parse(value, ';');
 
-        // Feed data into list
-        SVGHelper::ParseSeperatedList(temp.get(), value.deprecatedString(), ';');
-
-        // Parse data
-        for (unsigned int i = 0; i < temp->numberOfItems(); i++) {
-            DeprecatedString current = String(temp->getItem(i)).deprecatedString();
+        ExceptionCode ec = 0;
+        for (unsigned int i = 0; i < valueList->numberOfItems(); i++) {
+            String current = valueList->getItem(i, ec);
 
             if (current.startsWith("accessKey")) {
                 // Register keyDownEventListener for the character
-                DeprecatedString character = current.mid(current.length() - 2, 1);
+                String character = current.substring(current.length() - 2, 1);
                 // FIXME: Not implemented! Supposed to register accessKey character
             } else if (current.startsWith("wallclock")) {
                 int firstBrace = current.find('(');
                 int secondBrace = current.find(')');
 
-                DeprecatedString wallclockValue = current.mid(firstBrace + 1, secondBrace - firstBrace - 2);
+                String wallclockValue = current.substring(firstBrace + 1, secondBrace - firstBrace - 2);
                 // FIXME: Not implemented! Supposed to use wallClock value
             } else if (current.contains('.')) {
                 int dotPosition = current.find('.');
 
-                DeprecatedString element = current.mid(0, dotPosition);
-                DeprecatedString clockValue;
+                String element = current.substring(0, dotPosition);
+                String clockValue;
                 if (current.contains("begin"))
-                    clockValue = current.mid(dotPosition + 6);
+                    clockValue = current.substring(dotPosition + 6);
                 else if (current.contains("end"))
-                    clockValue = current.mid(dotPosition + 4);
+                    clockValue = current.substring(dotPosition + 4);
                 else if (current.contains("repeat"))
-                    clockValue = current.mid(dotPosition + 7);
-                else // DOM2 Event Reference
-                {
+                    clockValue = current.substring(dotPosition + 7);
+                else { // DOM2 Event Reference
                     int plusMinusPosition = -1;
 
                     if (current.contains('+'))
@@ -180,8 +166,8 @@ void SVGAnimationElement::parseMappedAttribute(MappedAttribute *attr)
                     else if (current.contains('-'))
                         plusMinusPosition = current.find('-');
 
-                    DeprecatedString event = current.mid(dotPosition + 1, plusMinusPosition - dotPosition - 1);
-                    clockValue = current.mid(dotPosition + event.length() + 1);
+                    String event = current.substring(dotPosition + 1, plusMinusPosition - dotPosition - 1);
+                    clockValue = current.substring(dotPosition + event.length() + 1);
                     // FIXME: supposed to use DOM Event
                 }
             } else {
@@ -198,52 +184,38 @@ void SVGAnimationElement::parseMappedAttribute(MappedAttribute *attr)
                 }
             }
         }
-    }
-    else if (attr->name() == SVGNames::durAttr)
-    {
-        m_simpleDuration = parseClockValue(value.deprecatedString());
+    } else if (attr->name() == SVGNames::durAttr) {
+        m_simpleDuration = parseClockValue(value);
         if (!isIndefinite(m_simpleDuration))
             m_simpleDuration *= 1000.0;
-    }
-    else if (attr->name() == SVGNames::minAttr)
-    {
-        m_min = parseClockValue(value.deprecatedString());
+    } else if (attr->name() == SVGNames::minAttr) {
+        m_min = parseClockValue(value);
         if (!isIndefinite(m_min))
             m_min *= 1000.0;
-    }
-    else if (attr->name() == SVGNames::maxAttr)
-    {
-        m_max = parseClockValue(value.deprecatedString());
+    } else if (attr->name() == SVGNames::maxAttr) {
+        m_max = parseClockValue(value);
         if (!isIndefinite(m_max))
             m_max *= 1000.0;
-    }
-    else if (attr->name() == SVGNames::restartAttr)
-    {
+    } else if (attr->name() == SVGNames::restartAttr) {
         if (value == "whenNotActive")
             m_restart = RESTART_WHENNOTACTIVE;
         else if (value == "never")
             m_restart = RESTART_NEVER;
         else if (value == "always")
             m_restart = RESTART_ALWAYS;
-    }
-    else if (attr->name() == SVGNames::repeatCountAttr)
-    {
+    } else if (attr->name() == SVGNames::repeatCountAttr) {
         if (value == "indefinite")
             m_repeatCount = DBL_MAX;
         else
-            m_repeatCount = value.deprecatedString().toDouble();
-    }
-    else if (attr->name() == SVGNames::repeatDurAttr)
-        m_repeatDur = value.deprecatedString();
-    else if (attr->name() == SVGNames::fillAttr)
-    {
+            m_repeatCount = value.toDouble();
+    } else if (attr->name() == SVGNames::repeatDurAttr)
+        m_repeatDur = value;
+    else if (attr->name() == SVGNames::fillAttr) {
         if (value == "freeze")
             m_fill = FILL_FREEZE;
         else if (value == "remove")
             m_fill = FILL_REMOVE;
-    }
-    else if (attr->name() == SVGNames::calcModeAttr)
-    {
+    } else if (attr->name() == SVGNames::calcModeAttr) {
         if (value == "discrete")
             m_calcMode = CALCMODE_DISCRETE;
         else if (value == "linear")
@@ -252,54 +224,43 @@ void SVGAnimationElement::parseMappedAttribute(MappedAttribute *attr)
             m_calcMode = CALCMODE_SPLINE;
         else if (value == "paced")
             m_calcMode = CALCMODE_PACED;
-    }
-    else if (attr->name() == SVGNames::valuesAttr)
-    {
+    } else if (attr->name() == SVGNames::valuesAttr) {
         m_values = new SVGStringList();
-        SVGHelper::ParseSeperatedList(m_values.get(), value.deprecatedString(), ';');
-    }
-    else if (attr->name() == SVGNames::keyTimesAttr)
-    {
+        m_values->parse(value, ';');
+    } else if (attr->name() == SVGNames::keyTimesAttr) {
         m_keyTimes = new SVGStringList();
-        SVGHelper::ParseSeperatedList(m_keyTimes.get(), value.deprecatedString(), ';');
-    }
-    else if (attr->name() == SVGNames::keySplinesAttr)
-    {
+        m_keyTimes->parse(value, ';');
+    } else if (attr->name() == SVGNames::keySplinesAttr) {
         m_keySplines = new SVGStringList();
-        SVGHelper::ParseSeperatedList(m_keySplines.get(), value.deprecatedString(), ';');
-    }
-    else if (attr->name() == SVGNames::fromAttr)
-        m_from = value.deprecatedString();
+        m_keySplines->parse(value, ';');
+    } else if (attr->name() == SVGNames::fromAttr)
+        m_from = value;
     else if (attr->name() == SVGNames::toAttr)
-        m_to = value.deprecatedString();
+        m_to = value;
     else if (attr->name() == SVGNames::byAttr)
-        m_by = value.deprecatedString();
-    else if (attr->name() == SVGNames::additiveAttr)
-    {
+        m_by = value;
+    else if (attr->name() == SVGNames::additiveAttr) {
         if (value == "sum")
             m_additive = ADDITIVE_SUM;
         else if (value == "replace")
             m_additive = ADDITIVE_REPLACE;
-    }
-    else if (attr->name() == SVGNames::accumulateAttr)
-    {
+    } else if (attr->name() == SVGNames::accumulateAttr) {
         if (value == "sum")
             m_accumulate = ACCUMULATE_SUM;
         else if (value == "none")
             m_accumulate = ACCUMULATE_NONE;
-    }
-    else
-    {
-        if (SVGTests::parseMappedAttribute(attr)) return;
-        if (SVGExternalResourcesRequired::parseMappedAttribute(attr)) return;
-        
+    } else {
+        if (SVGTests::parseMappedAttribute(attr))
+            return;
+        if (SVGExternalResourcesRequired::parseMappedAttribute(attr))
+            return;
         SVGElement::parseMappedAttribute(attr);
     }
 }
 
-double SVGAnimationElement::parseClockValue(const DeprecatedString &data) const
+double SVGAnimationElement::parseClockValue(const String& data) const
 {
-    DeprecatedString parse = data.stripWhiteSpace();
+    DeprecatedString parse = data.deprecatedString().stripWhiteSpace();
     
     if (parse == "indefinite") // Saves some time...
         return DBL_MAX;
@@ -309,8 +270,7 @@ double SVGAnimationElement::parseClockValue(const DeprecatedString &data) const
     int doublePointOne = parse.find(':');
     int doublePointTwo = parse.find(':', doublePointOne + 1);
 
-    if (doublePointOne != -1 && doublePointTwo != -1) // Spec: "Full clock values"
-    {
+    if (doublePointOne != -1 && doublePointTwo != -1) { // Spec: "Full clock values"
         unsigned int hours = parse.mid(0, 2).toUInt();
         unsigned int minutes = parse.mid(3, 2).toUInt();
         unsigned int seconds = parse.mid(6, 2).toUInt();
@@ -318,77 +278,59 @@ double SVGAnimationElement::parseClockValue(const DeprecatedString &data) const
 
         result = (3600 * hours) + (60 * minutes) + seconds;
 
-        if (parse.find('.') != -1)
-        {
+        if (parse.find('.') != -1) {
             DeprecatedString temp = parse.mid(9, 2);
             milliseconds = temp.toUInt();
             result += (milliseconds * (1 / pow(10.0, int(temp.length()))));
         }
-    }
-    else if (doublePointOne != -1 && doublePointTwo == -1) // Spec: "Partial clock values"
-    {
+    } else if (doublePointOne != -1 && doublePointTwo == -1) { // Spec: "Partial clock values"
         unsigned int minutes = parse.mid(0, 2).toUInt();
         unsigned int seconds = parse.mid(3, 2).toUInt();
         unsigned int milliseconds = 0;
 
         result = (60 * minutes) + seconds;
 
-        if (parse.find('.') != -1)
-        {
+        if (parse.find('.') != -1) {
             DeprecatedString temp = parse.mid(6, 2);
             milliseconds = temp.toUInt();
             result += (milliseconds * (1 / pow(10.0, int(temp.length()))));
         }
-    }
-    else // Spec: "Timecount values"
-    {
+    } else { // Spec: "Timecount values"
         int dotPosition = parse.find('.');
 
-        if (parse.endsWith("h"))
-        {
+        if (parse.endsWith("h")) {
             if (dotPosition == -1)
                 result = parse.mid(0, parse.length() - 1).toUInt() * 3600;
-            else
-            {
+            else {
                 result = parse.mid(0, dotPosition).toUInt() * 3600;
                 DeprecatedString temp = parse.mid(dotPosition + 1, parse.length() - dotPosition - 2);
                 result += (3600.0 * temp.toUInt()) * (1 / pow(10.0, int(temp.length())));
             }
-        }
-        else if (parse.endsWith("min"))
-        {
+        } else if (parse.endsWith("min")) {
             if (dotPosition == -1)
                 result = parse.mid(0, parse.length() - 3).toUInt() * 60;
-            else
-            {
+            else {
                 result = parse.mid(0, dotPosition).toUInt() * 60;
                 DeprecatedString temp = parse.mid(dotPosition + 1, parse.length() - dotPosition - 4);
                 result += (60.0 * temp.toUInt()) * (1 / pow(10.0, int(temp.length())));
             }
-        }
-        else if (parse.endsWith("ms"))
-        {
+        } else if (parse.endsWith("ms")) {
             if (dotPosition == -1)
                 result = parse.mid(0, parse.length() - 2).toUInt() / 1000.0;
-            else
-            {
+            else {
                 result = parse.mid(0, dotPosition).toUInt() / 1000.0;
                 DeprecatedString temp = parse.mid(dotPosition + 1, parse.length() - dotPosition - 3);
                 result += (temp.toUInt() / 1000.0) * (1 / pow(10.0, int(temp.length())));
             }
-        }
-        else if (parse.endsWith("s"))
-        {
+        } else if (parse.endsWith("s")) {
             if (dotPosition == -1)
                 result = parse.mid(0, parse.length() - 1).toUInt();
-            else
-            {
+            else {
                 result = parse.mid(0, dotPosition).toUInt();
                 DeprecatedString temp = parse.mid(dotPosition + 1, parse.length() - dotPosition - 2);
                 result += temp.toUInt() * (1 / pow(10.0, int(temp.length())));
             }
-        }
-        else
+        } else
             result = parse.toDouble();
     }
 
@@ -406,10 +348,10 @@ String SVGAnimationElement::targetAttribute() const
     if (!targetElement())
         return String();
     
-    SVGElement *target = targetElement();
-    SVGStyledElement *styled = NULL;
+    SVGElement* target = targetElement();
+    SVGStyledElement* styled = 0;
     if (target && target->isStyled())
-        styled = static_cast<SVGStyledElement *>(target);
+        styled = static_cast<SVGStyledElement*>(target);
     
     String ret;
 
@@ -433,55 +375,49 @@ String SVGAnimationElement::targetAttribute() const
     }
 
     if (attributeType == ATTRIBUTETYPE_XML || ret.isEmpty())
-        ret = targetElement()->getAttribute(String(m_attributeName).impl());
+        ret = targetElement()->getAttribute(m_attributeName);
 
     return ret;
 }
 
-void SVGAnimationElement::setTargetAttribute(StringImpl *value)
+void SVGAnimationElement::setTargetAttribute(const String& value)
 {
-    SVGAnimationElement::setTargetAttribute(targetElement(), String(m_attributeName).impl(), value, static_cast<EAttributeType>(m_attributeType));
+    SVGAnimationElement::setTargetAttribute(targetElement(), m_attributeName, value, static_cast<EAttributeType>(m_attributeType));
 }
 
-void SVGAnimationElement::setTargetAttribute(SVGElement *target, StringImpl *nameImpl, StringImpl *value, EAttributeType type)
+void SVGAnimationElement::setTargetAttribute(SVGElement* target, const String& name, const String& value, EAttributeType type)
 {
-    if (!target || !nameImpl || !value)
+    if (!target || name.isNull() || value.isNull())
         return;
-    String name(nameImpl);
     
-    SVGStyledElement *styled = NULL;
-    if (target && target->isStyled())
-        styled = static_cast<SVGStyledElement *>(target);
+    SVGStyledElement* styled = (target && target->isStyled()) ? static_cast<SVGStyledElement*>(target) : 0;
 
     EAttributeType attributeType = type;
-    if (type == ATTRIBUTETYPE_AUTO)
-    {
-        attributeType = ATTRIBUTETYPE_XML;
-
+    if (type == ATTRIBUTETYPE_AUTO) {
         // Spec: The implementation should match the attributeName to an attribute
         // for the target element. The implementation must first search through the
         // list of CSS properties for a matching property name, and if none is found,
         // search the default XML namespace for the element.
-        if (styled && styled->style()) {
-            if (styled->style()->getPropertyCSSValue(name))
-                attributeType = ATTRIBUTETYPE_CSS;
-        }
+        if (styled && styled->style() && styled->style()->getPropertyCSSValue(name))
+            attributeType = ATTRIBUTETYPE_CSS;
+        else
+            attributeType = ATTRIBUTETYPE_XML;
     }
-    ExceptionCode ec;
+    ExceptionCode ec = 0;
     if (attributeType == ATTRIBUTETYPE_CSS && styled && styled->style())
         styled->style()->setProperty(name, value, "", ec);
     else if (attributeType == ATTRIBUTETYPE_XML)
-        target->setAttribute(nameImpl, value, ec);
+        target->setAttribute(name, value, ec);
 }
 
-DeprecatedString SVGAnimationElement::attributeName() const
+String SVGAnimationElement::attributeName() const
 {
     return m_attributeName;
 }
 
-bool SVGAnimationElement::connected() const
+bool SVGAnimationElement::connectedToTimer() const
 {
-    return m_connected;
+    return m_connectedToTimer;
 }
 
 bool SVGAnimationElement::isFrozen() const
@@ -491,28 +427,23 @@ bool SVGAnimationElement::isFrozen() const
 
 bool SVGAnimationElement::isAdditive() const
 {
-    return (m_additive == ADDITIVE_SUM) ||
-           (detectAnimationMode() == BY_ANIMATION);
+    return (m_additive == ADDITIVE_SUM) || (detectAnimationMode() == BY_ANIMATION);
 }
 
 bool SVGAnimationElement::isAccumulated() const
 {
-    return (m_accumulate == ACCUMULATE_SUM) &&
-           (detectAnimationMode() != TO_ANIMATION);
+    return (m_accumulate == ACCUMULATE_SUM) && (detectAnimationMode() != TO_ANIMATION);
 }
 
 EAnimationMode SVGAnimationElement::detectAnimationMode() const
 {
-    if ((!m_from.isEmpty() && !m_to.isEmpty()) || (!m_to.isEmpty())) // to/from-to animation
-    {
+    if ((!m_from.isEmpty() && !m_to.isEmpty()) || (!m_to.isEmpty())) { // to/from-to animation
         if (!m_from.isEmpty()) // from-to animation
             return FROM_TO_ANIMATION;
         else
             return TO_ANIMATION;
-    }
-    else if ((m_from.isEmpty() && m_to.isEmpty() && !m_by.isEmpty()) ||
-            (!m_from.isEmpty() && !m_by.isEmpty())) // by/from-by animation
-    {
+    } else if ((m_from.isEmpty() && m_to.isEmpty() && !m_by.isEmpty()) ||
+            (!m_from.isEmpty() && !m_by.isEmpty())) { // by/from-by animation
         if (!m_from.isEmpty()) // from-by animation
             return FROM_BY_ANIMATION;
         else
@@ -573,12 +504,86 @@ double SVGAnimationElement::calculateRelativeTimePercentage(double timePercentag
 
 double SVGAnimationElement::repeations() const
 {
-    return m_repeations;
+    return m_repetitions;
 }
 
 bool SVGAnimationElement::isIndefinite(double value) const
 {
     return (value == DBL_MAX);
+}
+
+void SVGAnimationElement::connectTimer()
+{
+    ASSERT(!m_connectedToTimer);
+    ownerSVGElement()->timeScheduler()->connectIntervalTimer(this);
+    m_connectedToTimer = true;
+}
+
+void SVGAnimationElement::disconnectTimer()
+{
+    ASSERT(m_connectedToTimer);
+    ownerSVGElement()->timeScheduler()->disconnectIntervalTimer(this);
+    m_connectedToTimer = false;
+}
+
+static double calculateTimePercentage(double elapsedSeconds, double start, double end, double duration, double repetitions)
+{
+    double percentage = 0.0;
+    double useElapsed = elapsedSeconds - (duration * repetitions);
+    
+    if (duration > 0.0 && end == 0.0)
+        percentage = 1.0 - (((start + duration) - useElapsed) / duration);
+    else if (duration > 0.0 && end != 0.0) {
+        if (duration > end)
+            percentage = 1.0 - (((start + end) - useElapsed) / end);
+        else
+            percentage = 1.0 - (((start + duration) - useElapsed) / duration);
+    } else if (duration == 0.0 && end != 0.0)
+        percentage = 1.0 - (((start + end) - useElapsed) / end);
+    
+    return percentage;
+}
+
+void SVGAnimationElement::handleTimerEvent(double timePercentage)
+{
+    if (!connectedToTimer()) {
+        connectTimer();
+        handleStartCondition(); // Need to check bool return if adding anything after this call
+        return;
+    }
+    
+    if (!updateCurrentValue(timePercentage))
+        return;
+    
+    if (timePercentage == 1.0) {
+        if ((m_repeatCount > 0 && m_repetitions < m_repeatCount - 1) || isIndefinite(m_repeatCount)) {
+            updateLastValueWithCurrent();
+            m_repetitions++;
+            return;
+        }
+        
+        disconnectTimer();
+        resetValues();   
+    }
+}
+
+bool SVGAnimationElement::updateForElapsedSeconds(double elapsedSeconds)
+{
+    // Validate animation timing settings:
+    // #1 (duration > 0) -> fine
+    // #2 (duration <= 0.0 && end > 0) -> fine
+    
+    if ((m_simpleDuration <= 0.0 && m_end <= 0.0) || (isIndefinite(m_simpleDuration) && m_end <= 0.0))
+        return false; // Ignore dur="0" or dur="-neg"
+    
+    float percentage = calculateTimePercentage(elapsedSeconds, m_begin, m_end, m_simpleDuration, m_repetitions);
+    
+    if (percentage <= 1.0 || connectedToTimer())
+        handleTimerEvent(percentage);
+    
+    return true;
+}
+
 }
 
 // vim:ts=4:noet

@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -24,8 +24,8 @@
 #define KSVG_SVGFEMergeElementImpl_H
 #ifdef SVG_SUPPORT
 
+#include "SVGFEMerge.h"
 #include "SVGFilterPrimitiveStandardAttributes.h"
-#include "KCanvasFilters.h"
 
 namespace WebCore
 {
@@ -35,10 +35,13 @@ namespace WebCore
         SVGFEMergeElement(const QualifiedName&, Document*);
         virtual ~SVGFEMergeElement();
 
-        virtual KCanvasFEMerge *filterEffect() const;
+        virtual SVGFEMerge* filterEffect() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable KCanvasFEMerge *m_filterEffect;
+        mutable SVGFEMerge* m_filterEffect;
     };
 
 } // namespace WebCore

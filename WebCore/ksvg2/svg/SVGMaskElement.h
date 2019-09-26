@@ -19,29 +19,27 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGMaskElementImpl_H
-#define KSVG_SVGMaskElementImpl_H
+#ifndef SVGMaskElement_H
+#define SVGMaskElement_H
+
 #ifdef SVG_SUPPORT
 
-#include "SVGTests.h"
-#include "SVGLangSpace.h"
-#include "SVGURIReference.h"
-#include "SVGStyledLocatableElement.h"
+#include "SVGResourceMasker.h"
 #include "SVGExternalResourcesRequired.h"
-
-#include "KCanvasResources.h"
-
-class KCanvasImage;
+#include "SVGLangSpace.h"
+#include "SVGStyledLocatableElement.h"
+#include "SVGTests.h"
+#include "SVGURIReference.h"
 
 namespace WebCore
 {
     class Attribute;
-    class SVGAnimatedLength;
+    class SVGLength;
     class SVGMaskElement : public SVGStyledLocatableElement,
-                                  public SVGURIReference,
-                                  public SVGTests,
-                                  public SVGLangSpace,
-                                  public SVGExternalResourcesRequired
+                           public SVGURIReference,
+                           public SVGTests,
+                           public SVGLangSpace,
+                           public SVGExternalResourcesRequired
     {
     public:
         SVGMaskElement(const QualifiedName&, Document*);
@@ -49,30 +47,29 @@ namespace WebCore
         virtual bool isValid() const { return SVGTests::isValid(); }
 
         // 'SVGMaskElement' functions
-        SVGAnimatedLength *x() const;
-        SVGAnimatedLength *y() const;
-
-        SVGAnimatedLength *width() const;
-        SVGAnimatedLength *height() const;
-
         virtual void childrenChanged();
-        virtual void attributeChanged(Attribute* attr, bool preserveDecls);
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void attributeChanged(Attribute*, bool preserveDecls);
+        virtual void parseMappedAttribute(MappedAttribute*);
 
-        virtual bool rendererIsNeeded(RenderStyle *style) { return StyledElement::rendererIsNeeded(style); }
-        virtual RenderObject *createRenderer(RenderArena *arena, RenderStyle *style);
-        virtual KCanvasMasker *canvasResource();
+        virtual bool rendererIsNeeded(RenderStyle* style) { return StyledElement::rendererIsNeeded(style); }
+        virtual RenderObject* createRenderer(RenderArena*, RenderStyle*);
+        virtual SVGResource* canvasResource();
 
     protected:
-        KCanvasImage *drawMaskerContent();
+        std::auto_ptr<ImageBuffer> drawMaskerContent();
 
-        mutable RefPtr<SVGAnimatedLength> m_x;
-        mutable RefPtr<SVGAnimatedLength> m_y;
-        mutable RefPtr<SVGAnimatedLength> m_width;
-        mutable RefPtr<SVGAnimatedLength> m_height;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGURIReference, String, Href, href)
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired)
+ 
+        ANIMATED_PROPERTY_DECLARATIONS(SVGMaskElement, SVGLength, SVGLength, X, x)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGMaskElement, SVGLength, SVGLength, Y, y)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGMaskElement, SVGLength, SVGLength, Width, width)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGMaskElement, SVGLength, SVGLength, Height, height)
+
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        KCanvasMasker *m_masker;
+        RefPtr<SVGResourceMasker> m_masker;
         bool m_dirty;
     };
 

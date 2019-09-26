@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,16 +21,18 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGPathSegLinetoVertical.h"
+
 #include "SVGStyledElement.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGPathSegLinetoVerticalAbs::SVGPathSegLinetoVerticalAbs(const SVGStyledElement *context)
-: SVGPathSeg(context)
+SVGPathSegLinetoVerticalAbs::SVGPathSegLinetoVerticalAbs(double y)
+    : SVGPathSeg()
+    , m_y(y)
 {
-    m_y = 0.0;
 }
 
 SVGPathSegLinetoVerticalAbs::~SVGPathSegLinetoVerticalAbs()
@@ -40,9 +42,6 @@ SVGPathSegLinetoVerticalAbs::~SVGPathSegLinetoVerticalAbs()
 void SVGPathSegLinetoVerticalAbs::setY(double y)
 {
     m_y = y;
-
-    if(m_context)
-        m_context->notifyAttributeChange();
 }
 
 double SVGPathSegLinetoVerticalAbs::y() const
@@ -53,10 +52,10 @@ double SVGPathSegLinetoVerticalAbs::y() const
 
 
 
-SVGPathSegLinetoVerticalRel::SVGPathSegLinetoVerticalRel(const SVGStyledElement *context)
-: SVGPathSeg(context)
+SVGPathSegLinetoVerticalRel::SVGPathSegLinetoVerticalRel(double y)
+    : SVGPathSeg()
+    , m_y(y)
 {
-    m_y = 0.0;
 }
 
 SVGPathSegLinetoVerticalRel::~SVGPathSegLinetoVerticalRel()
@@ -66,9 +65,6 @@ SVGPathSegLinetoVerticalRel::~SVGPathSegLinetoVerticalRel()
 void SVGPathSegLinetoVerticalRel::setY(double y)
 {
     m_y = y;
-
-    if(m_context)
-        m_context->notifyAttributeChange();
 }
 
 double SVGPathSegLinetoVerticalRel::y() const
@@ -76,6 +72,8 @@ double SVGPathSegLinetoVerticalRel::y() const
     return m_y;
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

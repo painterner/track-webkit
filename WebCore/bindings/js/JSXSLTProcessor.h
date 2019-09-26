@@ -23,10 +23,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifdef KHTML_XSLT
-
 #ifndef XSLTProcessor_H
 #define XSLTProcessor_H
+
+#ifdef XSLT_SUPPORT
 
 #include "kjs_binding.h"
 
@@ -36,7 +36,7 @@ namespace WebCore {
 
 // Eventually we should implement XSLTException:
 // http://lxr.mozilla.org/seamonkey/source/content/xsl/public/nsIXSLTException.idl
-// http://bugzilla.opendarwin.org/show_bug.cgi?id=5446
+// http://bugs.webkit.org/show_bug.cgi?id=5446
 
 namespace KJS {
 
@@ -65,6 +65,6 @@ public:
 
 } // namespace KJS
 
-#endif // XSLTProcessor_H
+#endif // XSLT_SUPPORT
 
-#endif // KHTML_XSLT
+#endif // XSLTProcessor_H

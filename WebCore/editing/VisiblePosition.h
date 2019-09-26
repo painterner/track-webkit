@@ -72,6 +72,8 @@ public:
     void debugPosition(const char* msg = "") const;
     
     Element* rootEditableElement() const { return m_deepPosition.isNotNull() ? m_deepPosition.node()->rootEditableElement() : 0; }
+    
+    IntRect caretRect() const;
 
 #ifndef NDEBUG
     void formatForDebugger(char* buffer, unsigned length) const;
@@ -81,11 +83,6 @@ public:
 private:
     void init(const Position&, EAffinity);
     Position canonicalPosition(const Position&);
-
-    static int maxOffset(const Node*);
-    
-    static Position previousVisiblePosition(const Position&);
-    static Position nextVisiblePosition(const Position&);
         
     Position m_deepPosition;
     EAffinity m_affinity;

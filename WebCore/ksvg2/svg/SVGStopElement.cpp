@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -22,20 +22,16 @@
 
 #include "config.h"
 #ifdef SVG_SUPPORT
-#include "Attr.h"
-#include "Document.h"
-
-#include <kcanvas/device/KRenderingPaintServerGradient.h>
-
-#include "SVGNames.h"
-#include "SVGHelper.h"
-#include "SVGRenderStyle.h"
 #include "SVGStopElement.h"
-#include "SVGAnimatedNumber.h"
 
-using namespace WebCore;
+#include "Document.h"
+#include "SVGNames.h"
 
-SVGStopElement::SVGStopElement(const QualifiedName& tagName, Document *doc) : SVGStyledElement(tagName, doc)
+namespace WebCore {
+
+SVGStopElement::SVGStopElement(const QualifiedName& tagName, Document* doc)
+    : SVGStyledElement(tagName, doc)
+    , m_offset(0.0)
 {
 }
 
@@ -43,29 +39,28 @@ SVGStopElement::~SVGStopElement()
 {
 }
 
-SVGAnimatedNumber *SVGStopElement::offset() const
-{
-    return lazy_create<SVGAnimatedNumber>(m_offset, this);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGStopElement, double, Number, number, Offset, offset, SVGNames::offsetAttr.localName(), m_offset)
 
-void SVGStopElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGStopElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::offsetAttr) {
-        if(value.endsWith("%"))
-            offset()->setBaseVal(value.deprecatedString().left(value.length() - 1).toDouble() / 100.);
+        if (value.endsWith("%"))
+            setOffsetBaseValue(value.left(value.length() - 1).toDouble() / 100.);
         else
-            offset()->setBaseVal(value.deprecatedString().toDouble());
+            setOffsetBaseValue(value.toDouble());
     } else
         SVGStyledElement::parseMappedAttribute(attr);
 
     if (!ownerDocument()->parsing() && attached()) {
         recalcStyle(Force);
         
-        SVGStyledElement *parentStyled = static_cast<SVGStyledElement *>(parentNode());
-        if(parentStyled)
+        SVGStyledElement* parentStyled = static_cast<SVGStyledElement*>(parentNode());
+        if (parentStyled)
             parentStyled->notifyAttributeChange();
     }
+}
+
 }
 
 // vim:ts=4:noet

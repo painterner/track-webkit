@@ -28,6 +28,7 @@
 #include "CSSPropertyNames.h"
 #include "CSSValueKeywords.h"
 #include "DocumentFragment.h"
+#include "Event.h"
 #include "EventListener.h"
 #include "EventNames.h"
 #include "ExceptionCode.h"
@@ -38,12 +39,16 @@
 #include "HTMLNames.h"
 #include "HTMLTokenizer.h"
 #include "TextIterator.h"
+#include "XMLTokenizer.h"
 #include "markup.h"
 
 namespace WebCore {
 
 using namespace EventNames;
 using namespace HTMLNames;
+
+using std::min;
+using std::max;
 
 HTMLElement::HTMLElement(const QualifiedName& tagName, Document *doc)
     : StyledElement(tagName, doc)
@@ -94,9 +99,6 @@ PassRefPtr<Node> HTMLElement::cloneNode(bool deep)
     if (namedAttrMap)
         *clone->attributes() = *namedAttrMap;
 
-    if (m_inlineStyleDecl)
-        *clone->getInlineStyleDecl() = *m_inlineStyleDecl;
-
     clone->copyNonAttributeProperties(this);
 
     if (deep)
@@ -136,7 +138,8 @@ void HTMLElement::parseMappedAttribute(MappedAttribute *attr)
     } else if (attr->name() == tabindexAttr) {
         indexstring = getAttribute(tabindexAttr);
         if (indexstring.length())
-            setTabIndex(indexstring.toInt());
+            // Clamp tabindex to the range of 'short' to match Firefox's behavior.
+            setTabIndex(max(static_cast<int>(std::numeric_limits<short>::min()), min(indexstring.toInt(), static_cast<int>(std::numeric_limits<short>::max()))));
     } else if (attr->name() == langAttr) {
         // FIXME: Implement
     } else if (attr->name() == dirAttr) {
@@ -217,26 +220,6 @@ String HTMLElement::innerHTML() const
 String HTMLElement::outerHTML() const
 {
     return createMarkup(this);
-}
-
-String HTMLElement::innerText() const
-{
-    if (!renderer())
-        return textContent(true);
-    
-    // We need to update layout, since plainText uses line boxes in the render tree.
-    document()->updateLayoutIgnorePendingStylesheets();
-    return plainText(rangeOfContents(const_cast<HTMLElement *>(this)).get());
-}
-
-String HTMLElement::outerText() const
-{
-    // Getting outerText is the same as getting innerText, only
-    // setting is different. You would think this should get the plain
-    // text for the outer range, but this is wrong, <br> for instance
-    // would return different values for inner and outer text by such
-    // a rule, but it doesn't in WinIE, and we want to match that.
-    return innerText();
 }
 
 PassRefPtr<DocumentFragment> HTMLElement::createContextualFragment(const String &html)
@@ -584,18 +567,9 @@ void HTMLElement::setContentEditable(const String &enabled)
         setAttribute(contenteditableAttr, enabled.isEmpty() ? "true" : enabled);
 }
 
-void HTMLElement::click(bool sendMouseEvents, bool showPressedLook)
+void HTMLElement::click()
 {
-    // send mousedown and mouseup before the click, if requested
-    if (sendMouseEvents)
-        dispatchSimulatedMouseEvent(mousedownEvent);
-    setActive(true, showPressedLook);
-    if (sendMouseEvents)
-        dispatchSimulatedMouseEvent(mouseupEvent);
-    setActive(false);
-
-    // always send click
-    dispatchSimulatedMouseEvent(clickEvent);
+    dispatchSimulatedClick(0);
 }
 
 // accessKeyAction is used by the accessibility support code
@@ -608,7 +582,7 @@ void HTMLElement::click(bool sendMouseEvents, bool showPressedLook)
 void HTMLElement::accessKeyAction(bool sendToAnyElement)
 {
     if (sendToAnyElement)
-        click(true);
+        dispatchSimulatedClick(0, true);
 }
 
 String HTMLElement::toString() const
@@ -637,11 +611,6 @@ String HTMLElement::id() const
 void HTMLElement::setId(const String &value)
 {
     setAttribute(idAttr, value);
-}
-
-String HTMLElement::title() const
-{
-    return getAttribute(titleAttr);
 }
 
 void HTMLElement::setTitle(const String &value)
@@ -716,8 +685,10 @@ bool HTMLElement::isRecognizedTagName(const QualifiedName& tagName)
 {
     static HashSet<AtomicStringImpl*> tagList;
     if (tagList.isEmpty()) {
-        #define ADD_TAG(name) tagList.add(name##Tag.localName().impl());
-        DOM_HTMLNAMES_FOR_EACH_TAG(ADD_TAG)
+        size_t tagCount = 0;
+        WebCore::QualifiedName** tags = HTMLNames::getHTMLTags(&tagCount);
+        for (size_t i = 0; i < tagCount; i++)
+            tagList.add(tags[i]->localName().impl());
     }
     return tagList.contains(tagName.localName().impl());
 }

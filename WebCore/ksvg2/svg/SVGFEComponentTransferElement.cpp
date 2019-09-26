@@ -21,33 +21,25 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "DeprecatedStringList.h"
+#include "SVGFEComponentTransferElement.h"
 
 #include "Attr.h"
-
-#include <kcanvas/KCanvasResources.h>
-#include <kcanvas/KCanvasFilters.h>
-#include <kcanvas/device/KRenderingDevice.h>
-
 #include "SVGNames.h"
-#include "SVGHelper.h"
 #include "SVGRenderStyle.h"
-#include "SVGFEComponentTransferElement.h"
 #include "SVGFEFuncRElement.h"
 #include "SVGFEFuncGElement.h"
 #include "SVGFEFuncBElement.h"
 #include "SVGFEFuncAElement.h"
-#include "SVGAnimatedString.h"
-#include "SVGAnimatedNumber.h"
-#include "SVGAnimatedEnumeration.h"
+#include "SVGResourceFilter.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGFEComponentTransferElement::SVGFEComponentTransferElement(const QualifiedName& tagName, Document *doc) : 
-SVGFilterPrimitiveStandardAttributes(tagName, doc)
+SVGFEComponentTransferElement::SVGFEComponentTransferElement(const QualifiedName& tagName, Document* doc)
+    : SVGFilterPrimitiveStandardAttributes(tagName, doc)
+    , m_filterEffect(0)
 {
-    m_filterEffect = 0;
 }
 
 SVGFEComponentTransferElement::~SVGFEComponentTransferElement()
@@ -55,45 +47,43 @@ SVGFEComponentTransferElement::~SVGFEComponentTransferElement()
     delete m_filterEffect;
 }
 
-SVGAnimatedString *SVGFEComponentTransferElement::in1() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedString>(m_in1, dummy);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGFEComponentTransferElement, String, String, string, In1, in1, SVGNames::inAttr.localName(), m_in1)
 
-void SVGFEComponentTransferElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGFEComponentTransferElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::inAttr)
-        in1()->setBaseVal(value.impl());
+        setIn1BaseValue(value);
     else
         SVGFilterPrimitiveStandardAttributes::parseMappedAttribute(attr);
 }
 
-KCanvasFEComponentTransfer *SVGFEComponentTransferElement::filterEffect() const
+SVGFEComponentTransfer* SVGFEComponentTransferElement::filterEffect() const
 {
     if (!m_filterEffect)
-        m_filterEffect = static_cast<KCanvasFEComponentTransfer *>(renderingDevice()->createFilterEffect(FE_COMPONENT_TRANSFER));
+        m_filterEffect = static_cast<SVGFEComponentTransfer*>(SVGResourceFilter::createFilterEffect(FE_COMPONENT_TRANSFER));
     if (!m_filterEffect)
         return 0;
     
-    m_filterEffect->setIn(String(in1()->baseVal()).deprecatedString());
+    m_filterEffect->setIn(in1());
     setStandardAttributes(m_filterEffect);
     
     for (Node *n = firstChild(); n != 0; n = n->nextSibling()) {
         if (n->hasTagName(SVGNames::feFuncRTag))
-            m_filterEffect->setRedFunction(static_cast<SVGFEFuncRElement *>(n)->transferFunction());
+            m_filterEffect->setRedFunction(static_cast<SVGFEFuncRElement*>(n)->transferFunction());
         else if (n->hasTagName(SVGNames::feFuncGTag))
-            m_filterEffect->setGreenFunction(static_cast<SVGFEFuncGElement *>(n)->transferFunction());
+            m_filterEffect->setGreenFunction(static_cast<SVGFEFuncGElement*>(n)->transferFunction());
         else if (n->hasTagName(SVGNames::feFuncBTag))
-            m_filterEffect->setBlueFunction(static_cast<SVGFEFuncBElement *>(n)->transferFunction());
+            m_filterEffect->setBlueFunction(static_cast<SVGFEFuncBElement*>(n)->transferFunction());
         else if (n->hasTagName(SVGNames::feFuncATag))
-            m_filterEffect->setAlphaFunction(static_cast<SVGFEFuncAElement *>(n)->transferFunction());
+            m_filterEffect->setAlphaFunction(static_cast<SVGFEFuncAElement*>(n)->transferFunction());
     }
 
     return m_filterEffect;
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

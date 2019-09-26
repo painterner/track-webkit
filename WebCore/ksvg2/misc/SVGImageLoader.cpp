@@ -26,12 +26,9 @@
 #include "DocLoader.h"
 #include "Document.h"
 
-#include "SVGNames.h"
 #include "SVGImageElement.h"
-#include "SVGAnimatedLength.h"
-#include "SVGAnimatedString.h"
-#include "SVGMatrix.h"
-#include "KCanvasRenderingStyle.h"
+#include "SVGLength.h"
+#include "SVGNames.h"
 
 #include "RenderImage.h"
 
@@ -53,8 +50,8 @@ void SVGImageLoader::updateFromElement()
     WebCore::Document* doc = imageElement->ownerDocument();
     
     CachedImage *newImage = 0;
-    if (imageElement->href()->baseVal())
-        newImage = doc->docLoader()->requestImage(imageElement->href()->baseVal());
+    if (!imageElement->href().isEmpty())
+        newImage = doc->docLoader()->requestImage(imageElement->href());
 
     CachedImage *oldImage = image();
     if (newImage != oldImage) {

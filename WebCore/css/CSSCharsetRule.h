@@ -21,29 +21,35 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef CSSCharsetRule_H
-#define CSSCharsetRule_H
+#ifndef CSSCharsetRule_h
+#define CSSCharsetRule_h
 
 #include "CSSRule.h"
 #include "PlatformString.h"
 
 namespace WebCore {
 
-class CSSCharsetRule : public CSSRule
-{
+class CSSCharsetRule : public CSSRule {
 public:
-    CSSCharsetRule(StyleBase* parent) : CSSRule(parent) { m_type = CHARSET_RULE; }
+    CSSCharsetRule(StyleBase* parent, const String& encoding);
+    virtual ~CSSCharsetRule();
 
     virtual bool isCharsetRule() { return true; }
-    virtual String cssText() const;
 
     String encoding() const { return m_encoding; }
-    void setEncoding(String _encoding) { m_encoding = _encoding; }
+
+    // Inherited from CSSRule
+    virtual unsigned short type() const { return CHARSET_RULE; }
+
+    virtual String cssText() const;
+
+    // Not part of the CSSOM
+    void setEncoding(const String& encoding) { m_encoding = encoding; }
 
 protected:
     String m_encoding;
 };
 
-} // namespace
+} // namespace WebCore
 
-#endif
+#endif // CSSCharsetRule_h

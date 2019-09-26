@@ -19,7 +19,7 @@
  */
 
 // gcc 3.x can't handle including the HashMap pointer specialization in this file
-#ifndef __GLIBCXX__ // less than gcc 3.4
+#if defined __GNUC__ && !defined __GLIBCXX__ // less than gcc 3.4
 #define HASH_MAP_PTR_SPEC_WORKAROUND 1
 #endif
 
@@ -31,148 +31,203 @@
 #include "Frame.h"
 #include "PlatformString.h"
 #include "Range.h"
-#include "XPathEvaluator.h"
+#include "RangeException.h"
+#include "xmlhttprequest.h"
 #include "kjs_dom.h"
 #include "kjs_window.h"
 #include <kjs/collector.h>
 #include <wtf/HashMap.h>
+
+#ifdef SVG_SUPPORT
+#include "SVGException.h"
+#endif
+
+#ifdef XPATH_SUPPORT
+#include "XPathEvaluator.h"
+#endif
 
 using namespace WebCore;
 using namespace EventNames;
 
 namespace KJS {
 
-UString DOMObject::toString(ExecState *) const
-{
-  return "[object " + className() + "]";
-}
-
 typedef HashMap<void*, DOMObject*> DOMObjectMap;
 typedef HashMap<Node*, DOMNode*> NodeMap;
 typedef HashMap<Document*, NodeMap*> NodePerDocMap;
 
-static DOMObjectMap *domObjects()
+UString DOMObject::toString(ExecState*) const
+{
+    return "[object " + className() + "]";
+}
+
+// For debugging, keep a set of wrappers currently registered, and check that
+// all are unregistered before they are destroyed. This has helped us fix at
+// least one bug.
+
+#ifdef NDEBUG
+
+#define ADD_WRAPPER(wrapper)
+#define REMOVE_WRAPPER(wrapper)
+#define REMOVE_WRAPPERS(wrappers)
+
+#else
+
+#define ADD_WRAPPER(wrapper) addWrapper(wrapper)
+#define REMOVE_WRAPPER(wrapper) removeWrapper(wrapper)
+#define REMOVE_WRAPPERS(wrappers) removeWrappers(wrappers)
+
+static HashSet<DOMObject*>& wrapperSet()
+{
+    static HashSet<DOMObject*> staticWrapperSet;
+    return staticWrapperSet;
+}
+
+static void addWrapper(DOMObject* wrapper)
+{
+    ASSERT(!wrapperSet().contains(wrapper));
+    wrapperSet().add(wrapper);
+}
+
+static void removeWrapper(DOMObject* wrapper)
+{
+    if (!wrapper)
+        return;
+    ASSERT(wrapperSet().contains(wrapper));
+    wrapperSet().remove(wrapper);
+}
+
+static void removeWrappers(const NodeMap& wrappers)
+{
+    for (NodeMap::const_iterator it = wrappers.begin(); it != wrappers.end(); ++it)
+        removeWrapper(it->second);
+}
+
+DOMObject::~DOMObject()
+{
+    ASSERT(!wrapperSet().contains(this));
+}
+
+#endif
+
+static DOMObjectMap& domObjects()
 { 
-  static DOMObjectMap* staticDomObjects = new DOMObjectMap();
-  return staticDomObjects;
+    static DOMObjectMap staticDOMObjects;
+    return staticDOMObjects;
 }
 
-static NodePerDocMap *domNodesPerDocument()
+static NodePerDocMap& domNodesPerDocument()
 {
-  static NodePerDocMap *staticDOMNodesPerDocument = new NodePerDocMap();
-  return staticDOMNodesPerDocument;
+    static NodePerDocMap staticDOMNodesPerDocument;
+    return staticDOMNodesPerDocument;
 }
 
-
-ScriptInterpreter::ScriptInterpreter( JSObject *global, Frame *frame )
-  : Interpreter( global ), m_frame(frame),
-    m_evt( 0L ), m_inlineCode(false), m_timerCallback(false)
+ScriptInterpreter::ScriptInterpreter(JSObject* global, Frame* frame)
+    : Interpreter(global)
+    , m_frame(frame)
+    , m_currentEvent(0)
+    , m_inlineCode(false)
+    , m_timerCallback(false)
 {
-    // Time in milliseconds before the script timeout handler kicks in
-    const unsigned ScriptTimeoutTimeMS = 5000;
-        
-    setTimeoutTime(ScriptTimeoutTimeMS);
+    // Time in milliseconds before the script timeout handler kicks in.
+    setTimeoutTime(5000);
 }
 
 DOMObject* ScriptInterpreter::getDOMObject(void* objectHandle) 
 {
-    return domObjects()->get(objectHandle);
+    return domObjects().get(objectHandle);
 }
 
-void ScriptInterpreter::putDOMObject(void* objectHandle, DOMObject* obj) 
+void ScriptInterpreter::putDOMObject(void* objectHandle, DOMObject* wrapper) 
 {
-    domObjects()->set(objectHandle, obj);
+    ADD_WRAPPER(wrapper);
+    domObjects().set(objectHandle, wrapper);
 }
 
 void ScriptInterpreter::forgetDOMObject(void* objectHandle)
 {
-    domObjects()->remove(objectHandle);
+    REMOVE_WRAPPER(domObjects().get(objectHandle));
+    domObjects().remove(objectHandle);
 }
 
-DOMNode *ScriptInterpreter::getDOMNodeForDocument(Document *document, Node *node)
+DOMNode* ScriptInterpreter::getDOMNodeForDocument(Document* document, Node* node)
 {
     if (!document)
-        return static_cast<DOMNode *>(domObjects()->get(node));
-    NodeMap *documentDict = domNodesPerDocument()->get(document);
+        return static_cast<DOMNode*>(domObjects().get(node));
+    NodeMap* documentDict = domNodesPerDocument().get(document);
     if (documentDict)
         return documentDict->get(node);
     return NULL;
 }
 
-void ScriptInterpreter::forgetDOMNodeForDocument(Document *document, Node *node)
+void ScriptInterpreter::forgetDOMNodeForDocument(Document* document, Node* node)
 {
+    REMOVE_WRAPPER(getDOMNodeForDocument(document, node));
     if (!document) {
-        domObjects()->remove(node);
+        domObjects().remove(node);
         return;
     }
-    NodeMap *documentDict = domNodesPerDocument()->get(document);
+    NodeMap* documentDict = domNodesPerDocument().get(document);
     if (documentDict)
         documentDict->remove(node);
 }
 
-void ScriptInterpreter::putDOMNodeForDocument(Document *document, Node *nodeHandle, DOMNode *nodeWrapper)
+void ScriptInterpreter::putDOMNodeForDocument(Document* document, Node* node, DOMNode* wrapper)
 {
+    ADD_WRAPPER(wrapper);
     if (!document) {
-        domObjects()->set(nodeHandle, nodeWrapper);
+        domObjects().set(node, wrapper);
         return;
     }
-    NodeMap *documentDict = domNodesPerDocument()->get(document);
+    NodeMap* documentDict = domNodesPerDocument().get(document);
     if (!documentDict) {
-        documentDict = new NodeMap();
-        domNodesPerDocument()->set(document, documentDict);
+        documentDict = new NodeMap;
+        domNodesPerDocument().set(document, documentDict);
     }
-    documentDict->set(nodeHandle, nodeWrapper);
+    documentDict->set(node, wrapper);
 }
 
-void ScriptInterpreter::forgetAllDOMNodesForDocument(Document *document)
+void ScriptInterpreter::forgetAllDOMNodesForDocument(Document* document)
 {
-    assert(document);
-    NodePerDocMap::iterator it = domNodesPerDocument()->find(document);
-    if (it != domNodesPerDocument()->end()) {
+    ASSERT(document);
+    NodePerDocMap::iterator it = domNodesPerDocument().find(document);
+    if (it != domNodesPerDocument().end()) {
+        REMOVE_WRAPPERS(*it->second);
         delete it->second;
-        domNodesPerDocument()->remove(it);
+        domNodesPerDocument().remove(it);
     }
 }
 
 void ScriptInterpreter::mark(bool currentThreadIsMainThread)
 {
-  NodePerDocMap::iterator dictEnd = domNodesPerDocument()->end();
-  for (NodePerDocMap::iterator dictIt = domNodesPerDocument()->begin();
-       dictIt != dictEnd;
-       ++dictIt) {
-    
-      NodeMap *nodeDict = dictIt->second;
-      NodeMap::iterator nodeEnd = nodeDict->end();
-      for (NodeMap::iterator nodeIt = nodeDict->begin();
-           nodeIt != nodeEnd;
-           ++nodeIt) {
+    NodePerDocMap::iterator dictEnd = domNodesPerDocument().end();
+    for (NodePerDocMap::iterator dictIt = domNodesPerDocument().begin(); dictIt != dictEnd; ++dictIt) {
+        NodeMap* nodeDict = dictIt->second;
+        NodeMap::iterator nodeEnd = nodeDict->end();
+        for (NodeMap::iterator nodeIt = nodeDict->begin(); nodeIt != nodeEnd; ++nodeIt) {
+            DOMNode* node = nodeIt->second;
+            // don't mark wrappers for nodes that are no longer in the
+            // document - they should not be saved if the node is not
+            // otherwise reachable from JS.
+            if (node->impl()->inDocument() && !node->marked())
+                node->mark();
+        }
+    }
 
-        DOMNode *node = nodeIt->second;
-        // don't mark wrappers for nodes that are no longer in the
-        // document - they should not be saved if the node is not
-        // otherwise reachable from JS.
-        if (node->impl()->inDocument() && !node->marked())
-            node->mark();
-      }
-  }
-  
-  if (!currentThreadIsMainThread) {
-      // On alternate threads, DOMObjects remain in the cache because they're not collected.
-      // So, they need an opportunity to mark their children.
-      DOMObjectMap::iterator objectEnd = domObjects()->end();
-      for (DOMObjectMap::iterator objectIt = domObjects()->begin();
-           objectIt != objectEnd;
-           ++objectIt) {
-          DOMObject* object = objectIt->second;
-          if (!object->marked())
-              object->mark();
-      }
-  }
-  
-  Interpreter::mark(currentThreadIsMainThread);
+    if (!currentThreadIsMainThread) {
+        // On alternate threads, DOMObjects remain in the cache because they're not collected.
+        // So, they need an opportunity to mark their children.
+        DOMObjectMap::iterator objectEnd = domObjects().end();
+        for (DOMObjectMap::iterator objectIt = domObjects().begin(); objectIt != objectEnd; ++objectIt) {
+            DOMObject* object = objectIt->second;
+            if (!object->marked())
+                object->mark();
+        }
+    }
+
+    Interpreter::mark(currentThreadIsMainThread);
 }
 
-ExecState *ScriptInterpreter::globalExec()
+ExecState* ScriptInterpreter::globalExec()
 {
     // we need to make sure that any script execution happening in this
     // frame does not destroy it
@@ -180,42 +235,44 @@ ExecState *ScriptInterpreter::globalExec()
     return Interpreter::globalExec();
 }
 
-void ScriptInterpreter::updateDOMNodeDocument(Node *node, Document *oldDoc, Document *newDoc)
+void ScriptInterpreter::updateDOMNodeDocument(Node* node, Document* oldDoc, Document* newDoc)
 {
-  DOMNode *cachedObject = getDOMNodeForDocument(oldDoc, node);
-  if (cachedObject) {
-    putDOMNodeForDocument(newDoc, node, cachedObject);
-    forgetDOMNodeForDocument(oldDoc, node);
-  }
+    ASSERT(oldDoc != newDoc);
+    DOMNode* wrapper = getDOMNodeForDocument(oldDoc, node);
+    if (wrapper) {
+        REMOVE_WRAPPER(wrapper);
+        putDOMNodeForDocument(newDoc, node, wrapper);
+        forgetDOMNodeForDocument(oldDoc, node);
+        ADD_WRAPPER(wrapper);
+    }
 }
 
 bool ScriptInterpreter::wasRunByUserGesture() const
 {
-  if ( m_evt )
-  {
-    const AtomicString &type = m_evt->type();
-    bool eventOk = ( // mouse events
-      type == clickEvent || type == mousedownEvent ||
-      type == mouseupEvent || type == dblclickEvent ||
-      // keyboard events
-      type == keydownEvent || type == keypressEvent ||
-      type == keyupEvent ||
-      // other accepted events
-      type == selectEvent || type == changeEvent ||
-      type == focusEvent || type == blurEvent ||
-      type == submitEvent );
-    if (eventOk)
-      return true;
-  } else { // no event
-    if (m_inlineCode  && !m_timerCallback)
-      // This is the <a href="javascript:window.open('...')> case -> we let it through
-      return true;
-    // This is the <script>window.open(...)</script> case or a timer callback -> block it
-  }
-  return false;
+    if (m_currentEvent) {
+        const AtomicString& type = m_currentEvent->type();
+        bool eventOk = ( // mouse events
+            type == clickEvent || type == mousedownEvent ||
+            type == mouseupEvent || type == dblclickEvent ||
+            // keyboard events
+            type == keydownEvent || type == keypressEvent ||
+            type == keyupEvent ||
+            // other accepted events
+            type == selectEvent || type == changeEvent ||
+            type == focusEvent || type == blurEvent ||
+            type == submitEvent);
+        if (eventOk)
+            return true;
+    } else { // no event
+        if (m_inlineCode && !m_timerCallback)
+            // This is the <a href="javascript:window.open('...')> case -> we let it through
+            return true;
+        // This is the <script>window.open(...)</script> case or a timer callback -> block it
+    }
+    return false;
 }
 
-bool ScriptInterpreter::isGlobalObject(JSValue *v)
+bool ScriptInterpreter::isGlobalObject(JSValue* v)
 {
     return v->isObject(&Window::info);
 }
@@ -231,21 +288,6 @@ Interpreter* ScriptInterpreter::interpreterForGlobalObject(const JSValue* imp)
     return win->interpreter();
 }
 
-void *ScriptInterpreter::createLanguageInstanceForValue (ExecState *exec, int language, JSObject *value, const Bindings::RootObject *origin, const Bindings::RootObject *current)
-{
-    void *result = 0;
-    
-#if __APPLE__
-    // FIXME: Need to implement bindings support.
-    if (language == Bindings::Instance::ObjectiveCLanguage)
-        result = createObjcInstanceForValue (exec, value, origin, current);
-    
-    if (!result)
-        result = Interpreter::createLanguageInstanceForValue (exec, language, value, origin, current);
-#endif
-    return result;
-}
-
 bool ScriptInterpreter::shouldInterruptScript() const
 {
     return m_frame->shouldInterruptJavaScript();
@@ -253,21 +295,21 @@ bool ScriptInterpreter::shouldInterruptScript() const
     
 //////
 
-JSValue *jsStringOrNull(const String &s)
+JSValue* jsStringOrNull(const String& s)
 {
     if (s.isNull())
         return jsNull();
     return jsString(s);
 }
 
-JSValue *jsStringOrUndefined(const String &s)
+JSValue* jsStringOrUndefined(const String& s)
 {
     if (s.isNull())
         return jsUndefined();
     return jsString(s);
 }
 
-JSValue *jsStringOrFalse(const String &s)
+JSValue* jsStringOrFalse(const String& s)
 {
     if (s.isNull())
         return jsBoolean(false);
@@ -281,7 +323,7 @@ String valueToStringWithNullCheck(ExecState* exec, JSValue* val)
     return val->toString(exec);
 }
 
-static const char * const exceptionNames[] = {
+static const char* const exceptionNames[] = {
     0,
     "INDEX_SIZE_ERR",
     "DOMSTRING_SIZE_ERR",
@@ -302,78 +344,107 @@ static const char * const exceptionNames[] = {
     "TYPE_MISMATCH_ERR",
 };
 
-static const char * const rangeExceptionNames[] = {
+static const char* const rangeExceptionNames[] = {
     0, "BAD_BOUNDARYPOINTS_ERR", "INVALID_NODE_TYPE_ERR"
 };
 
-static const char * const eventExceptionNames[] = {
+static const char* const eventExceptionNames[] = {
     "UNSPECIFIED_EVENT_TYPE_ERR"
 };
 
+static const char* const xmlHttpRequestExceptionNames[] = {
+    "Permission denied"
+};
+
 #ifdef XPATH_SUPPORT
-static const char * const xpathExceptionNames[] = {
+static const char* const xpathExceptionNames[] = {
     "INVALID_EXPRESSION_ERR",
     "TYPE_ERR"
 };
 #endif
 
+#ifdef SVG_SUPPORT
+static const char* const svgExceptionNames[] = {
+    "SVG_WRONG_TYPE_ERR",
+    "SVG_INVALID_VALUE_ERR",
+    "SVG_MATRIX_NOT_INVERTABLE"
+};
+#endif
+
 void setDOMException(ExecState* exec, ExceptionCode ec)
 {
-  if (ec == 0 || exec->hadException())
-    return;
+    if (ec == 0 || exec->hadException())
+        return;
 
-  const char* type = "DOM";
-  int code = ec;
+    const char* type = "DOM";
+    int code = ec;
 
-  const char * const * nameTable;
+    const char* const* nameTable;
   
-  int nameTableSize;
-  int nameIndex;
-  if (code >= RangeExceptionOffset && code <= RangeExceptionMax) {
-    type = "DOM Range";
-    code -= RangeExceptionOffset;
-    nameIndex = code;
-    nameTable = rangeExceptionNames;
-    nameTableSize = sizeof(rangeExceptionNames) / sizeof(rangeExceptionNames[0]);
-  } else if (code >= EventExceptionOffset && code <= EventExceptionMax) {
-    type = "DOM Events";
-    code -= EventExceptionOffset;
-    nameIndex = code;
-    nameTable = eventExceptionNames;
-    nameTableSize = sizeof(eventExceptionNames) / sizeof(eventExceptionNames[0]);
+    int nameTableSize;
+    int nameIndex;
+    if (code >= RangeExceptionOffset && code <= RangeExceptionMax) {
+        type = "DOM Range";
+        code -= RangeExceptionOffset;
+        nameIndex = code;
+        nameTable = rangeExceptionNames;
+        nameTableSize = sizeof(rangeExceptionNames) / sizeof(rangeExceptionNames[0]);
+    } else if (code >= EventExceptionOffset && code <= EventExceptionMax) {
+        type = "DOM Events";
+        code -= EventExceptionOffset;
+        nameIndex = code;
+        nameTable = eventExceptionNames;
+        nameTableSize = sizeof(eventExceptionNames) / sizeof(eventExceptionNames[0]);
+    } else if (code >= XMLHttpRequestExceptionOffset && code <= XMLHttpRequestExceptionMax) {
+        // XMLHttpRequest case is special, because there is no exception code assigned (yet?).
+        code -= XMLHttpRequestExceptionOffset;
+        nameIndex = code;
+        nameTable = xmlHttpRequestExceptionNames;
+        nameTableSize = sizeof(xmlHttpRequestExceptionNames) / sizeof(xmlHttpRequestExceptionNames[0]);
+
+        throwError(exec, GeneralError, nameIndex < nameTableSize ? nameTable[nameIndex] : 0);
+        return;
 #ifdef XPATH_SUPPORT
-  } else if (code >= XPathExceptionOffset && code <= XPathExceptionMax) {
-    type = "DOM XPath";
-    // XPath exception codes start with 51 and we don't want 51 empty elements in the name array
-    nameIndex = code - INVALID_EXPRESSION_ERR;
-    code -= XPathExceptionOffset;
-    nameTable = xpathExceptionNames;
-    nameTableSize = sizeof(xpathExceptionNames) / sizeof(xpathExceptionNames[0]);
+    } else if (code >= XPathExceptionOffset && code <= XPathExceptionMax) {
+        type = "DOM XPath";
+        // XPath exception codes start with 51 and we don't want 51 empty elements in the name array
+        nameIndex = code - INVALID_EXPRESSION_ERR;
+        code -= XPathExceptionOffset;
+        nameTable = xpathExceptionNames;
+        nameTableSize = sizeof(xpathExceptionNames) / sizeof(xpathExceptionNames[0]);
 #endif
-  } else {
-    nameIndex = code;
-    nameTable = exceptionNames;
-    nameTableSize = sizeof(exceptionNames) / sizeof(exceptionNames[0]);
-  }
+#ifdef SVG_SUPPORT
+    } else if (code >= SVGExceptionOffset && code <= SVGExceptionMax) {
+        type = "DOM SVG";
+        code -= SVGExceptionOffset;
+        nameIndex = code;
+        nameTable = svgExceptionNames;
+        nameTableSize = sizeof(svgExceptionNames) / sizeof(svgExceptionNames[0]);
+#endif
+    } else {
+        nameIndex = code;
+        nameTable = exceptionNames;
+        nameTableSize = sizeof(exceptionNames) / sizeof(exceptionNames[0]);
+    }
 
-  const char* name = nameIndex < nameTableSize ? nameTable[nameIndex] : 0;
+    const char* name = nameIndex < nameTableSize ? nameTable[nameIndex] : 0;
 
-  // 100 characters is a big enough buffer, because there are:
-  //   13 characters in the message
-  //   10 characters in the longest type, "DOM Events"
-  //   27 characters in the longest name, "NO_MODIFICATION_ALLOWED_ERR"
-  //   20 or so digits in the longest integer's ASCII form (even if int is 64-bit)
-  //   1 byte for a null character
-  // That adds up to about 70 bytes.
-  char buffer[100];
+    // 100 characters is a big enough buffer, because there are:
+    //   13 characters in the message
+    //   10 characters in the longest type, "DOM Events"
+    //   27 characters in the longest name, "NO_MODIFICATION_ALLOWED_ERR"
+    //   20 or so digits in the longest integer's ASCII form (even if int is 64-bit)
+    //   1 byte for a null character
+    // That adds up to about 70 bytes.
+    char buffer[100];
 
-  if (name)
-    sprintf(buffer, "%s: %s Exception %d", name, type, code);
-  else
-    sprintf(buffer, "%s Exception %d", type, code);
+    if (name)
+        sprintf(buffer, "%s: %s Exception %d", name, type, code);
+    else
+        sprintf(buffer, "%s Exception %d", type, code);
 
-  JSObject* errorObject = throwError(exec, GeneralError, buffer);
-  errorObject->put(exec, "code", jsNumber(code));
+    JSObject* errorObject = throwError(exec, GeneralError, buffer);
+    errorObject->put(exec, "code", jsNumber(code));
 }
 
 }

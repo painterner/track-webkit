@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -33,8 +33,6 @@ namespace WebCore {
     class Attribute;
     class Node;
     class StringImpl;
-    class SVGAnimatedTransformList;
-    class SVGMatrix;
     class SVGTransformList;
 
     class SVGStyledTransformableElement : public SVGStyledLocatableElement, public SVGTransformable {
@@ -45,27 +43,25 @@ namespace WebCore {
         virtual bool isStyledTransformable() const { return true; }
 
         // 'SVGTransformable' functions
-        virtual SVGAnimatedTransformList *transform() const;
-        virtual SVGMatrix *localMatrix() const;
+        virtual AffineTransform localMatrix() const;
 
         // Derived from: 'SVGLocatable'
-        virtual SVGMatrix *getCTM() const;
-        virtual SVGMatrix *getScreenCTM() const;
-        virtual SVGElement *nearestViewportElement() const;
-        virtual SVGElement *farthestViewportElement() const;
+        virtual AffineTransform getCTM() const;
+        virtual AffineTransform getScreenCTM() const;
+        virtual SVGElement* nearestViewportElement() const;
+        virtual SVGElement* farthestViewportElement() const;
 
         virtual FloatRect getBBox() const;
-        virtual SVGMatrix *getTransformToElement(SVGElement *element) const;
 
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute* attr);
 
-        void updateLocalTransform(SVGTransformList *localTransforms);
+        void updateLocalTransform(SVGTransformList* localTransforms);
         
         virtual void attach();
 
     protected:
-        mutable RefPtr<SVGMatrix> m_localMatrix;
-        mutable RefPtr<SVGAnimatedTransformList> m_transform;
+        mutable AffineTransform m_localMatrix;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGStyledTransformableElement, SVGTransformList*, RefPtr<SVGTransformList>, Transform, transform)
     };
 
 } // namespace WebCore

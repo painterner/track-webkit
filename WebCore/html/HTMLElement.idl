@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006 Apple Computer, Inc.
+ * Copyright (C) 2006 Samuel Weinig <sam.weinig@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -20,7 +21,32 @@
 module html {
 
     interface [GenerateConstructor] HTMLElement : Element {
-        attribute DOMString title;
+                 attribute DOMString title;
+
+#if !defined(LANGUAGE_JAVASCRIPT)
+                 attribute DOMString id;
+                 attribute DOMString lang;
+                 attribute DOMString dir;
+                 attribute DOMString className;
+
+        // extensions
+
+                 attribute DOMString innerHTML
+                     setter raises (DOMException);
+                 attribute DOMString innerText
+                     setter raises (DOMException);
+                 attribute DOMString outerHTML
+                     setter raises (DOMException);
+                 attribute DOMString outerText
+                     setter raises (DOMException);
+
+        readonly attribute HTMLCollection children;
+
+                 attribute DOMString contentEditable;
+        readonly attribute boolean isContentEditable;
+
+        readonly attribute DOMString titleDisplayString;
+#endif
     };
 
 }

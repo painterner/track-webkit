@@ -28,10 +28,12 @@
 #include "Document.h"
 #include "Frame.h"
 #include "GraphicsContext.h"
-#include "RenderBlock.h"
-#include "break_lines.h"
+#include "HitTestResult.h"
 #include "Range.h"
 #include "RenderArena.h"
+#include "RenderBlock.h"
+#include "TextStyle.h"
+#include "break_lines.h"
 #include <wtf/AlwaysInline.h>
 
 #if PLATFORM(MAC)
@@ -191,8 +193,7 @@ int InlineTextBox::placeEllipsisBox(bool ltr, int blockEdge, int ellipsisWidth, 
     return -1;
 }
 
-static Color 
-correctedTextColor(Color textColor, Color backgroundColor) 
+static Color correctedTextColor(Color textColor, Color backgroundColor) 
 {
     // Adjust the text color if it is too close to the background color,
     // by darkening or lightening it to move it further away.
@@ -213,47 +214,69 @@ correctedTextColor(Color textColor, Color backgroundColor)
     return textColor.light();
 }
 
+static void updateGraphicsContext(GraphicsContext* context, const Color& fillColor, const Color& strokeColor, float strokeThickness)
+{
+    int mode = context->textDrawingMode();
+    if (strokeThickness > 0) {
+        int newMode = mode | cTextStroke;
+        if (mode != newMode) {
+            context->setTextDrawingMode(newMode);
+            mode = newMode;
+        }
+    }
+    
+    if (mode & cTextFill && fillColor != context->fillColor())
+        context->setFillColor(fillColor);
+
+    if (mode & cTextStroke) {
+        if (strokeColor != context->strokeColor())
+            context->setStrokeColor(strokeColor);
+        if (strokeThickness != context->strokeThickness())
+            context->setStrokeThickness(strokeThickness);
+    }
+}
+
 bool InlineTextBox::isLineBreak() const
 {
     return object()->isBR() || (object()->style()->preserveNewline() && len() == 1 && (*textObject()->string())[start()] == '\n');
 }
 
-bool InlineTextBox::nodeAtPoint(RenderObject::NodeInfo& i, int x, int y, int tx, int ty)
+bool InlineTextBox::nodeAtPoint(const HitTestRequest& request, HitTestResult& result, int x, int y, int tx, int ty)
 {
     if (isLineBreak())
         return false;
 
     IntRect rect(tx + m_x, ty + m_y, m_width, m_height);
     if (m_truncation != cFullTruncation && object()->style()->visibility() == VISIBLE && rect.contains(x, y)) {
-        object()->setInnerNode(i);
+        object()->setInnerNode(result);
         return true;
     }
     return false;
 }
 
-void InlineTextBox::paint(RenderObject::PaintInfo& i, int tx, int ty)
+void InlineTextBox::paint(RenderObject::PaintInfo& paintInfo, int tx, int ty)
 {
-    if (isLineBreak() || !object()->shouldPaintWithinRoot(i) || object()->style()->visibility() != VISIBLE ||
-        m_truncation == cFullTruncation || i.phase == PaintPhaseOutline)
+    if (isLineBreak() || !object()->shouldPaintWithinRoot(paintInfo) || object()->style()->visibility() != VISIBLE ||
+            m_truncation == cFullTruncation || paintInfo.phase == PaintPhaseOutline)
         return;
     
-    assert(i.phase != PaintPhaseSelfOutline && i.phase != PaintPhaseChildOutlines);
+    ASSERT(paintInfo.phase != PaintPhaseSelfOutline && paintInfo.phase != PaintPhaseChildOutlines);
 
-    int xPos = tx + m_x - parent()->maxHorizontalShadow();
-    int w = width() + 2 * parent()->maxHorizontalShadow();
-    if (xPos >= i.r.right() || xPos + w <= i.r.x())
+    int xPos = tx + m_x - parent()->maxHorizontalVisualOverflow();
+    int w = width() + 2 * parent()->maxHorizontalVisualOverflow();
+    if (xPos >= paintInfo.rect.right() || xPos + w <= paintInfo.rect.x())
         return;
 
     bool isPrinting = textObject()->document()->printing();
     
     // Determine whether or not we're selected.
     bool haveSelection = !isPrinting && selectionState() != RenderObject::SelectionNone;
-    if (!haveSelection && i.phase == PaintPhaseSelection)
+    if (!haveSelection && paintInfo.phase == PaintPhaseSelection)
         // When only painting the selection, don't bother to paint if there is none.
         return;
 
     // Determine whether or not we have marked text.
-    Range *markedTextRange = object()->document()->frame()->markedTextRange();
+    Range* markedTextRange = object()->document()->frame()->markedTextRange();
     int exception = 0;
     bool haveMarkedText = markedTextRange && markedTextRange->startContainer(exception) == object()->node();
     bool markedTextUsesUnderlines = object()->document()->frame()->markedTextUsesUnderlines();
@@ -262,80 +285,119 @@ void InlineTextBox::paint(RenderObject::PaintInfo& i, int tx, int ty)
     RenderStyle* styleToUse = object()->style(m_firstLine);
     int d = styleToUse->textDecorationsInEffect();
     const Font* font = &styleToUse->font();
-    if (*font != i.p->font())
-        i.p->setFont(*font);
+    if (*font != paintInfo.context->font())
+        paintInfo.context->setFont(*font);
 
     // 1. Paint backgrounds behind text if needed.  Examples of such backgrounds include selection
     // and marked text.
-    if (i.phase != PaintPhaseSelection && !isPrinting) {
+    if (paintInfo.phase != PaintPhaseSelection && !isPrinting) {
 #if PLATFORM(MAC)
         // Custom highlighters go behind everything else.
-        if (styleToUse->highlight() != nullAtom && !i.p->paintingDisabled())
+        if (styleToUse->highlight() != nullAtom && !paintInfo.context->paintingDisabled())
             paintCustomHighlight(tx, ty, styleToUse->highlight());
 #endif
 
         if (haveMarkedText  && !markedTextUsesUnderlines)
-            paintMarkedTextBackground(i.p, tx, ty, styleToUse, font, markedTextRange->startOffset(exception), markedTextRange->endOffset(exception));
+            paintMarkedTextBackground(paintInfo.context, tx, ty, styleToUse, font, markedTextRange->startOffset(exception), markedTextRange->endOffset(exception));
 
-        paintAllMarkersOfType(i.p, tx, ty, DocumentMarker::TextMatch, styleToUse, font);
+        paintDocumentMarkers(paintInfo.context, tx, ty, styleToUse, font, true);
 
         if (haveSelection)
-            paintSelection(i.p, tx, ty, styleToUse, font);
+            paintSelection(paintInfo.context, tx, ty, styleToUse, font);
     }
-    
+
     // 2. Now paint the foreground, including text and decorations like underline/overline (in quirks mode only).
-    if (m_len <= 0) return;
-    
-    DeprecatedValueList<MarkedTextUnderline> underlines;
+    if (m_len <= 0)
+        return;
+
+    const Vector<MarkedTextUnderline>* underlines = 0;
+    size_t numUnderlines = 0;
     if (haveMarkedText && markedTextUsesUnderlines) {
-        underlines = object()->document()->frame()->markedTextUnderlines();
+        underlines = &object()->document()->frame()->markedTextUnderlines();
+        numUnderlines = underlines->size();
     }
-    DeprecatedValueListIterator<MarkedTextUnderline> underlineIt = underlines.begin();
 
-    Color textColor;
-    
-    if (i.forceWhiteText)
-        textColor = Color::white;
-    else {
-        textColor = styleToUse->color();
+    Color textFillColor;
+    Color textStrokeColor;
+    float textStrokeWidth = styleToUse->textStrokeWidth();
+
+    if (paintInfo.forceWhiteText) {
+        textFillColor = Color::white;
+        textStrokeColor = Color::white;
+    } else {
+        textFillColor = styleToUse->textFillColor();
+        if (!textFillColor.isValid())
+            textFillColor = styleToUse->color();
         
-        // Make the text color legible against a white background
+        // Make the text fill color legible against a white background
         if (styleToUse->forceBackgroundsToWhite())
-            textColor = correctedTextColor(textColor, Color::white);
+            textFillColor = correctedTextColor(textFillColor, Color::white);
+            
+        textStrokeColor = styleToUse->textStrokeColor();
+        if (!textStrokeColor.isValid())
+            textStrokeColor = styleToUse->color();
+        
+        // Make the text stroke color legible against a white background
+        if (styleToUse->forceBackgroundsToWhite())
+            textStrokeColor = correctedTextColor(textStrokeColor, Color::white);
     }
 
-    if (textColor != i.p->pen().color())
-        i.p->setPen(textColor);
+    // For stroked painting, we have to change the text drawing mode.  It's probably dangerous to leave that mutated as a side
+    // effect, so only when we know we're stroking, do a save/restore.
+    if (textStrokeWidth > 0)
+        paintInfo.context->save();
 
+    updateGraphicsContext(paintInfo.context, textFillColor, textStrokeColor, textStrokeWidth);
+    
     // Set a text shadow if we have one.
     // FIXME: Support multiple shadow effects.  Need more from the CG API before
     // we can do this.
     bool setShadow = false;
     if (styleToUse->textShadow()) {
-        i.p->setShadow(IntSize(styleToUse->textShadow()->x, styleToUse->textShadow()->y),
-            styleToUse->textShadow()->blur, styleToUse->textShadow()->color);
+        paintInfo.context->setShadow(IntSize(styleToUse->textShadow()->x, styleToUse->textShadow()->y),
+                                     styleToUse->textShadow()->blur, styleToUse->textShadow()->color);
         setShadow = true;
     }
 
-    bool paintSelectedTextOnly = (i.phase == PaintPhaseSelection);
+    bool paintSelectedTextOnly = (paintInfo.phase == PaintPhaseSelection);
     bool paintSelectedTextSeparately = false; // Whether or not we have to do multiple paints.  Only
                                               // necessary when a custom ::selection foreground color is applied.
-    Color selectionColor = i.p->pen().color();
+    Color selectionFillColor = textFillColor;
+    Color selectionStrokeColor = textStrokeColor;
+    float selectionStrokeWidth = textStrokeWidth;
     ShadowData* selectionTextShadow = 0;
     if (haveSelection) {
         // Check foreground color first.
         Color foreground = object()->selectionForegroundColor();
-        if (foreground.isValid() && foreground != selectionColor) {
+        if (foreground.isValid() && foreground != selectionFillColor) {
             if (!paintSelectedTextOnly)
                 paintSelectedTextSeparately = true;
-            selectionColor = foreground;
+            selectionFillColor = foreground;
         }
         RenderStyle* pseudoStyle = object()->getPseudoStyle(RenderStyle::SELECTION);
-        if (pseudoStyle && pseudoStyle->textShadow()) {
-            if (!paintSelectedTextOnly)
-                paintSelectedTextSeparately = true;
-            if (pseudoStyle->textShadow())
-                selectionTextShadow = pseudoStyle->textShadow();
+        if (pseudoStyle) {
+            if (pseudoStyle->textShadow()) {
+                if (!paintSelectedTextOnly)
+                    paintSelectedTextSeparately = true;
+                if (pseudoStyle->textShadow())
+                    selectionTextShadow = pseudoStyle->textShadow();
+            }
+            
+            float strokeWidth = pseudoStyle->textStrokeWidth();
+            if (strokeWidth != selectionStrokeWidth) {
+                if (!paintSelectedTextOnly)
+                    paintSelectedTextSeparately = true;
+                selectionStrokeWidth = strokeWidth;
+            }
+
+            Color stroke = pseudoStyle->textStrokeColor();
+            if (!stroke.isValid())
+                stroke = pseudoStyle->color();
+            if (stroke != selectionStrokeColor) {
+                if (!paintSelectedTextOnly)
+                    paintSelectedTextSeparately = true;
+                selectionStrokeColor = stroke;
+            }
         }
     }
 
@@ -350,48 +412,52 @@ void InlineTextBox::paint(RenderObject::PaintInfo& i, int tx, int ty)
         int endPoint = m_len;
         if (m_truncation != cNoTruncation)
             endPoint = m_truncation - m_start;
-        i.p->drawText(TextRun(textStr, m_start, endPoint), IntPoint(m_x + tx, m_y + ty + m_baseline), textStyle);
+        paintInfo.context->drawText(TextRun(textStr, m_start, endPoint), IntPoint(m_x + tx, m_y + ty + m_baseline), textStyle);
     } else {
         int sPos, ePos;
         selectionStartEnd(sPos, ePos);
         if (paintSelectedTextSeparately) {
             // paint only the text that is not selected
             if (sPos >= ePos)
-                i.p->drawText(TextRun(textStr, m_start, m_len), IntPoint(m_x + tx, m_y + ty + m_baseline), textStyle);
+                paintInfo.context->drawText(TextRun(textStr, m_start, m_len), IntPoint(m_x + tx, m_y + ty + m_baseline), textStyle);
             else {
                 if (sPos - 1 >= 0)
-                    i.p->drawText(TextRun(textStr, m_start, m_len, 0, sPos), IntPoint(m_x + tx, m_y + ty + m_baseline), textStyle);
+                    paintInfo.context->drawText(TextRun(textStr, m_start, m_len, 0, sPos), IntPoint(m_x + tx, m_y + ty + m_baseline), textStyle);
                 if (ePos < m_start + m_len)
-                    i.p->drawText(TextRun(textStr, m_start, m_len, ePos), IntPoint(m_x + tx, m_y + ty + m_baseline), textStyle);
+                    paintInfo.context->drawText(TextRun(textStr, m_start, m_len, ePos), IntPoint(m_x + tx, m_y + ty + m_baseline), textStyle);
             }
         }
-            
+
         if (sPos < ePos) {
             // paint only the text that is selected
-            if (selectionColor != i.p->pen().color())
-                i.p->setPen(selectionColor);
-            
+            if (selectionStrokeWidth > 0)
+                paintInfo.context->save();
+        
+            updateGraphicsContext(paintInfo.context, selectionFillColor, selectionStrokeColor, selectionStrokeWidth);
+
             if (selectionTextShadow)
-                i.p->setShadow(IntSize(selectionTextShadow->x, selectionTextShadow->y),
-                               selectionTextShadow->blur,
-                               selectionTextShadow->color);
-            i.p->drawText(TextRun(textStr, m_start, m_len, sPos, ePos), IntPoint(m_x + tx, m_y + ty + m_baseline), textStyle);
+                paintInfo.context->setShadow(IntSize(selectionTextShadow->x, selectionTextShadow->y),
+                                             selectionTextShadow->blur, selectionTextShadow->color);
+            paintInfo.context->drawText(TextRun(textStr, m_start, m_len, sPos, ePos), IntPoint(m_x + tx, m_y + ty + m_baseline), textStyle);
             if (selectionTextShadow)
-                i.p->clearShadow();
+                paintInfo.context->clearShadow();
+                
+            if (selectionStrokeWidth > 0)
+                paintInfo.context->restore();
         }
     }
 
     // Paint decorations
-    if (d != TDNONE && i.phase != PaintPhaseSelection && styleToUse->htmlHacks()) {
-        i.p->setPen(styleToUse->color());
-        paintDecoration(i.p, tx, ty, d);
+    if (d != TDNONE && paintInfo.phase != PaintPhaseSelection && styleToUse->htmlHacks()) {
+        paintInfo.context->setStrokeColor(styleToUse->color());
+        paintDecoration(paintInfo.context, tx, ty, d);
     }
 
-    if (i.phase != PaintPhaseSelection) {
-        paintAllMarkersOfType(i.p, tx, ty, DocumentMarker::Spelling, styleToUse, font);
+    if (paintInfo.phase != PaintPhaseSelection) {
+        paintDocumentMarkers(paintInfo.context, tx, ty, styleToUse, font, false);
 
-        for ( ; underlineIt != underlines.end(); underlineIt++) {
-            MarkedTextUnderline underline = *underlineIt;
+        for (size_t index = 0; index < numUnderlines; ++index) {
+            const MarkedTextUnderline& underline = (*underlines)[index];
 
             if (underline.endOffset <= start())
                 // underline is completely before this run.  This might be an underline that sits
@@ -401,7 +467,7 @@ void InlineTextBox::paint(RenderObject::PaintInfo& i, int tx, int ty)
             
             if (underline.startOffset <= end()) {
                 // underline intersects this run.  Paint it.
-                paintMarkedTextUnderline(i.p, tx, ty, underline);
+                paintMarkedTextUnderline(paintInfo.context, tx, ty, underline);
                 if (underline.endOffset > end() + 1)
                     // underline also runs into the next run. Bail now, no more marker advancement.
                     break;
@@ -412,7 +478,10 @@ void InlineTextBox::paint(RenderObject::PaintInfo& i, int tx, int ty)
     }
 
     if (setShadow)
-        i.p->clearShadow();
+        paintInfo.context->clearShadow();
+        
+    if (textStrokeWidth > 0)
+        paintInfo.context->restore();
 }
 
 void InlineTextBox::selectionStartEnd(int& sPos, int& ePos)
@@ -452,11 +521,11 @@ void InlineTextBox::paintSelection(GraphicsContext* p, int tx, int ty, RenderSty
         c = Color(0xff - c.red(), 0xff - c.green(), 0xff - c.blue());
 
     p->save();
-    p->setPen(c); // Don't draw text at all!
+    updateGraphicsContext(p, c, c, 0);  // Don't draw text at all!
     RootInlineBox* r = root();
     int y = r->selectionTop();
     int h = r->selectionHeight();
-    p->addClip(IntRect(m_x + tx, y + ty, m_width, h));
+    p->clip(IntRect(m_x + tx, y + ty, m_width, h));
     p->drawHighlightForText(TextRun(textObject()->string(), m_start, m_len, sPos, ePos), IntPoint(m_x + tx, y + ty), h, 
                             TextStyle(textObject()->tabWidth(), textPos(), m_toAdd, m_reversed, m_dirOverride || style->visuallyOrdered()), c);
     p->restore();
@@ -475,7 +544,7 @@ void InlineTextBox::paintMarkedTextBackground(GraphicsContext* p, int tx, int ty
 
     Color c = Color(225, 221, 85);
     
-    p->setPen(c); // Don't draw text at all!
+    updateGraphicsContext(p, c, c, 0); // Don't draw text at all!
 
     RootInlineBox* r = root();
     int y = r->selectionTop();
@@ -497,7 +566,7 @@ void InlineTextBox::paintCustomHighlight(int tx, int ty, const AtomicString& typ
 }
 #endif
 
-void InlineTextBox::paintDecoration(GraphicsContext *pt, int _tx, int _ty, int deco)
+void InlineTextBox::paintDecoration(GraphicsContext* context, int _tx, int _ty, int deco)
 {
     _tx += m_x;
     _ty += m_y;
@@ -514,21 +583,22 @@ void InlineTextBox::paintDecoration(GraphicsContext *pt, int _tx, int _ty, int d
     
     // Use a special function for underlines to get the positioning exactly right.
     bool isPrinting = textObject()->document()->printing();
+    context->setStrokeThickness(1.0f); // FIXME: We should improve this rule and not always just assume 1.
     if (deco & UNDERLINE) {
-        pt->setPen(underline);
-        pt->drawLineForText(IntPoint(_tx, _ty), m_baseline, width, isPrinting);
+        context->setStrokeColor(underline);
+        context->drawLineForText(IntPoint(_tx, _ty), m_baseline, width, isPrinting);
     }
     if (deco & OVERLINE) {
-        pt->setPen(overline);
-        pt->drawLineForText(IntPoint(_tx, _ty), 0, width, isPrinting);
+        context->setStrokeColor(overline);
+        context->drawLineForText(IntPoint(_tx, _ty), 0, width, isPrinting);
     }
     if (deco & LINE_THROUGH) {
-        pt->setPen(linethrough);
-        pt->drawLineForText(IntPoint(_tx, _ty), 2*m_baseline/3, width, isPrinting);
+        context->setStrokeColor(linethrough);
+        context->drawLineForText(IntPoint(_tx, _ty), 2*m_baseline/3, width, isPrinting);
     }
 }
 
-void InlineTextBox::paintSpellingMarker(GraphicsContext* pt, int _tx, int _ty, DocumentMarker marker)
+void InlineTextBox::paintSpellingOrGrammarMarker(GraphicsContext* pt, int _tx, int _ty, DocumentMarker marker, RenderStyle* style, const Font* f, bool grammar)
 {
     _tx += m_x;
     _ty += m_y;
@@ -558,6 +628,19 @@ void InlineTextBox::paintSpellingMarker(GraphicsContext* pt, int _tx, int _ty, D
         width = static_cast<RenderText*>(m_object)->width(paintStart, paintEnd - paintStart, textPos() + start, m_firstLine);
     }
     
+    // Store rendered rects for bad grammar markers, so we can hit-test against it elsewhere in order to
+    // display a toolTip. We don't do this for misspelling markers.
+    if (grammar) {
+        int y = root()->selectionTop();
+        IntPoint startPoint = IntPoint(m_x + _tx, y + _ty);
+        TextStyle textStyle = TextStyle(textObject()->tabWidth(), textPos(), m_toAdd, m_reversed, m_dirOverride || style->visuallyOrdered());
+        int startPosition = max(marker.startOffset - m_start, (unsigned)0);
+        int endPosition = min(marker.endOffset - m_start, (unsigned)m_len);    
+        TextRun run = TextRun(textObject()->string(), m_start, m_len, startPosition, endPosition);
+        IntRect markerRect = enclosingIntRect(f->selectionRectForText(run, textStyle, startPoint, root()->selectionHeight()));
+        object()->document()->setRenderedRectForMarker(object()->node(), marker, markerRect);
+    }
+    
     // IMPORTANT: The misspelling underline is not considered when calculating the text bounds, so we have to
     // make sure to fit within those bounds.  This means the top pixel(s) of the underline will overlap the
     // bottom pixel(s) of the glyphs in smaller font sizes.  The alternatives are to increase the line spacing (bad!!)
@@ -574,7 +657,7 @@ void InlineTextBox::paintSpellingMarker(GraphicsContext* pt, int _tx, int _ty, D
         // in larger fonts, tho, place the underline up near the baseline to prevent big gap
         underlineOffset = m_baseline + 2;
     }
-    pt->drawLineForMisspelling(IntPoint(_tx + start, _ty + underlineOffset), width);
+    pt->drawLineForMisspellingOrBadGrammar(IntPoint(_tx + start, _ty + underlineOffset), width, grammar);
 }
 
 void InlineTextBox::paintTextMatchMarker(GraphicsContext* pt, int _tx, int _ty, DocumentMarker marker, RenderStyle* style, const Font* f)
@@ -599,14 +682,14 @@ void InlineTextBox::paintTextMatchMarker(GraphicsContext* pt, int _tx, int _ty, 
     if (object()->document()->frame()->markedTextMatchesAreHighlighted()) {
         Color yellow = Color(255, 255, 0);
         pt->save();
-        pt->setPen(yellow); // Don't draw text at all!
-        pt->addClip(IntRect(_tx + m_x, _ty + y, m_width, h));
+        updateGraphicsContext(pt, yellow, yellow, 0);  // Don't draw text at all!
+        pt->clip(IntRect(_tx + m_x, _ty + y, m_width, h));
         pt->drawHighlightForText(run, startPoint, h, renderStyle, yellow);
         pt->restore();
     }
 }
 
-void InlineTextBox::paintAllMarkersOfType(GraphicsContext* pt, int _tx, int _ty, DocumentMarker::MarkerType markerType, RenderStyle* style, const Font* f)
+void InlineTextBox::paintDocumentMarkers(GraphicsContext* pt, int _tx, int _ty, RenderStyle* style, const Font* f, bool background)
 {
     Vector<DocumentMarker> markers = object()->document()->markersForNode(object()->node());
     Vector<DocumentMarker>::iterator markerIt = markers.begin();
@@ -616,9 +699,23 @@ void InlineTextBox::paintAllMarkersOfType(GraphicsContext* pt, int _tx, int _ty,
     for ( ; markerIt != markers.end(); markerIt++) {
         DocumentMarker marker = *markerIt;
         
-        if (marker.type != markerType)
-            continue;
-        
+        // Paint either the background markers or the foreground markers, but not both
+        switch (marker.type) {
+            case DocumentMarker::Grammar:
+            case DocumentMarker::Spelling:
+                if (background)
+                    continue;
+                break;
+                
+            case DocumentMarker::TextMatch:
+                if (!background)
+                    continue;
+                break;
+            
+            default:
+                ASSERT_NOT_REACHED();
+        }
+
         if (marker.endOffset <= start())
             // marker is completely before this run.  This might be a marker that sits before the
             // first run we draw, or markers that were within runs we skipped due to truncation.
@@ -629,15 +726,18 @@ void InlineTextBox::paintAllMarkersOfType(GraphicsContext* pt, int _tx, int _ty,
             break;
         
         // marker intersects this run.  Paint it.
-        switch (markerType) {
+        switch (marker.type) {
             case DocumentMarker::Spelling:
-                paintSpellingMarker(pt, _tx, _ty, marker);
+                paintSpellingOrGrammarMarker(pt, _tx, _ty, marker, style, f, false);
+                break;
+            case DocumentMarker::Grammar:
+                paintSpellingOrGrammarMarker(pt, _tx, _ty, marker, style, f, true);
                 break;
             case DocumentMarker::TextMatch:
                 paintTextMatchMarker(pt, _tx, _ty, marker, style, f);
                 break;
             default:
-                assert(false);
+                ASSERT_NOT_REACHED();
         }
 
         if (marker.endOffset > end() + 1)
@@ -647,7 +747,7 @@ void InlineTextBox::paintAllMarkersOfType(GraphicsContext* pt, int _tx, int _ty,
 }
 
 
-void InlineTextBox::paintMarkedTextUnderline(GraphicsContext* pt, int _tx, int _ty, MarkedTextUnderline& underline)
+void InlineTextBox::paintMarkedTextUnderline(GraphicsContext* pt, int _tx, int _ty, const MarkedTextUnderline& underline)
 {
     _tx += m_x;
     _ty += m_y;
@@ -677,8 +777,12 @@ void InlineTextBox::paintMarkedTextUnderline(GraphicsContext* pt, int _tx, int _
         width = static_cast<RenderText*>(m_object)->width(paintStart, paintEnd - paintStart, textPos() + start, m_firstLine);
     }
 
-    int underlineOffset = m_height - 3;
-    pt->setPen(Pen(underline.color, underline.thick ? 2 : 0));
+    int lineThickness = 0;
+    if (underline.thick)
+        lineThickness = ((m_height - m_baseline) > 2) ? 2 : 1;
+    int underlineOffset = m_height - lineThickness;
+    pt->setStrokeColor(underline.color);
+    pt->setStrokeThickness(lineThickness);
     pt->drawLineForText(IntPoint(_tx + start, _ty), underlineOffset, width, textObject()->document()->printing());
 }
 
@@ -759,4 +863,4 @@ bool InlineTextBox::containsCaretOffset(int offset) const
     return true;
 }
 
-}
+} // namespace WebCore

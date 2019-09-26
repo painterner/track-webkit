@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -24,20 +24,18 @@
 #define KSVG_SVGClipPathElementImpl_H
 #ifdef SVG_SUPPORT
 
-#include "SVGTests.h"
+#include "SVGResourceClipper.h"
+#include "SVGExternalResourcesRequired.h"
 #include "SVGLangSpace.h"
 #include "SVGStyledTransformableElement.h"
-#include "SVGExternalResourcesRequired.h"
-
-#include "KCanvasResources.h"
+#include "SVGTests.h"
 
 namespace WebCore
 {
-    class SVGAnimatedEnumeration;
     class SVGClipPathElement : public SVGStyledTransformableElement,
-                                   public SVGTests,
-                                   public SVGLangSpace,
-                                   public SVGExternalResourcesRequired
+                               public SVGTests,
+                               public SVGLangSpace,
+                               public SVGExternalResourcesRequired
     {
     public:
         SVGClipPathElement(const QualifiedName&, Document*);
@@ -45,16 +43,20 @@ namespace WebCore
         
         virtual bool isValid() const { return SVGTests::isValid(); }
 
-        virtual KCanvasClipper *canvasResource();
+        virtual SVGResource* canvasResource();
 
         // 'SVGClipPathElement' functions
-        SVGAnimatedEnumeration *clipPathUnits() const;
+        virtual void parseMappedAttribute(MappedAttribute*);
 
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedEnumeration> m_clipPathUnits;
-        KCanvasClipper *m_clipper;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired)
+
+        ANIMATED_PROPERTY_DECLARATIONS(SVGClipPathElement, int, int, ClipPathUnits, clipPathUnits)
+
+        RefPtr<SVGResourceClipper> m_clipper;
     };
 
 } // namespace WebCore

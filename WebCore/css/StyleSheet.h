@@ -34,10 +34,9 @@ class MediaList;
 
 class StyleSheet : public StyleList {
 public:
-    StyleSheet(Node* ownerNode, String href = String());
-    StyleSheet(StyleSheet* parentSheet, String href = String());
-    StyleSheet(StyleBase* owner, String href = String());
-    StyleSheet(CachedCSSStyleSheet*, String href = String());
+    StyleSheet(Node* ownerNode, const String& href = String());
+    StyleSheet(StyleSheet* parentSheet, const String& href = String());
+    StyleSheet(StyleBase* owner, const String& href = String());
     virtual ~StyleSheet();
 
     virtual bool isStyleSheet() const { return true; }
@@ -51,6 +50,7 @@ public:
     StyleSheet *parentStyleSheet() const;
     String href() const { return m_strHref; }
     String title() const { return m_strTitle; }
+    void setTitle(const String& s) { m_strTitle = s; }
     MediaList* media() const { return m_media.get(); }
     void setMedia(MediaList*);
 

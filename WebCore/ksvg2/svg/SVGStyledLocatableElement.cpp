@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,19 +21,21 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
+
 #include "SVGStyledLocatableElement.h"
 
+#include "RenderPath.h"
 #include "SVGElement.h"
-#include "SVGMatrix.h"
-#include "SVGRect.h"
+#include "AffineTransform.h"
 #include "SVGSVGElement.h"
-#include <kcanvas/RenderPath.h>
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGStyledLocatableElement::SVGStyledLocatableElement(const QualifiedName& tagName, Document *doc)
-: SVGStyledElement(tagName, doc), SVGLocatable()
+SVGStyledLocatableElement::SVGStyledLocatableElement(const QualifiedName& tagName, Document* doc)
+    : SVGLocatable()
+    , SVGStyledElement(tagName, doc)
 {
 }
 
@@ -41,12 +43,12 @@ SVGStyledLocatableElement::~SVGStyledLocatableElement()
 {
 }
 
-SVGElement *SVGStyledLocatableElement::nearestViewportElement() const
+SVGElement* SVGStyledLocatableElement::nearestViewportElement() const
 {
     return SVGLocatable::nearestViewportElement(this);
 }
 
-SVGElement *SVGStyledLocatableElement::farthestViewportElement() const
+SVGElement* SVGStyledLocatableElement::farthestViewportElement() const
 {
     return SVGLocatable::farthestViewportElement(this);
 }
@@ -56,20 +58,16 @@ FloatRect SVGStyledLocatableElement::getBBox() const
     return SVGLocatable::getBBox(this);
 }
 
-SVGMatrix *SVGStyledLocatableElement::getCTM() const
+AffineTransform SVGStyledLocatableElement::getCTM() const
 {
     return SVGLocatable::getCTM(this);
 }
 
-SVGMatrix *SVGStyledLocatableElement::getScreenCTM() const
+AffineTransform SVGStyledLocatableElement::getScreenCTM() const
 {
     return SVGLocatable::getScreenCTM(this);
 }
 
-SVGMatrix *SVGStyledLocatableElement::getTransformToElement(SVGElement *) const
-{
-    // TODO!
-    return 0;
 }
 
 // vim:ts=4:noet

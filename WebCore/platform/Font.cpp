@@ -25,23 +25,26 @@
 
 #include "config.h"
 #include "Font.h"
-#include "FontData.h"
 
+#include "FloatRect.h"
 #include "FontFallbackList.h"
-#include "GraphicsContext.h"
-#include "Settings.h"
-
+#include "IntPoint.h"
 #include "GlyphBuffer.h"
-
-#include <unicode/umachine.h>
-#include <unicode/unorm.h>
-
+#include "TextStyle.h"
+#include <wtf/unicode/Unicode.h>
 #include <wtf/MathExtras.h>
+
+#if USE(ICU_UNICODE)
+#include <unicode/unorm.h>
+#endif
+
+using namespace WTF;
+using namespace Unicode;
 
 namespace WebCore {
 
 // According to http://www.unicode.org/Public/UNIDATA/UCD.html#Canonical_Combining_Class_Values
-#define HIRAGANA_KATAKANA_VOICING_MARKS 8
+const uint8_t hiraganaKatakanaVoicingMarksCombiningClass = 8;
 
 const uint8_t Font::gRoundingHackCharacterTable[256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 1 /*\t*/, 1 /*\n*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -53,6 +56,8 @@ const uint8_t Font::gRoundingHackCharacterTable[256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
+
+Font::CodePath Font::codePath = Auto;
 
 struct WidthIterator {
     WidthIterator(const Font* font, const TextRun& run, const TextStyle& style, const FontData* substituteFontData = 0);
@@ -81,8 +86,14 @@ private:
 };
 
 WidthIterator::WidthIterator(const Font* font, const TextRun& run, const TextStyle& style, const FontData* substituteFontData)
-:m_font(font), m_run(run), m_end(style.rtl() ? run.length() : run.to()), m_style(style), m_substituteFontData(substituteFontData),
- m_currentCharacter(run.from()), m_runWidthSoFar(0), m_finalRoundingWidth(0)
+    : m_font(font)
+    , m_run(run)
+    , m_end(style.rtl() ? run.length() : run.to())
+    , m_style(style)
+    , m_substituteFontData(substituteFontData)
+    , m_currentCharacter(run.from())
+    , m_runWidthSoFar(0)
+    , m_finalRoundingWidth(0)
 {
     // If the padding is non-zero, count the number of spaces in the run
     // and divide that by the padding for per space addition.
@@ -166,11 +177,11 @@ void WidthIterator::advance(int offset, GlyphBuffer* glyphBuffer)
 
         if (needCharTransform) {
             if (rtl)
-                c = u_charMirror(c);
+                c = mirroredChar(c);
 
             // If small-caps, convert lowercase to upper.
-            if (m_font->isSmallCaps() && !u_isUUppercase(c)) {
-                UChar32 upperC = u_toupper(c);
+            if (m_font->isSmallCaps() && !Unicode::isUpper(c)) {
+                UChar32 upperC = Unicode::toUpper(c);
                 if (upperC != c) {
                     c = upperC;
                     fontData = fontData->smallCapsFontData(m_font->fontDescription());
@@ -292,14 +303,21 @@ bool WidthIterator::advanceOneCharacter(float& width, GlyphBuffer* glyphBuffer)
 UChar32 WidthIterator::normalizeVoicingMarks(int currentCharacter)
 {
     if (currentCharacter + 1 < m_end) {
-        if (u_getCombiningClass(m_run[currentCharacter + 1]) == HIRAGANA_KATAKANA_VOICING_MARKS) {
+        if (combiningClass(m_run[currentCharacter + 1]) == hiraganaKatakanaVoicingMarksCombiningClass) {
+#if USE(ICU_UNICODE)
             // Normalize into composed form using 3.2 rules.
             UChar normalizedCharacters[2] = { 0, 0 };
-            UErrorCode uStatus = (UErrorCode)0;  
+            UErrorCode uStatus = U_ZERO_ERROR;  
             int32_t resultLength = unorm_normalize(m_run.data(currentCharacter), 2,
                 UNORM_NFC, UNORM_UNICODE_3_2, &normalizedCharacters[0], 2, &uStatus);
             if (resultLength == 1 && uStatus == 0)
                 return normalizedCharacters[0];
+#elif USE(QT4_UNICODE)
+            QString tmp(reinterpret_cast<const QChar*>(m_run.data(currentCharacter)), 2);
+            QString res = tmp.normalized(QString::NormalizationForm_C, QChar::Unicode_3_2);
+            if (res.length() == 1)
+                return res.at(0).unicode();
+#endif
         }
     }
     return 0;
@@ -370,6 +388,11 @@ void Font::update() const
     m_fontList->invalidate();
 }
 
+int Font::width(const TextRun& run) const
+{
+    return width(run, TextStyle());
+}
+
 int Font::width(const TextRun& run, const TextStyle& style) const
 {
     return lroundf(floatWidth(run, style));
@@ -401,17 +424,21 @@ bool Font::isFixedPitch() const
     return m_fontList->isFixedPitch(this);
 }
 
-// FIXME: These methods will eventually be cross-platform, but to keep Windows compiling we'll make this Apple-only for now.
-bool Font::gAlwaysUseComplexPath = false;
-void Font::setAlwaysUseComplexPath(bool alwaysUse)
+void Font::setCodePath(CodePath p)
 {
-    gAlwaysUseComplexPath = alwaysUse;
+    codePath = p;
 }
 
 bool Font::canUseGlyphCache(const TextRun& run) const
 {
-    if (gAlwaysUseComplexPath)
-        return false;
+    switch (codePath) {
+        case Auto:
+            break;
+        case Simple:
+            return true;
+        case Complex:
+            return false;
+    }
     
     // Start from 0 since drawing and highlighting also measure the characters before run->from
     for (int i = 0; i < run.to(); i++) {

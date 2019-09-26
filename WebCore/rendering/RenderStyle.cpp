@@ -1,8 +1,6 @@
 /*
- * This file is part of the DOM implementation for KDE.
- *
  * Copyright (C) 1999 Antti Koivisto (koivisto@kde.org)
- * Copyright (C) 2004, 2005 Apple Computer, Inc.
+ * Copyright (C) 2004, 2005, 2006, 2007 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -58,7 +56,7 @@ StyleBoxData::StyleBoxData()
     max_width = max_height = RenderStyle::initialMaxSize();
 }
 
-StyleBoxData::StyleBoxData(const StyleBoxData& o )
+StyleBoxData::StyleBoxData(const StyleBoxData& o)
     : Shared<StyleBoxData>()
     , width(o.width)
     , height(o.height)
@@ -85,13 +83,12 @@ bool StyleBoxData::operator==(const StyleBoxData& o) const
            boxSizing == o.boxSizing;
 }
 
-
 StyleVisualData::StyleVisualData()
     : hasClip(false)
     , textDecoration(RenderStyle::initialTextDecoration())
     , colspan(1)
-    , counter_increment(0)
-    , counter_reset(0)
+    , counterIncrement(0)
+    , counterReset(0)
 {
 }
 
@@ -105,8 +102,8 @@ StyleVisualData::StyleVisualData(const StyleVisualData& o)
     , hasClip(o.hasClip)
     , textDecoration(o.textDecoration)
     , colspan(o.colspan)
-    , counter_increment(o.counter_increment)
-    , counter_reset(o.counter_reset)
+    , counterIncrement(o.counterIncrement)
+    , counterReset(o.counterReset)
 {
 }
 
@@ -390,48 +387,93 @@ bool StyleFlexibleBoxData::operator==(const StyleFlexibleBoxData& o) const
            pack == o.pack && orient == o.orient && lines == o.lines;
 }
 
-StyleCSS3NonInheritedData::StyleCSS3NonInheritedData()
+StyleMultiColData::StyleMultiColData()
+    : m_width(0)
+    , m_count(RenderStyle::initialColumnCount())
+    , m_gap(0)
+    , m_autoWidth(true)
+    , m_autoCount(true)
+    , m_normalGap(true)
+    , m_breakBefore(RenderStyle::initialPageBreak())
+    , m_breakAfter(RenderStyle::initialPageBreak())
+    , m_breakInside(RenderStyle::initialPageBreak())
+{}
+
+StyleMultiColData::StyleMultiColData(const StyleMultiColData& o)
+    : Shared<StyleMultiColData>()
+    , m_width(o.m_width)
+    , m_count(o.m_count)
+    , m_gap(o.m_gap)
+    , m_rule(o.m_rule)
+    , m_autoWidth(o.m_autoWidth)
+    , m_autoCount(o.m_autoCount)
+    , m_normalGap(o.m_normalGap)
+    , m_breakBefore(o.m_breakBefore)
+    , m_breakAfter(o.m_breakAfter)
+    , m_breakInside(o.m_breakInside)
+{}
+
+bool StyleMultiColData::operator==(const StyleMultiColData& o) const
+{
+    return m_width == o.m_width && m_count == o.m_count && m_gap == o.m_gap &&
+           m_rule == o.m_rule && m_breakBefore == o.m_breakBefore && 
+           m_autoWidth == o.m_autoWidth && m_autoCount == o.m_autoCount && m_normalGap == o.m_normalGap &&
+           m_breakAfter == o.m_breakAfter && m_breakInside == o.m_breakInside;
+}
+
+StyleRareNonInheritedData::StyleRareNonInheritedData()
     : lineClamp(RenderStyle::initialLineClamp())
     , opacity(RenderStyle::initialOpacity())
+    , m_content(0)
+    , m_counterDirectives(0)
     , userDrag(RenderStyle::initialUserDrag())
     , userSelect(RenderStyle::initialUserSelect())
     , textOverflow(RenderStyle::initialTextOverflow())
     , marginTopCollapse(MCOLLAPSE)
     , marginBottomCollapse(MCOLLAPSE)
+    , matchNearestMailBlockquoteColor(RenderStyle::initialMatchNearestMailBlockquoteColor())
     , m_appearance(RenderStyle::initialAppearance())
-#ifndef KHTML_NO_XBL
+    , m_boxShadow(0)
+#ifdef XBL_SUPPORT
     , bindingURI(0)
 #endif
 {
 }
 
-StyleCSS3NonInheritedData::StyleCSS3NonInheritedData(const StyleCSS3NonInheritedData& o)
-    : Shared<StyleCSS3NonInheritedData>()
+StyleRareNonInheritedData::StyleRareNonInheritedData(const StyleRareNonInheritedData& o)
+    : Shared<StyleRareNonInheritedData>()
     , lineClamp(o.lineClamp)
     , opacity(o.opacity)
     , flexibleBox(o.flexibleBox)
     , marquee(o.marquee)
+    , m_multiCol(o.m_multiCol)
+    , m_content(0)
+    , m_counterDirectives(0)
     , userDrag(o.userDrag)
     , userSelect(o.userSelect)
     , textOverflow(o.textOverflow)
     , marginTopCollapse(o.marginTopCollapse)
     , marginBottomCollapse(o.marginBottomCollapse)
+    , matchNearestMailBlockquoteColor(o.matchNearestMailBlockquoteColor)
     , m_appearance(o.m_appearance)
-#ifndef KHTML_NO_XBL
+    , m_boxShadow(o.m_boxShadow ? new ShadowData(*o.m_boxShadow) : 0)
+#ifdef XBL_SUPPORT
     , bindingURI(o.bindingURI ? o.bindingURI->copy() : 0)
 #endif
 {
 }
 
-StyleCSS3NonInheritedData::~StyleCSS3NonInheritedData()
+StyleRareNonInheritedData::~StyleRareNonInheritedData()
 {
-#ifndef KHTML_NO_XBL
+    delete m_content;
+    delete m_counterDirectives;
+#ifdef XBL_SUPPORT
     delete bindingURI;
 #endif
 }
 
-#ifndef KHTML_NO_XBL
-bool StyleCSS3NonInheritedData::bindingsEquivalent(const StyleCSS3NonInheritedData& o) const
+#ifdef XBL_SUPPORT
+bool StyleRareNonInheritedData::bindingsEquivalent(const StyleRareNonInheritedData& o) const
 {
     if (this == &o) return true;
     if (!bindingURI && o.bindingURI || bindingURI && !o.bindingURI)
@@ -442,21 +484,43 @@ bool StyleCSS3NonInheritedData::bindingsEquivalent(const StyleCSS3NonInheritedDa
 }
 #endif
 
-bool StyleCSS3NonInheritedData::operator==(const StyleCSS3NonInheritedData& o) const
+bool StyleRareNonInheritedData::operator==(const StyleRareNonInheritedData& o) const
 {
-    return opacity == o.opacity && flexibleBox == o.flexibleBox && marquee == o.marquee &&
-           userDrag == o.userDrag && userSelect == o.userSelect && textOverflow == o.textOverflow &&
-           marginTopCollapse == o.marginTopCollapse && marginBottomCollapse == o.marginBottomCollapse &&
-           m_appearance == o.m_appearance
-#ifndef KHTML_NO_XBL
-           && bindingsEquivalent(o)
+    return lineClamp == o.lineClamp
+        && m_dashboardRegions == o.m_dashboardRegions
+        && opacity == o.opacity
+        && flexibleBox == o.flexibleBox
+        && marquee == o.marquee
+        && m_multiCol == o.m_multiCol
+        && m_content == o.m_content
+        && m_counterDirectives == o.m_counterDirectives
+        && userDrag == o.userDrag
+        && userSelect == o.userSelect
+        && textOverflow == o.textOverflow
+        && marginTopCollapse == o.marginTopCollapse
+        && marginBottomCollapse == o.marginBottomCollapse
+        && matchNearestMailBlockquoteColor == o.matchNearestMailBlockquoteColor
+        && m_appearance == o.m_appearance
+        && shadowDataEquivalent(o)
+#ifdef XBL_SUPPORT
+        && bindingsEquivalent(o)
 #endif
-           && lineClamp == o.lineClamp && m_dashboardRegions == o.m_dashboardRegions
-    ;
+        ;
 }
 
-StyleCSS3InheritedData::StyleCSS3InheritedData()
-    : textShadow(0)
+bool StyleRareNonInheritedData::shadowDataEquivalent(const StyleRareNonInheritedData& o) const
+{
+    if (!m_boxShadow && o.m_boxShadow || m_boxShadow && !o.m_boxShadow)
+        return false;
+    if (m_boxShadow && o.m_boxShadow && (*m_boxShadow != *o.m_boxShadow))
+        return false;
+    return true;
+}
+
+StyleRareInheritedData::StyleRareInheritedData()
+    : textStrokeWidth(RenderStyle::initialTextStrokeWidth())
+    , textShadow(0)
+    , textSecurity(RenderStyle::initialTextSecurity())
     , userModify(READ_ONLY)
     , wordWrap(WBNORMAL)
     , nbspMode(NBNORMAL)
@@ -464,13 +528,16 @@ StyleCSS3InheritedData::StyleCSS3InheritedData()
     , textSizeAdjust(RenderStyle::initialTextSizeAdjust())
     , resize(RenderStyle::initialResize())
 {
-
 }
 
-StyleCSS3InheritedData::StyleCSS3InheritedData(const StyleCSS3InheritedData& o)
-    : Shared<StyleCSS3InheritedData>()
+StyleRareInheritedData::StyleRareInheritedData(const StyleRareInheritedData& o)
+    : Shared<StyleRareInheritedData>()
+    , textStrokeColor(o.textStrokeColor)
+    , textStrokeWidth(o.textStrokeWidth)
+    , textFillColor(o.textFillColor)
     , textShadow(o.textShadow ? new ShadowData(*o.textShadow) : 0)
     , highlight(o.highlight)
+    , textSecurity(o.textSecurity)
     , userModify(o.userModify)
     , wordWrap(o.wordWrap)
     , nbspMode(o.nbspMode)
@@ -480,23 +547,27 @@ StyleCSS3InheritedData::StyleCSS3InheritedData(const StyleCSS3InheritedData& o)
 {
 }
 
-StyleCSS3InheritedData::~StyleCSS3InheritedData()
+StyleRareInheritedData::~StyleRareInheritedData()
 {
     delete textShadow;
 }
 
-bool StyleCSS3InheritedData::operator==(const StyleCSS3InheritedData& o) const
+bool StyleRareInheritedData::operator==(const StyleRareInheritedData& o) const
 {
-    return userModify == o.userModify
+    return textStrokeColor == o.textStrokeColor
+        && textStrokeWidth == o.textStrokeWidth
+        && textFillColor == o.textFillColor
         && shadowDataEquivalent(o)
         && highlight == o.highlight
+        && textSecurity == o.textSecurity
+        && userModify == o.userModify
         && wordWrap == o.wordWrap
         && nbspMode == o.nbspMode
         && khtmlLineBreak == o.khtmlLineBreak
         && textSizeAdjust == o.textSizeAdjust;
 }
 
-bool StyleCSS3InheritedData::shadowDataEquivalent(const StyleCSS3InheritedData& o) const
+bool StyleRareInheritedData::shadowDataEquivalent(const StyleRareInheritedData& o) const
 {
     if (!textShadow && o.textShadow || textShadow && !o.textShadow)
         return false;
@@ -508,7 +579,7 @@ bool StyleCSS3InheritedData::shadowDataEquivalent(const StyleCSS3InheritedData& 
 StyleInheritedData::StyleInheritedData()
     : indent(RenderStyle::initialTextIndent()), line_height(RenderStyle::initialLineHeight()), 
       style_image(RenderStyle::initialListStyleImage()),
-      cursor_image(0), color(RenderStyle::initialColor()), 
+      color(RenderStyle::initialColor()), 
       horizontal_border_spacing(RenderStyle::initialHorizontalBorderSpacing()), 
       vertical_border_spacing(RenderStyle::initialVerticalBorderSpacing()),
       widows(RenderStyle::initialWidows()), orphans(RenderStyle::initialOrphans()),
@@ -520,11 +591,11 @@ StyleInheritedData::~StyleInheritedData()
 {
 }
 
-StyleInheritedData::StyleInheritedData(const StyleInheritedData& o )
+StyleInheritedData::StyleInheritedData(const StyleInheritedData& o)
     : Shared<StyleInheritedData>(),
       indent( o.indent ), line_height( o.line_height ), style_image( o.style_image ),
-      cursor_image( o.cursor_image ), font( o.font ),
-      color( o.color ),
+      cursorData(o.cursorData),
+      font( o.font ), color( o.color ),
       horizontal_border_spacing( o.horizontal_border_spacing ),
       vertical_border_spacing( o.vertical_border_spacing ),
       widows(o.widows), orphans(o.orphans), page_break_inside(o.page_break_inside)
@@ -537,7 +608,7 @@ bool StyleInheritedData::operator==(const StyleInheritedData& o) const
         indent == o.indent &&
         line_height == o.line_height &&
         style_image == o.style_image &&
-        cursor_image == o.cursor_image &&
+        cursorData  == o.cursorData &&
         font == o.font &&
         color == o.color &&
         horizontal_border_spacing == o.horizontal_border_spacing &&
@@ -545,6 +616,13 @@ bool StyleInheritedData::operator==(const StyleInheritedData& o) const
         widows == o.widows &&
         orphans == o.orphans &&
         page_break_inside == o.page_break_inside;
+}
+
+static inline bool operator!=(const CounterContent& a, const CounterContent& b)
+{
+    return a.identifier() != b.identifier()
+        || a.listStyle() != b.listStyle()
+        || a.separator() != b.separator();
 }
 
 // ----------------------------------------------------------
@@ -574,8 +652,6 @@ void RenderStyle::arenaDelete(RenderArena *arena)
         prev->pseudoStyle = 0;
         prev->deref(arena);
     }
-    delete content;
-    
     delete this;
     
     // Recover the size left there for us by operator delete and free the memory.
@@ -594,11 +670,10 @@ RenderStyle::RenderStyle()
     , visual(defaultStyle->visual)
     , background(defaultStyle->background)
     , surround(defaultStyle->surround)
-    , css3NonInheritedData(defaultStyle->css3NonInheritedData)
-    , css3InheritedData(defaultStyle->css3InheritedData)
+    , rareNonInheritedData(defaultStyle->rareNonInheritedData)
+    , rareInheritedData(defaultStyle->rareInheritedData)
     , inherited(defaultStyle->inherited)
     , pseudoStyle(0)
-    , content(0)
     , m_pseudoState(PseudoUnknown)
     , m_affectedByAttributeSelectors(false)
     , m_unique(false)
@@ -612,7 +687,6 @@ RenderStyle::RenderStyle()
 
 RenderStyle::RenderStyle(bool)
     : pseudoStyle(0)
-    , content(0)
     , m_pseudoState(PseudoUnknown)
     , m_affectedByAttributeSelectors(false)
     , m_unique(false)
@@ -624,10 +698,11 @@ RenderStyle::RenderStyle(bool)
     visual.init();
     background.init();
     surround.init();
-    css3NonInheritedData.init();
-    css3NonInheritedData.access()->flexibleBox.init();
-    css3NonInheritedData.access()->marquee.init();
-    css3InheritedData.init();
+    rareNonInheritedData.init();
+    rareNonInheritedData.access()->flexibleBox.init();
+    rareNonInheritedData.access()->marquee.init();
+    rareNonInheritedData.access()->m_multiCol.init();
+    rareInheritedData.init();
     inherited.init();
     
 #ifdef SVG_SUPPORT
@@ -639,14 +714,13 @@ RenderStyle::RenderStyle(const RenderStyle& o)
     : inherited_flags(o.inherited_flags)
     , noninherited_flags(o.noninherited_flags)
     , box(o.box)
-    , visual(o.visual )
+    , visual(o.visual)
     , background(o.background)
     , surround(o.surround)
-    , css3NonInheritedData(o.css3NonInheritedData)
-    , css3InheritedData(o.css3InheritedData)
+    , rareNonInheritedData(o.rareNonInheritedData)
+    , rareInheritedData(o.rareInheritedData)
     , inherited(o.inherited)
     , pseudoStyle(0)
-    , content(o.content)
     , m_pseudoState(o.m_pseudoState)
     , m_affectedByAttributeSelectors(false)
     , m_unique(false)
@@ -659,7 +733,7 @@ RenderStyle::RenderStyle(const RenderStyle& o)
 
 void RenderStyle::inheritFrom(const RenderStyle* inheritParent)
 {
-    css3InheritedData = inheritParent->css3InheritedData;
+    rareInheritedData = inheritParent->rareInheritedData;
     inherited = inheritParent->inherited;
     inherited_flags = inheritParent->inherited_flags;
 #ifdef SVG_SUPPORT
@@ -681,8 +755,8 @@ bool RenderStyle::operator==(const RenderStyle& o) const
             visual == o.visual &&
             background == o.background &&
             surround == o.surround &&
-            css3NonInheritedData == o.css3NonInheritedData &&
-            css3InheritedData == o.css3InheritedData &&
+            rareNonInheritedData == o.rareNonInheritedData &&
+            rareInheritedData == o.rareInheritedData &&
             inherited == o.inherited
 #ifdef SVG_SUPPORT
             && m_svgStyle == o.m_svgStyle
@@ -696,7 +770,9 @@ bool RenderStyle::isStyleAvailable() const
 }
 
 enum EPseudoBit { NO_BIT = 0x0, BEFORE_BIT = 0x1, AFTER_BIT = 0x2, FIRST_LINE_BIT = 0x4,
-                  FIRST_LETTER_BIT = 0x8, SELECTION_BIT = 0x10, FIRST_LINE_INHERITED_BIT = 0x20 };
+                  FIRST_LETTER_BIT = 0x8, SELECTION_BIT = 0x10, FIRST_LINE_INHERITED_BIT = 0x20,
+                  FILE_UPLOAD_BUTTON_BIT = 0x40, SLIDER_THUMB_BIT = 0x80, SEARCH_CANCEL_BUTTON_BIT = 0x100, SEARCH_DECORATION_BIT = 0x200, 
+                  SEARCH_RESULTS_DECORATION_BIT = 0x400, SEARCH_RESULTS_BUTTON_BIT = 0x800 };
 
 static inline int pseudoBit(RenderStyle::PseudoId pseudo)
 {
@@ -713,6 +789,18 @@ static inline int pseudoBit(RenderStyle::PseudoId pseudo)
             return SELECTION_BIT;
         case RenderStyle::FIRST_LINE_INHERITED:
             return FIRST_LINE_INHERITED_BIT;
+        case RenderStyle::FILE_UPLOAD_BUTTON:
+            return FILE_UPLOAD_BUTTON_BIT;
+        case RenderStyle::SLIDER_THUMB:
+            return SLIDER_THUMB_BIT;
+        case RenderStyle::SEARCH_CANCEL_BUTTON:
+            return SEARCH_CANCEL_BUTTON_BIT;        
+        case RenderStyle::SEARCH_DECORATION:
+            return SEARCH_DECORATION_BIT;
+        case RenderStyle::SEARCH_RESULTS_DECORATION:
+            return SEARCH_RESULTS_DECORATION_BIT;
+        case RenderStyle::SEARCH_RESULTS_BUTTON:
+            return SEARCH_RESULTS_BUTTON_BIT;
         default:
             return NO_BIT;
     }
@@ -747,14 +835,14 @@ void RenderStyle::addPseudoStyle(RenderStyle* pseudo)
     pseudoStyle = pseudo;
 }
 
-bool RenderStyle::inheritedNotEqual( RenderStyle *other ) const
+bool RenderStyle::inheritedNotEqual(RenderStyle* other) const
 {
     return inherited_flags != other->inherited_flags ||
            inherited != other->inherited ||
 #ifdef SVG_SUPPORT
            m_svgStyle->inheritedNotEqual(other->m_svgStyle.get()) ||
 #endif
-           css3InheritedData != other->css3InheritedData;
+           rareInheritedData != other->rareInheritedData;
 }
 
 /*
@@ -772,7 +860,7 @@ bool RenderStyle::inheritedNotEqual( RenderStyle *other ) const
   optimisations are unimplemented, and currently result in the
   worst case result causing a relayout of the containing block.
 */
-RenderStyle::Diff RenderStyle::diff( const RenderStyle *other ) const
+RenderStyle::Diff RenderStyle::diff(const RenderStyle* other) const
 {
 #ifdef SVG_SUPPORT
     // This is horribly inefficient.  Eventually we'll have to integrate
@@ -809,20 +897,21 @@ RenderStyle::Diff RenderStyle::diff( const RenderStyle *other ) const
          box->boxSizing != other->box->boxSizing ||
          !(surround->margin == other->surround->margin) ||
          !(surround->padding == other->surround->padding) ||
-         css3NonInheritedData->m_appearance != other->css3NonInheritedData->m_appearance ||
-         css3NonInheritedData->marginTopCollapse != other->css3NonInheritedData->marginTopCollapse ||
-         css3NonInheritedData->marginBottomCollapse != other->css3NonInheritedData->marginBottomCollapse ||
-         *css3NonInheritedData->flexibleBox.get() != *other->css3NonInheritedData->flexibleBox.get() ||
-         (css3NonInheritedData->lineClamp != other->css3NonInheritedData->lineClamp) ||
-         (css3InheritedData->highlight != other->css3InheritedData->highlight) ||
-         (css3InheritedData->textSizeAdjust != other->css3InheritedData->textSizeAdjust) ||
-         (css3InheritedData->wordWrap != other->css3InheritedData->wordWrap) ||
-         (css3InheritedData->nbspMode != other->css3InheritedData->nbspMode) ||
-         (css3InheritedData->khtmlLineBreak != other->css3InheritedData->khtmlLineBreak) ||
+         rareNonInheritedData->m_appearance != other->rareNonInheritedData->m_appearance ||
+         rareNonInheritedData->marginTopCollapse != other->rareNonInheritedData->marginTopCollapse ||
+         rareNonInheritedData->marginBottomCollapse != other->rareNonInheritedData->marginBottomCollapse ||
+         *rareNonInheritedData->flexibleBox.get() != *other->rareNonInheritedData->flexibleBox.get() ||
+         *rareNonInheritedData->m_multiCol.get() != *other->rareNonInheritedData->m_multiCol.get() ||
+         (rareNonInheritedData->lineClamp != other->rareNonInheritedData->lineClamp) ||
+         (rareInheritedData->highlight != other->rareInheritedData->highlight) ||
+         (rareInheritedData->textSizeAdjust != other->rareInheritedData->textSizeAdjust) ||
+         (rareInheritedData->wordWrap != other->rareInheritedData->wordWrap) ||
+         (rareInheritedData->nbspMode != other->rareInheritedData->nbspMode) ||
+         (rareInheritedData->khtmlLineBreak != other->rareInheritedData->khtmlLineBreak) ||
         !(inherited->indent == other->inherited->indent) ||
         !(inherited->line_height == other->inherited->line_height) ||
         !(inherited->style_image == other->inherited->style_image) ||
-        !(inherited->cursor_image == other->inherited->cursor_image) ||
+        !(inherited->cursorData  == other->inherited->cursorData) ||
         !(inherited->font == other->inherited->font) ||
         !(inherited->horizontal_border_spacing == other->inherited->horizontal_border_spacing) ||
         !(inherited->vertical_border_spacing == other->inherited->vertical_border_spacing) ||
@@ -833,9 +922,10 @@ RenderStyle::Diff RenderStyle::diff( const RenderStyle *other ) const
         !(noninherited_flags._floating == other->noninherited_flags._floating) ||
         !(noninherited_flags._originalDisplay == other->noninherited_flags._originalDisplay) ||
          visual->colspan != other->visual->colspan ||
-         visual->counter_increment != other->visual->counter_increment ||
-         visual->counter_reset != other->visual->counter_reset ||
-         css3NonInheritedData->textOverflow != other->css3NonInheritedData->textOverflow)
+         visual->counterIncrement != other->visual->counterIncrement ||
+         visual->counterReset != other->visual->counterReset ||
+         rareNonInheritedData->textOverflow != other->rareNonInheritedData->textOverflow ||
+         (rareInheritedData->textSecurity != other->rareInheritedData->textSecurity))
         return Layout;
    
     // changes causing Layout changes:
@@ -892,7 +982,9 @@ RenderStyle::Diff RenderStyle::diff( const RenderStyle *other ) const
          !(inherited_flags._direction == other->inherited_flags._direction) ||
          !(inherited_flags._white_space == other->inherited_flags._white_space) ||
          !(noninherited_flags._clear == other->noninherited_flags._clear) ||
-         !css3InheritedData->shadowDataEquivalent(*other->css3InheritedData.get())
+         !rareInheritedData->shadowDataEquivalent(*other->rareInheritedData.get()) ||
+         !rareNonInheritedData->shadowDataEquivalent(*other->rareNonInheritedData.get()) ||
+         textStrokeWidth() != other->textStrokeWidth()
         )
         return Layout;
 
@@ -917,7 +1009,13 @@ RenderStyle::Diff RenderStyle::diff( const RenderStyle *other ) const
         return Layout;
 
     // If regions change trigger a relayout to re-calc regions.
-    if (!(css3NonInheritedData->m_dashboardRegions == other->css3NonInheritedData->m_dashboardRegions))
+    if (!(rareNonInheritedData->m_dashboardRegions == other->rareNonInheritedData->m_dashboardRegions))
+        return Layout;
+    
+    // If the counter directives change, trigger a relayout to re-calculate counter values and rebuild the counter node tree.
+    const CounterDirectiveMap* mapA = rareNonInheritedData->m_counterDirectives;
+    const CounterDirectiveMap* mapB = other->rareNonInheritedData->m_counterDirectives;
+    if (!(mapA == mapB || (mapA && mapB && *mapA == *mapB)))
         return Layout;
 
     // Make sure these left/top/right/bottom checks stay below all layout checks and above
@@ -937,7 +1035,7 @@ RenderStyle::Diff RenderStyle::diff( const RenderStyle *other ) const
             return RepaintLayer;
     }
 
-    if (css3NonInheritedData->opacity != other->css3NonInheritedData->opacity)
+    if (rareNonInheritedData->opacity != other->rareNonInheritedData->opacity)
         return RepaintLayer;
 
     // Repaint:
@@ -951,9 +1049,11 @@ RenderStyle::Diff RenderStyle::diff( const RenderStyle *other ) const
         !(surround->border == other->surround->border) ||
         *background.get() != *other->background.get() ||
         visual->textDecoration != other->visual->textDecoration ||
-        css3InheritedData->userModify != other->css3InheritedData->userModify ||
-        css3NonInheritedData->userSelect != other->css3NonInheritedData->userSelect ||
-        css3NonInheritedData->userDrag != other->css3NonInheritedData->userDrag
+        rareInheritedData->userModify != other->rareInheritedData->userModify ||
+        rareNonInheritedData->userSelect != other->rareNonInheritedData->userSelect ||
+        rareNonInheritedData->userDrag != other->rareNonInheritedData->userDrag ||
+        rareInheritedData->textFillColor != other->rareInheritedData->textFillColor ||
+        rareInheritedData->textStrokeColor != other->rareInheritedData->textStrokeColor
         )
         return Repaint;
 
@@ -980,30 +1080,72 @@ void RenderStyle::setClip( Length top, Length right, Length bottom, Length left 
     data->clip.left = left;
 }
 
+void RenderStyle::addCursor(CachedImage* image, const IntPoint& hotSpot)
+{
+    CursorData data;
+    data.cursorImage = image;
+    data.hotSpot = hotSpot;
+    if (!inherited.access()->cursorData)
+        inherited.access()->cursorData = new CursorList;
+    inherited.access()->cursorData->append(data);
+}
+
+void RenderStyle::addSVGCursor(const String& fragmentId)
+{
+    CursorData data;
+    data.cursorFragmentId = fragmentId;
+    if (!inherited.access()->cursorData)
+        inherited.access()->cursorData = new CursorList;
+    inherited.access()->cursorData->append(data);
+}
+
+void RenderStyle::setCursorList(PassRefPtr<CursorList> other)
+{
+    inherited.access()->cursorData = other;
+}
+
+void RenderStyle::clearCursorList()
+{
+    inherited.access()->cursorData = new CursorList;
+}
+
 bool RenderStyle::contentDataEquivalent(const RenderStyle* otherStyle) const
 {
-    ContentData* c1 = content;
-    ContentData* c2 = otherStyle->content;
+    ContentData* c1 = rareNonInheritedData->m_content;
+    ContentData* c2 = otherStyle->rareNonInheritedData->m_content;
 
     while (c1 && c2) {
-        if (c1->_contentType != c2->_contentType)
+        if (c1->m_type != c2->m_type)
             return false;
-        if (c1->_contentType == CONTENT_TEXT) {
-            String c1Str(c1->_content.text);
-            String c2Str(c2->_content.text);
-            if (c1Str != c2Str)
-                return false;
-        }
-        else if (c1->_contentType == CONTENT_OBJECT) {
-            if (c1->_content.object != c2->_content.object)
-                return false;
+
+        switch (c1->m_type) {
+            case CONTENT_NONE:
+                break;
+            case CONTENT_TEXT:
+                if (!equal(c1->m_content.m_text, c2->m_content.m_text))
+                    return false;
+                break;
+            case CONTENT_OBJECT:
+                if (c1->m_content.m_object != c2->m_content.m_object)
+                    return false;
+                break;
+            case CONTENT_COUNTER:
+                if (*c1->m_content.m_counter != *c2->m_content.m_counter)
+                    return false;
+                break;
         }
 
-        c1 = c1->_nextContent;
-        c2 = c2->_nextContent;
+        c1 = c1->m_next;
+        c2 = c2->m_next;
     }
 
     return !c1 && !c2;
+}
+
+void RenderStyle::clearContent()
+{
+    if (rareNonInheritedData->m_content)
+        rareNonInheritedData->m_content->clear();
 }
 
 void RenderStyle::setContent(CachedResource* o, bool add)
@@ -1011,26 +1153,26 @@ void RenderStyle::setContent(CachedResource* o, bool add)
     if (!o)
         return; // The object is null. Nothing to do. Just bail.
 
+    ContentData*& content = rareNonInheritedData.access()->m_content;
     ContentData* lastContent = content;
-    while (lastContent && lastContent->_nextContent)
-        lastContent = lastContent->_nextContent;
+    while (lastContent && lastContent->m_next)
+        lastContent = lastContent->m_next;
 
     bool reuseContent = !add;
     ContentData* newContentData = 0;
     if (reuseContent && content) {
-        content->clearContent();
+        content->clear();
         newContentData = content;
-    }
-    else
+    } else
         newContentData = new ContentData;
 
     if (lastContent && !reuseContent)
-        lastContent->_nextContent = newContentData;
+        lastContent->m_next = newContentData;
     else
         content = newContentData;
 
-    newContentData->_content.object = o;
-    newContentData->_contentType = CONTENT_OBJECT;
+    newContentData->m_content.m_object = o;
+    newContentData->m_type = CONTENT_OBJECT;
 }
 
 void RenderStyle::setContent(StringImpl* s, bool add)
@@ -1038,66 +1180,103 @@ void RenderStyle::setContent(StringImpl* s, bool add)
     if (!s)
         return; // The string is null. Nothing to do. Just bail.
     
+    ContentData*& content = rareNonInheritedData.access()->m_content;
     ContentData* lastContent = content;
-    while (lastContent && lastContent->_nextContent)
-        lastContent = lastContent->_nextContent;
+    while (lastContent && lastContent->m_next)
+        lastContent = lastContent->m_next;
 
     bool reuseContent = !add;
     if (add && lastContent) {
-        if (lastContent->_contentType == CONTENT_TEXT) {
+        if (lastContent->m_type == CONTENT_TEXT) {
             // We can augment the existing string and share this ContentData node.
-            StringImpl* oldStr = lastContent->_content.text;
+            StringImpl* oldStr = lastContent->m_content.m_text;
             StringImpl* newStr = oldStr->copy();
             newStr->ref();
             oldStr->deref();
             newStr->append(s);
-            lastContent->_content.text = newStr;
+            lastContent->m_content.m_text = newStr;
             return;
         }
     }
 
     ContentData* newContentData = 0;
     if (reuseContent && content) {
-        content->clearContent();
+        content->clear();
         newContentData = content;
-    }
-    else
+    } else
         newContentData = new ContentData;
     
     if (lastContent && !reuseContent)
-        lastContent->_nextContent = newContentData;
+        lastContent->m_next = newContentData;
     else
         content = newContentData;
     
-    newContentData->_content.text = s;
-    newContentData->_content.text->ref();
-    newContentData->_contentType = CONTENT_TEXT;
+    newContentData->m_content.m_text = s;
+    newContentData->m_content.m_text->ref();
+    newContentData->m_type = CONTENT_TEXT;
 }
 
-ContentData::~ContentData()
+void RenderStyle::setContent(CounterContent* c, bool add)
 {
-    clearContent();
+    if (!c)
+        return;
+
+    ContentData*& content = rareNonInheritedData.access()->m_content;
+    ContentData* lastContent = content;
+    while (lastContent && lastContent->m_next)
+        lastContent = lastContent->m_next;
+
+    bool reuseContent = !add;
+    ContentData* newContentData = 0;
+    if (reuseContent && content) {
+        content->clear();
+        newContentData = content;
+    } else
+        newContentData = new ContentData;
+
+    if (lastContent && !reuseContent)
+        lastContent->m_next = newContentData;
+    else
+        content = newContentData;
+
+    newContentData->m_content.m_counter = c;
+    newContentData->m_type = CONTENT_COUNTER;
 }
 
-void ContentData::clearContent()
+void ContentData::clear()
 {
-    delete _nextContent;
-    _nextContent = 0;
-    
-    switch (_contentType)
-    {
+    switch (m_type) {
+        case CONTENT_NONE:
         case CONTENT_OBJECT:
-            _content.object = 0;
             break;
         case CONTENT_TEXT:
-            _content.text->deref();
-            _content.text = 0;
-        default:
-            ;
+            m_content.m_text->deref();
+            break;
+        case CONTENT_COUNTER:
+            delete m_content.m_counter;
+            break;
+    }
+
+    ContentData* n = m_next;
+    m_type = CONTENT_NONE;
+    m_next = 0;
+
+    // Reverse the list so we can delete without recursing.
+    ContentData* last = 0;
+    ContentData* c;
+    while ((c = n)) {
+        n = c->m_next;
+        c->m_next = last;
+        last = c;
+    }
+    for (c = last; c; c = n) {
+        n = c->m_next;
+        c->m_next = 0;
+        delete c;
     }
 }
 
-#ifndef KHTML_NO_XBL
+#ifdef XBL_SUPPORT
 BindingURI::BindingURI(StringImpl* uri) 
 :m_next(0)
 { 
@@ -1141,7 +1320,7 @@ void RenderStyle::addBindingURI(StringImpl* uri)
 {
     BindingURI* binding = new BindingURI(uri);
     if (!bindingURIs())
-        SET_VAR(css3NonInheritedData, bindingURI, binding)
+        SET_VAR(rareNonInheritedData, bindingURI, binding)
     else 
         for (BindingURI* b = bindingURIs(); b; b = b->next()) {
             if (!b->next())
@@ -1152,14 +1331,28 @@ void RenderStyle::addBindingURI(StringImpl* uri)
 
 void RenderStyle::setTextShadow(ShadowData* val, bool add)
 {
-    StyleCSS3InheritedData* css3Data = css3InheritedData.access(); 
+    StyleRareInheritedData* rareData = rareInheritedData.access(); 
     if (!add) {
-        delete css3Data->textShadow;
-        css3Data->textShadow = val;
+        delete rareData->textShadow;
+        rareData->textShadow = val;
         return;
     }
 
-    ShadowData* last = css3Data->textShadow;
+    ShadowData* last = rareData->textShadow;
+    while (last->next) last = last->next;
+    last->next = val;
+}
+
+void RenderStyle::setBoxShadow(ShadowData* val, bool add)
+{
+    StyleRareNonInheritedData* rareData = rareNonInheritedData.access(); 
+    if (!add) {
+        delete rareData->m_boxShadow;
+        rareData->m_boxShadow = val;
+        return;
+    }
+
+    ShadowData* last = rareData->m_boxShadow;
     while (last->next) last = last->next;
     last->next = val;
 }
@@ -1179,15 +1372,39 @@ bool ShadowData::operator==(const ShadowData& o) const
     return x == o.x && y == o.y && blur == o.blur && color == o.color;
 }
 
-const DeprecatedValueList<StyleDashboardRegion>& RenderStyle::initialDashboardRegions()
+bool operator==(const CounterDirectives& a, const CounterDirectives& b)
+{
+    if (a.m_reset != b.m_reset || a.m_increment != b.m_increment)
+        return false;
+    if (a.m_reset && a.m_resetValue != b.m_resetValue)
+        return false;
+    if (a.m_increment && a.m_incrementValue != b.m_incrementValue)
+        return false;
+    return true;
+}
+
+const CounterDirectiveMap* RenderStyle::counterDirectives() const
+{
+    return rareNonInheritedData->m_counterDirectives;
+}
+
+CounterDirectiveMap& RenderStyle::accessCounterDirectives()
+{
+    CounterDirectiveMap*& map = rareNonInheritedData.access()->m_counterDirectives;
+    if (!map)
+        map = new CounterDirectiveMap;
+    return *map;
+}
+
+const Vector<StyleDashboardRegion>& RenderStyle::initialDashboardRegions()
 { 
-    static DeprecatedValueList<StyleDashboardRegion> emptyList;
+    static Vector<StyleDashboardRegion> emptyList;
     return emptyList;
 }
 
-const DeprecatedValueList<StyleDashboardRegion>& RenderStyle::noneDashboardRegions()
+const Vector<StyleDashboardRegion>& RenderStyle::noneDashboardRegions()
 { 
-    static DeprecatedValueList<StyleDashboardRegion> noneList;
+    static Vector<StyleDashboardRegion> noneList;
     static bool noneListInitialized = false;
     
     if (!noneListInitialized) {

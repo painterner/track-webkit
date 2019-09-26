@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -22,26 +22,17 @@
 
 #include "config.h"
 #ifdef SVG_SUPPORT
-#include "DeprecatedStringList.h"
-
-#include "Attr.h"
-
-#include <kcanvas/KCanvasFilters.h>
-#include <kcanvas/device/KRenderingDevice.h>
-
-#include "ksvg.h"
-#include "SVGHelper.h"
-#include "SVGRenderStyle.h"
 #include "SVGFEBlendElement.h"
-#include "SVGAnimatedEnumeration.h"
-#include "SVGAnimatedString.h"
 
-using namespace WebCore;
+#include "SVGResourceFilter.h"
 
-SVGFEBlendElement::SVGFEBlendElement(const QualifiedName& tagName, Document *doc) : 
-SVGFilterPrimitiveStandardAttributes(tagName, doc)
+namespace WebCore {
+
+SVGFEBlendElement::SVGFEBlendElement(const QualifiedName& tagName, Document* doc)
+    : SVGFilterPrimitiveStandardAttributes(tagName, doc)
+    , m_mode(0)
+    , m_filterEffect(0)
 {
-    m_filterEffect = 0;
 }
 
 SVGFEBlendElement::~SVGFEBlendElement()
@@ -49,59 +40,45 @@ SVGFEBlendElement::~SVGFEBlendElement()
     delete m_filterEffect;
 }
 
-SVGAnimatedString *SVGFEBlendElement::in1() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedString>(m_in1, dummy);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGFEBlendElement, String, String, string, In1, in1, SVGNames::inAttr.localName(), m_in1)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFEBlendElement, String, String, string, In2, in2, SVGNames::in2Attr.localName(), m_in2)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFEBlendElement, int, Enumeration, enumeration, Mode, mode, SVGNames::modeAttr.localName(), m_mode)
 
-SVGAnimatedString *SVGFEBlendElement::in2() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedString>(m_in2, dummy);
-}
-
-SVGAnimatedEnumeration *SVGFEBlendElement::mode() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedEnumeration>(m_mode, dummy);
-}
-
-void SVGFEBlendElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGFEBlendElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
-    if (attr->name() == SVGNames::modeAttr)
-    {
-        if(value == "normal")
-            mode()->setBaseVal(SVG_FEBLEND_MODE_NORMAL);
-        else if(value == "multiply")
-            mode()->setBaseVal(SVG_FEBLEND_MODE_MULTIPLY);
-        else if(value == "screen")
-            mode()->setBaseVal(SVG_FEBLEND_MODE_SCREEN);
-        else if(value == "darken")
-            mode()->setBaseVal(SVG_FEBLEND_MODE_DARKEN);
-        else if(value == "lighten")
-            mode()->setBaseVal(SVG_FEBLEND_MODE_LIGHTEN);
-    }
-    else if (attr->name() == SVGNames::inAttr)
-        in1()->setBaseVal(value.impl());
+    if (attr->name() == SVGNames::modeAttr) {
+        if (value == "normal")
+            setModeBaseValue(SVG_FEBLEND_MODE_NORMAL);
+        else if (value == "multiply")
+            setModeBaseValue(SVG_FEBLEND_MODE_MULTIPLY);
+        else if (value == "screen")
+            setModeBaseValue(SVG_FEBLEND_MODE_SCREEN);
+        else if (value == "darken")
+            setModeBaseValue(SVG_FEBLEND_MODE_DARKEN);
+        else if (value == "lighten")
+            setModeBaseValue(SVG_FEBLEND_MODE_LIGHTEN);
+    } else if (attr->name() == SVGNames::inAttr)
+        setIn1BaseValue(value);
     else if (attr->name() == SVGNames::in2Attr)
-        in2()->setBaseVal(value.impl());
+        setIn2BaseValue(value);
     else
         SVGFilterPrimitiveStandardAttributes::parseMappedAttribute(attr);
 }
 
-KCanvasFEBlend *SVGFEBlendElement::filterEffect() const
+SVGFEBlend* SVGFEBlendElement::filterEffect() const
 {
     if (!m_filterEffect)
-        m_filterEffect = static_cast<KCanvasFEBlend *>(renderingDevice()->createFilterEffect(FE_BLEND));
+        m_filterEffect = static_cast<SVGFEBlend*>(SVGResourceFilter::createFilterEffect(FE_BLEND));
     if (!m_filterEffect)
         return 0;
-    m_filterEffect->setBlendMode((KCBlendModeType)(mode()->baseVal()-1));
-    m_filterEffect->setIn(String(in1()->baseVal()).deprecatedString());
-    m_filterEffect->setIn2(String(in2()->baseVal()).deprecatedString());
+    m_filterEffect->setBlendMode((SVGBlendModeType) mode());
+    m_filterEffect->setIn(in1());
+    m_filterEffect->setIn2(in2());
     setStandardAttributes(m_filterEffect);
     return m_filterEffect;
+}
+
 }
 
 // vim:ts=4:noet

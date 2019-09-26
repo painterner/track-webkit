@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005 Rob, 2006 Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -24,13 +24,11 @@
 #ifdef SVG_SUPPORT
 #include "SVGTests.h"
 
+#include "DOMImplementation.h"
 #include "Language.h"
 #include "SVGElement.h"
-#include "SVGHelper.h"
 #include "SVGNames.h"
 #include "SVGStringList.h"
-#include "Attr.h"
-#include "DOMImplementation.h"
 
 namespace WebCore {
 
@@ -42,59 +40,69 @@ SVGTests::~SVGTests()
 {
 }
 
-SVGStringList *SVGTests::requiredFeatures() const
+SVGStringList* SVGTests::requiredFeatures() const
 {
-    return lazy_create<SVGStringList>(m_features);
+    if (!m_features)
+        m_features = new SVGStringList();
+
+    return m_features.get();
 }
 
-SVGStringList *SVGTests::requiredExtensions() const
+SVGStringList* SVGTests::requiredExtensions() const
 {
-    return lazy_create<SVGStringList>(m_extensions);
+    if (!m_extensions)
+        m_extensions = new SVGStringList();
+
+    return m_extensions.get();
 }
 
-SVGStringList *SVGTests::systemLanguage() const
+SVGStringList* SVGTests::systemLanguage() const
 {
-    return lazy_create<SVGStringList>(m_systemLanguage);
+    if (!m_systemLanguage)
+        m_systemLanguage = new SVGStringList();
+
+    return m_systemLanguage.get();
 }
 
-bool SVGTests::hasExtension(StringImpl *) const
+bool SVGTests::hasExtension(const String&) const
 {
     return false;
 }
 
 bool SVGTests::isValid() const
 {
-    SVGStringList *list = requiredFeatures();
-    for(unsigned long i = 0;i < list->numberOfItems();i++)
-    {
-        String value = String(list->getItem(i));
-        if(value.isEmpty() || !DOMImplementation::instance()->hasFeature(value, String()))
+    ExceptionCode ec = 0;
+
+    SVGStringList* list = requiredFeatures();
+    for (unsigned long i = 0; i < list->numberOfItems(); i++) {
+        String value = list->getItem(i, ec);
+        if (value.isEmpty() || !DOMImplementation::instance()->hasFeature(value, String()))
             return false;
     }
 
     list = systemLanguage();
     for (unsigned long i = 0; i < list->numberOfItems(); i++)
-        if (!equal(list->getItem(i), defaultLanguage().substring(0, 2).impl()))
+        if (list->getItem(i, ec) != defaultLanguage().substring(0, 2))
             return false;
 
     list = requiredExtensions();
-    if(list->numberOfItems() > 0)
+    if (list->numberOfItems() > 0)
         return false;
 
     return true;
 }
 
-bool SVGTests::parseMappedAttribute(MappedAttribute *attr)
+bool SVGTests::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::requiredFeaturesAttr) {
-        requiredFeatures()->reset(value.deprecatedString());
+        requiredFeatures()->reset(value);
         return true;
     } else if (attr->name() == SVGNames::requiredExtensionsAttr) {
-        requiredExtensions()->reset(value.deprecatedString());
+        requiredExtensions()->reset(value);
         return true;
     } else if (attr->name() == SVGNames::systemLanguageAttr) {
-        systemLanguage()->reset(value.deprecatedString());
+        systemLanguage()->reset(value);
         return true;
     }
     

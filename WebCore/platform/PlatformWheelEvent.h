@@ -28,12 +28,18 @@
 
 #include "IntPoint.h"
 
-#ifdef __APPLE__
+#if PLATFORM(MAC)
 #ifdef __OBJC__
 @class NSEvent;
 #else
 class NSEvent;
 #endif
+#endif
+
+#if PLATFORM(WIN)
+typedef struct HWND__* HWND;
+typedef unsigned WPARAM;
+typedef long LPARAM;
 #endif
 
 #if PLATFORM(GDK)
@@ -46,8 +52,10 @@ namespace WebCore {
     public:
         const IntPoint& pos() const { return m_position; }
         const IntPoint& globalPos() const { return m_globalPosition; }
-        int delta() const { return m_delta; }
-        bool isHorizontal() const { return m_isHorizontal; }
+
+        float deltaX() const { return m_deltaX; }
+        float deltaY() const { return m_deltaY; }
+
         bool isAccepted() const { return m_isAccepted; }
         bool shiftKey() const { return m_shiftKey; }
         bool ctrlKey() const { return m_ctrlKey; }
@@ -62,10 +70,12 @@ namespace WebCore {
         void accept() { m_isAccepted = true; }
         void ignore() { m_isAccepted = false; }
 
-#ifdef __APPLE__
+#if PLATFORM(MAC)
         PlatformWheelEvent(NSEvent*);
 #endif
-
+#if PLATFORM(WIN)
+        PlatformWheelEvent(HWND, WPARAM, LPARAM);
+#endif
 #if PLATFORM(GDK)
         PlatformWheelEvent(GdkEvent*);
 #endif
@@ -73,8 +83,8 @@ namespace WebCore {
     private:
         IntPoint m_position;
         IntPoint m_globalPosition;
-        int m_delta;
-        bool m_isHorizontal;
+        float m_deltaX;
+        float m_deltaY;
         bool m_isAccepted;
         bool m_shiftKey;
         bool m_ctrlKey;

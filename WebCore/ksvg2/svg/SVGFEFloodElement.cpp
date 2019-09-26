@@ -21,25 +21,22 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGFEFloodElement.h"
 
 #include "Attr.h"
-#include "DeprecatedStringList.h"
 #include "RenderView.h"
-#include "SVGAnimatedString.h"
-#include "SVGHelper.h"
 #include "SVGNames.h"
 #include "SVGRenderStyle.h"
-#include <kcanvas/KCanvasFilters.h>
-#include <kcanvas/device/KRenderingDevice.h>
+#include "SVGResourceFilter.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGFEFloodElement::SVGFEFloodElement(const QualifiedName& tagName, Document *doc) : 
-SVGFilterPrimitiveStandardAttributes(tagName, doc)
+SVGFEFloodElement::SVGFEFloodElement(const QualifiedName& tagName, Document* doc)
+    : SVGFilterPrimitiveStandardAttributes(tagName, doc)
+    , m_filterEffect(0)
 {
-    m_filterEffect = 0;
 }
 
 SVGFEFloodElement::~SVGFEFloodElement()
@@ -47,31 +44,27 @@ SVGFEFloodElement::~SVGFEFloodElement()
     delete m_filterEffect;
 }
 
-SVGAnimatedString *SVGFEFloodElement::in1() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedString>(m_in1, dummy);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGFEFloodElement, String, String, string, In1, in1, SVGNames::inAttr.localName(), m_in1)
 
-void SVGFEFloodElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGFEFloodElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::inAttr)
-        in1()->setBaseVal(value.impl());
+        setIn1BaseValue(value);
     else
         SVGFilterPrimitiveStandardAttributes::parseMappedAttribute(attr);
 }
 
-KCanvasFEFlood *SVGFEFloodElement::filterEffect() const
+SVGFEFlood* SVGFEFloodElement::filterEffect() const
 {
     if (!m_filterEffect)
-        m_filterEffect = static_cast<KCanvasFEFlood *>(renderingDevice()->createFilterEffect(FE_FLOOD));
+        m_filterEffect = static_cast<SVGFEFlood*>(SVGResourceFilter::createFilterEffect(FE_FLOOD));
     if (!m_filterEffect)
         return 0;
-    m_filterEffect->setIn(String(in1()->baseVal()).deprecatedString());
+    m_filterEffect->setIn(in1());
     setStandardAttributes(m_filterEffect);
-    RenderStyle *filterStyle = const_cast<SVGFEFloodElement *>(this)->styleForRenderer(parentNode()->renderer());
-    const SVGRenderStyle *svgStyle = filterStyle->svgStyle();
+    RenderStyle* filterStyle = const_cast<SVGFEFloodElement *>(this)->styleForRenderer(parentNode()->renderer());
+    const SVGRenderStyle* svgStyle = filterStyle->svgStyle();
     m_filterEffect->setFloodColor(svgStyle->floodColor());
     m_filterEffect->setFloodOpacity(svgStyle->floodOpacity());
     filterStyle->deref(view()->renderArena());
@@ -79,6 +72,8 @@ KCanvasFEFlood *SVGFEFloodElement::filterEffect() const
     return m_filterEffect;
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

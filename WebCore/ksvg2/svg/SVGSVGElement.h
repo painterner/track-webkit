@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -22,30 +22,29 @@
 
 #ifndef SVGSVGElement_H
 #define SVGSVGElement_H
+
 #ifdef SVG_SUPPORT
 
-#include "SVGTests.h"
-#include "SVGLangSpace.h"
-#include "SVGFitToViewBox.h"
-#include "SVGZoomAndPan.h"
-#include "SVGStyledLocatableElement.h"
 #include "SVGExternalResourcesRequired.h"
+#include "SVGFitToViewBox.h"
+#include "SVGLangSpace.h"
+#include "SVGStyledLocatableElement.h"
+#include "SVGTests.h"
+#include "SVGZoomAndPan.h"
 
 namespace WebCore
 {
-    class DocumentPtr;
     class SVGAngle;
     class SVGLength;
-    class SVGMatrix;
     class SVGTransform;
-    class SVGAnimatedLength;
+    class SVGLength;
     class TimeScheduler;
     class SVGSVGElement : public SVGStyledLocatableElement,
-                              public SVGTests,
-                              public SVGLangSpace,
-                              public SVGExternalResourcesRequired,
-                              public SVGFitToViewBox,
-                              public SVGZoomAndPan
+                          public SVGTests,
+                          public SVGLangSpace,
+                          public SVGExternalResourcesRequired,
+                          public SVGFitToViewBox,
+                          public SVGZoomAndPan
     {
     public:
         SVGSVGElement(const QualifiedName&, Document*);
@@ -56,15 +55,10 @@ namespace WebCore
         virtual bool isValid() const { return SVGTests::isValid(); }
 
         // 'SVGSVGElement' functions
-        SVGAnimatedLength* x() const;
-        SVGAnimatedLength* y() const;
-        SVGAnimatedLength* width() const;
-        SVGAnimatedLength* height() const;
-
-        AtomicString contentScriptType() const;
+        const AtomicString& contentScriptType() const;
         void setContentScriptType(const AtomicString& type);
 
-        AtomicString contentStyleType() const;
+        const AtomicString& contentStyleType() const;
         void setContentStyleType(const AtomicString& type);
 
         FloatRect viewport() const;
@@ -77,7 +71,7 @@ namespace WebCore
         bool useCurrentView() const;
         void setUseCurrentView(bool currentView);
 
-        // SVGViewSpec *currentView() const;
+        // SVGViewSpec* currentView() const;
 
         float currentScale() const;
         void setCurrentScale(float scale);
@@ -98,40 +92,55 @@ namespace WebCore
         void unsuspendRedrawAll();
         void forceRedraw();
 
-        NodeList* getIntersectionList(const FloatRect&, SVGElement *referenceElement);
-        NodeList* getEnclosureList(const FloatRect&, SVGElement *referenceElement);
+        NodeList* getIntersectionList(const FloatRect&, SVGElement* referenceElement);
+        NodeList* getEnclosureList(const FloatRect&, SVGElement* referenceElement);
         bool checkIntersection(SVGElement*, const FloatRect&);
         bool checkEnclosure(SVGElement*, const FloatRect&);
         void deselectAll();
 
-        static float createSVGNumber();
-        static SVGLength* createSVGLength();
+        static double createSVGNumber();
+        static SVGLength createSVGLength();
         static SVGAngle* createSVGAngle();
-        static FloatPoint createSVGPoint(const IntPoint &p = IntPoint());
-        static SVGMatrix* createSVGMatrix();
+        static FloatPoint createSVGPoint();
+        static AffineTransform createSVGMatrix();
         static FloatRect createSVGRect();
         static SVGTransform* createSVGTransform();
-        static SVGTransform* createSVGTransformFromMatrix(SVGMatrix *matrix);
+        static SVGTransform* createSVGTransformFromMatrix(const AffineTransform&);
 
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute*);
 
         // 'virtual SVGLocatable' functions
-        virtual SVGMatrix *getCTM() const;
-        virtual SVGMatrix *getScreenCTM() const;
+        virtual AffineTransform getCTM() const;
+        virtual AffineTransform getScreenCTM() const;
 
-        virtual bool rendererIsNeeded(RenderStyle *style) { return StyledElement::rendererIsNeeded(style); }
-        virtual RenderObject* createRenderer(RenderArena *arena, RenderStyle *style);
+        virtual bool rendererIsNeeded(RenderStyle* style) { return StyledElement::rendererIsNeeded(style); }
+        virtual RenderObject* createRenderer(RenderArena*, RenderStyle*);
+
+        virtual void insertedIntoDocument();
+        virtual void removedFromDocument();
 
         // 'virtual SVGZoomAndPan functions
         virtual void setZoomAndPan(unsigned short zoomAndPan);
 
+        virtual void attributeChanged(Attribute*, bool preserveDecls = false);
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
+
+        friend class RenderSVGContainer;
+        virtual bool hasRelativeValues() const;
+
     private:
         void addSVGWindowEventListner(const AtomicString& eventType, const Attribute* attr);   
 
-        mutable RefPtr<SVGAnimatedLength> m_x;
-        mutable RefPtr<SVGAnimatedLength> m_y;
-        mutable RefPtr<SVGAnimatedLength> m_width;
-        mutable RefPtr<SVGAnimatedLength> m_height;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired)
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGFitToViewBox, FloatRect, ViewBox, viewBox)
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGFitToViewBox, SVGPreserveAspectRatio*, PreserveAspectRatio, preserveAspectRatio)
+
+        ANIMATED_PROPERTY_DECLARATIONS(SVGSVGElement, SVGLength, SVGLength, X, x)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGSVGElement, SVGLength, SVGLength, Y, y)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGSVGElement, SVGLength, SVGLength, Width, width)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGSVGElement, SVGLength, SVGLength, Height, height)
 
         bool m_useCurrentView;
         TimeScheduler* m_timeScheduler;

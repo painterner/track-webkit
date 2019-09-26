@@ -26,7 +26,7 @@
 #import "config.h"
 #import "WebCoreEncodings.h"
 
-#import "Decoder.h"
+#import "TextResourceDecoder.h"
 #import "HTMLNames.h"
 
 using namespace WebCore;
@@ -36,11 +36,10 @@ using namespace WebCore;
 + (NSString *)decodeData:(NSData *)data
 {
     HTMLNames::init(); // this method is used for importing bookmarks at startup, so HTMLNames are likely to be uninitialized yet
-    Decoder* decoder = new Decoder;
-    DeprecatedString result = decoder->decode(static_cast<const char *>([data bytes]), [data length]);
+    RefPtr<TextResourceDecoder> decoder = new TextResourceDecoder("text/html"); // bookmark files are HTML
+    String result = decoder->decode(static_cast<const char*>([data bytes]), [data length]);
     result += decoder->flush();
-    decoder->deref();
-    return result.getNSString();
+    return result;
 }
 
 @end

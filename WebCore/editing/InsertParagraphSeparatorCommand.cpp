@@ -77,8 +77,6 @@ void InsertParagraphSeparatorCommand::applyStyleAfterInsertion()
         applyStyle(m_style.get());
 }
 
-
-
 void InsertParagraphSeparatorCommand::doApply()
 {
     bool splitText = false;
@@ -99,18 +97,19 @@ void InsertParagraphSeparatorCommand::doApply()
     
     // FIXME: Turn into an InsertLineBreak in other cases where we don't want to do the splitting/cloning that
     // InsertParagraphSeparator does.
-    Node* block = pos.node()->enclosingBlockFlowElement();
-    if (!block ||
-        !block->parentNode() ||
-        block->renderer() && block->renderer()->isTableCell()) {
-        EditCommandPtr cmd(new InsertLineBreakCommand(document())); 
-        applyCommandToComposite(cmd);
+    Node* block = enclosingBlock(pos.node());
+    Position canonicalPos = VisiblePosition(pos).deepEquivalent();
+    if (!block || !block->parentNode() || 
+        block->renderer() && block->renderer()->isTableCell() ||
+        canonicalPos.node()->renderer() && canonicalPos.node()->renderer()->isTable() ||
+        canonicalPos.node()->hasTagName(hrTag)) {
+        applyCommandToComposite(new InsertLineBreakCommand(document()));
         return;
     }
     
     // Use the leftmost candidate.
     pos = pos.upstream();
-    if (!pos.inRenderedContent())
+    if (!pos.isCandidate())
         pos = pos.downstream();
 
     // Adjust the insertion position after the delete
@@ -157,7 +156,7 @@ void InsertParagraphSeparatorCommand::doApply()
             insertNodeAfter(blockToInsert.get(), startBlock);
 
         appendBlockPlaceholder(blockToInsert.get());
-        setEndingSelection(Position(blockToInsert.get(), 0), DOWNSTREAM);
+        setEndingSelection(Selection(Position(blockToInsert.get(), 0), DOWNSTREAM));
         applyStyleAfterInsertion();
         return;
     }
@@ -179,9 +178,9 @@ void InsertParagraphSeparatorCommand::doApply()
 
         insertNodeBefore(blockToInsert.get(), refNode);
         appendBlockPlaceholder(blockToInsert.get());
-        setEndingSelection(Position(blockToInsert.get(), 0), DOWNSTREAM);
+        setEndingSelection(Selection(Position(blockToInsert.get(), 0), DOWNSTREAM));
         applyStyleAfterInsertion();
-        setEndingSelection(pos, DOWNSTREAM);
+        setEndingSelection(Selection(pos, DOWNSTREAM));
         return;
     }
 
@@ -201,11 +200,10 @@ void InsertParagraphSeparatorCommand::doApply()
     startNode = pos.node();
 
     // Build up list of ancestors in between the start node and the start block.
-    DeprecatedPtrList<Node> ancestors;
-    if (startNode != startBlock) {
-        for (Node *n = startNode->parentNode(); n && n != startBlock; n = n->parentNode())
-            ancestors.prepend(n);
-    }
+    Vector<Node*> ancestors;
+    if (startNode != startBlock)
+        for (Node* n = startNode->parentNode(); n && n != startBlock; n = n->parentNode())
+            ancestors.append(n);
 
     // Make sure we do not cause a rendered space to become unrendered.
     // FIXME: We need the affinity for pos, but pos.downstream() does not give it
@@ -238,8 +236,8 @@ void InsertParagraphSeparatorCommand::doApply()
 
     // Make clones of ancestors in between the start node and the start block.
     RefPtr<Node> parent = blockToInsert;
-    for (DeprecatedPtrListIterator<Node> it(ancestors); it.current(); ++it) {
-        RefPtr<Node> child = it.current()->cloneNode(false); // shallow clone
+    for (size_t i = ancestors.size(); i != 0; --i) {
+        RefPtr<Node> child = ancestors[i - 1]->cloneNode(false); // shallow clone
         appendNode(child.get(), parent.get());
         parent = child.release();
     }
@@ -266,17 +264,19 @@ void InsertParagraphSeparatorCommand::doApply()
     }            
 
     // Move everything after the start node.
-    Node *leftParent = ancestors.last();
-    while (leftParent && leftParent != startBlock) {
-        parent = parent->parentNode();
-        Node *n = leftParent->nextSibling();
-        while (n && n != blockToInsert) {
-            Node *next = n->nextSibling();
-            removeNode(n);
-            appendNode(n, parent.get());
-            n = next;
+    if (!ancestors.isEmpty()) {
+        Node* leftParent = ancestors.first();
+        while (leftParent && leftParent != startBlock) {
+            parent = parent->parentNode();
+            Node* n = leftParent->nextSibling();
+            while (n && n != blockToInsert) {
+                Node* next = n->nextSibling();
+                removeNode(n);
+                appendNode(n, parent.get());
+                n = next;
+            }
+            leftParent = leftParent->parentNode();
         }
-        leftParent = leftParent->parentNode();
     }
 
     // Handle whitespace that occurs after the split
@@ -293,7 +293,7 @@ void InsertParagraphSeparatorCommand::doApply()
         }
     }
 
-    setEndingSelection(Position(blockToInsert.get(), 0), DOWNSTREAM);
+    setEndingSelection(Selection(Position(blockToInsert.get(), 0), DOWNSTREAM));
     applyStyleAfterInsertion();
 }
 

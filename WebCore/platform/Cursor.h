@@ -29,12 +29,15 @@
 #include <wtf/Platform.h>
 
 #if PLATFORM(WIN)
-#include <windows.h>
+typedef struct HICON__* HICON;
+typedef HICON HCURSOR;
 #elif PLATFORM(GDK)
 #include <gdk/gdk.h>
+#elif PLATFORM(QT)
+#include <QCursor>
 #endif
 
-#ifdef __APPLE__
+#if PLATFORM(MAC)
 #ifdef __OBJC__
 @class NSCursor;
 #else
@@ -45,21 +48,29 @@ class NSCursor;
 namespace WebCore {
 
     class Image;
+    class IntPoint;
 
 #if PLATFORM(WIN)
     typedef HCURSOR PlatformCursor;
-#elif defined(__APPLE__)
+#elif PLATFORM(MAC)
     typedef NSCursor* PlatformCursor;
 #elif PLATFORM(GDK)
     typedef GdkCursor* PlatformCursor;
+#elif PLATFORM(QT) && !defined(QT_NO_CURSOR)
+    typedef QCursor PlatformCursor;
 #else
     typedef void* PlatformCursor;
 #endif
 
     class Cursor {
     public:
-        Cursor() : m_impl(0) { }
-        Cursor(Image*);
+        Cursor()
+#if !PLATFORM(QT)
+        : m_impl(0)
+#endif
+        { }
+
+        Cursor(Image*, const IntPoint& hotspot);
         Cursor(const Cursor&);
         ~Cursor();
         Cursor& operator=(const Cursor&);
@@ -71,7 +82,7 @@ namespace WebCore {
         PlatformCursor m_impl;
     };
 
-    inline Cursor pointerCursor() { return Cursor(); }
+    const Cursor& pointerCursor();
     const Cursor& crossCursor();
     const Cursor& handCursor();
     const Cursor& moveCursor();
@@ -93,6 +104,14 @@ namespace WebCore {
     const Cursor& northWestSouthEastResizeCursor();
     const Cursor& columnResizeCursor();
     const Cursor& rowResizeCursor();
+    const Cursor& verticalTextCursor();
+    const Cursor& cellCursor();
+    const Cursor& contextMenuCursor();
+    const Cursor& noDropCursor();
+    const Cursor& progressCursor();
+    const Cursor& aliasCursor();
+    const Cursor& copyCursor();
+    const Cursor& noneCursor();
 
 } // namespace WebCore
 

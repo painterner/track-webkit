@@ -31,8 +31,9 @@ namespace KJS {
 
     class Node;
     class ProgramNode;
-    class UChar;
     class UString;
+
+    struct UChar;
 
     /**
      * @internal
@@ -47,6 +48,8 @@ namespace KJS {
             const UChar* code, unsigned length,
             int* sourceId = 0, int* errLine = 0, UString* errMsg = 0);
 
+        static UString prettyPrint(const UString&);
+        
         static void accept(PassRefPtr<ProgramNode>);
 
         static void saveNewNode(Node*);

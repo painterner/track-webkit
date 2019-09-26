@@ -57,6 +57,8 @@
 #define WebKitBackForwardCacheExpirationIntervalKey @"WebKitBackForwardCacheExpirationIntervalKey"
 #define WebKitTabToLinksPreferenceKey @"WebKitTabToLinksPreferenceKey"
 #define WebKitPrivateBrowsingEnabledPreferenceKey @"WebKitPrivateBrowsingEnabled"
+#define WebContinuousSpellCheckingEnabled @"WebContinuousSpellCheckingEnabled"
+#define WebGrammarCheckingEnabled @"WebGrammarCheckingEnabled"
 
 // These are private both because callers should be using the cover methods and because the
 // cover methods themselves are private.
@@ -64,12 +66,9 @@
 #define WebKitShowsURLsInToolTipsPreferenceKey @"WebKitShowsURLsInToolTips"
 #define WebKitPDFDisplayModePreferenceKey @"WebKitPDFDisplayMode"
 #define WebKitPDFScaleFactorPreferenceKey @"WebKitPDFScaleFactor"
+#define WebKitUsePDFPreviewViewPreferenceKey @"WebKitUsePDFPreviewView"
+#define WebKitEditableLinkBehaviorPreferenceKey @"WebKitEditableLinkBehavior"
 
-
-// Window display is throttled to 60 frames per second if WebKitThrottleWindowDisplayPreferenceKey
-// is set to YES.  The window display throttle is OFF by default for compatibility with Mac OS X
-// 10.4.6.
-#define WebKitThrottleWindowDisplayPreferenceKey @"WebKitThrottleWindowDisplay"
 
 // CoreGraphics deferred updates are disabled if WebKitEnableCoalescedUpdatesPreferenceKey is set
 // to NO, or has no value.  For compatibility with Mac OS X 10.4.6, deferred updates are OFF by

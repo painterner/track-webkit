@@ -39,10 +39,11 @@
 
 namespace KJS {
 
-class ClassInfo;
 class ExecState;
 class JSObject;
 class JSCell;
+
+struct ClassInfo;
 
 /**
  * JSValue is the base type for all primitives (Undefined, Null, Boolean,
@@ -93,11 +94,12 @@ public:
     JSObject *toObject(ExecState *exec) const;
 
     // Integer conversions.
-    double toInteger(ExecState *exec) const;
+    double toInteger(ExecState*) const;
     int32_t toInt32(ExecState*) const;
     int32_t toInt32(ExecState*, bool& ok) const;
-    uint32_t toUInt32(ExecState *exec) const;
-    uint16_t toUInt16(ExecState *exec) const;
+    uint32_t toUInt32(ExecState*) const;
+    uint32_t toUInt32(ExecState*, bool& ok) const;
+    uint16_t toUInt16(ExecState*) const;
 
     // Garbage collection.
     void mark();
@@ -107,7 +109,6 @@ private:
     // Implementation details.
     JSCell *downcast();
     const JSCell *downcast() const;
-    inline int32_t toInt32Inline(ExecState*, bool& ok) const;
 
     // Give a compile time error if we try to copy one of these.
     JSValue(const JSValue&);

@@ -30,17 +30,17 @@ module window {
     interface [LegacyParent=KJS::Window, DoNotCache] DOMWindow {
         // DOM Level 2 AbstractView Interface
         readonly attribute Document document;
-        
+
         // DOM Level 2 Style Interface
-        CSSStyleDeclaration getComputedStyle(in Element elt,
-                                             in DOMString pseudoElt);
+        CSSStyleDeclaration getComputedStyle(in Element element,
+                                             in DOMString pseudoElement);
 
         // WebKit extensions
-        CSSRuleList getMatchedCSSRules(in Element elt,
-                                       in DOMString pseudoElt,
+        CSSRuleList getMatchedCSSRules(in Element element,
+                                       in DOMString pseudoElement,
                                        in [Optional] boolean authorOnly);
         readonly attribute double devicePixelRatio;
-        
+
         // Global constructors
         attribute CSSPrimitiveValueConstructor CSSPrimitiveValue;
         attribute CSSRuleConstructor CSSRule;
@@ -57,13 +57,14 @@ module window {
         attribute NodeConstructor Node;
         attribute NodeFilterConstructor NodeFilter;
         attribute RangeConstructor Range;
-        
+        attribute RangeExceptionConstructor RangeException;
+
         // Mozilla has a separate XMLDocument object for XML documents. 
         // We just use Document for this.
         attribute DocumentConstructor XMLDocument;
-        
+
         attribute XMLSerializerConstructor XMLSerializer;
-        
+
 #ifdef XPATH_SUPPORT
         attribute XPathEvaluatorConstructor XPathEvaluator;
         attribute XPathResultConstructor XPathResult;

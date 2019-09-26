@@ -25,9 +25,10 @@
 #include "config.h"
 #include "MouseRelatedEvent.h"
 
-#include "AtomicString.h"
+#include "DOMWindow.h"
 #include "Document.h"
 #include "Frame.h"
+#include "FrameView.h"
 #include "Node.h"
 #include "RenderLayer.h"
 #include "RenderObject.h"
@@ -118,14 +119,16 @@ void MouseRelatedEvent::initCoordinates(int clientX, int clientY)
 
 void MouseRelatedEvent::receivedTarget()
 {
+    ASSERT(target());
+    Node* targ = target()->toNode();
+    if (!targ)
+        return;
+
     // Compute coordinates that are based on the target.
     m_layerX = m_pageX;
     m_layerY = m_pageY;
     m_offsetX = m_pageX;
     m_offsetY = m_pageY;
-
-    Node* targ = target();
-    ASSERT(targ);
 
     // Must have an updated render tree for this math to work correctly.
     targ->document()->updateRendering();

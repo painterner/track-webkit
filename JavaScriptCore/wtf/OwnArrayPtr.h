@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef KXMLCORE_OWN_ARRAY_PTR_H
-#define KXMLCORE_OWN_ARRAY_PTR_H
+#ifndef WTF_OwnArrayPtr_h
+#define WTF_OwnArrayPtr_h
 
 #include <algorithm>
 #include <wtf/Assertions.h>
@@ -60,8 +60,13 @@ namespace WTF {
     
     template <typename T> inline void swap(OwnArrayPtr<T>& a, OwnArrayPtr<T>& b) { a.swap(b); }
 
+    template <typename T> inline T* getPtr(const OwnArrayPtr<T>& p)
+    {
+        return p.get();
+    }
+
 } // namespace WTF
 
 using WTF::OwnArrayPtr;
 
-#endif // KXMLCORE_OWN_ARRAY_PTR_H
+#endif // WTF_OwnArrayPtr_h

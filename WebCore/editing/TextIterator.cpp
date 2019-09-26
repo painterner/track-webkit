@@ -27,6 +27,7 @@
 #include "config.h"
 #include "TextIterator.h"
 
+#include "CharacterNames.h"
 #include "Document.h"
 #include "Element.h"
 #include "HTMLNames.h"
@@ -38,12 +39,11 @@
 #include "RenderTableRow.h"
 
 using namespace std;
+using namespace WTF::Unicode;
 
 namespace WebCore {
 
 using namespace HTMLNames;
-
-const UChar nonBreakingSpace = 0xA0;
 
 // Buffer that knows how to compare with a search target.
 // Keeps enough of the previous text to be able to search in the future,
@@ -91,6 +91,10 @@ TextIterator::TextIterator(const Range *r, IteratorKind kind) : m_endContainer(0
     int endOffset = r->endOffset(ec);
     if (ec != 0)
         return;
+
+    // Callers should be handing us well-formed ranges. If we discover that this isn't
+    // the case, we could consider changing this assertion to an early return.
+    ASSERT(r->boundaryPointsValid());
 
     // remember ending place - this does not change
     m_endContainer = endContainer;
@@ -157,7 +161,7 @@ void TextIterator::advance()
                 // FIXME: What about CDATA_SECTION_NODE?
                 if (renderer->style()->visibility() == VISIBLE)
                     m_handledNode = handleTextNode();
-            } else if (renderer && (renderer->isImage() || renderer->isWidget())) {
+            } else if (renderer && (renderer->isImage() || renderer->isWidget() || (renderer->element() && renderer->element()->isControl()))) {
                 if (renderer->style()->visibility() == VISIBLE)
                     m_handledNode = handleReplacedElement();
             } else
@@ -656,7 +660,7 @@ void SimplifiedBackwardsTextIterator::advance()
             Node *block = m_node->enclosingBlockFlowElement();
             if (block) {
                 Node *nextBlock = next->enclosingBlockFlowElement();
-                if (nextBlock && nextBlock->isAncestor(block))
+                if (nextBlock && nextBlock->isDescendantOf(block))
                     emitNewline();
             }
         }
@@ -678,7 +682,7 @@ bool SimplifiedBackwardsTextIterator::handleTextNode()
     m_lastTextNode = m_node;
 
     RenderText *renderer = static_cast<RenderText *>(m_node->renderer());
-    String str = m_node->nodeValue();
+    String str = renderer->string();
 
     if (!renderer->firstTextBox() && str.length() > 0)
         return true;
@@ -799,6 +803,11 @@ PassRefPtr<Range> CharacterIterator::range() const
 
 void CharacterIterator::advance(int count)
 {
+    if (count <= 0) {
+        ASSERT(count == 0);
+        return;
+    }
+    
     m_atBreak = false;
 
     // easy if there is enough left in the current m_textIterator run
@@ -946,7 +955,7 @@ CircularSearchBuffer::CircularSearchBuffer(const String& s, bool isCaseSensitive
 
     if (!isCaseSensitive)
         m_target = s.foldCase();
-    m_target.replace(nonBreakingSpace, ' ');
+    m_target.replace(noBreakSpace, ' ');
     m_isCaseSensitive = isCaseSensitive;
 
     m_buffer = static_cast<UChar*>(fastMalloc(s.length() * sizeof(UChar)));
@@ -957,9 +966,9 @@ CircularSearchBuffer::CircularSearchBuffer(const String& s, bool isCaseSensitive
 void CircularSearchBuffer::append(UChar c)
 {
     if (m_isCaseSensitive)
-        *m_cursor++ = c == nonBreakingSpace ? ' ' : c;
+        *m_cursor++ = c == noBreakSpace ? ' ' : c;
     else
-        *m_cursor++ = c == nonBreakingSpace ? ' ' : u_foldCase(c, U_FOLD_CASE_DEFAULT);
+        *m_cursor++ = c == noBreakSpace ? ' ' : foldCase(c);
     if (m_cursor == m_buffer + length()) {
         m_cursor = m_buffer;
         m_bufferFull = true;
@@ -979,12 +988,12 @@ void CircularSearchBuffer::append(int count, const UChar* characters)
     if (m_isCaseSensitive) {
         for (int i = 0; i != count; ++i) {
             UChar c = characters[i];
-            m_cursor[i] = c == nonBreakingSpace ? ' ' : c;
+            m_cursor[i] = c == noBreakSpace ? ' ' : c;
         }
     } else {
         for (int i = 0; i != count; ++i) {
             UChar c = characters[i];
-            m_cursor[i] = c == nonBreakingSpace ? ' ' : u_foldCase(c, U_FOLD_CASE_DEFAULT);
+            m_cursor[i] = c == noBreakSpace ? ' ' : foldCase(c);
         }
     }
     if (count < tailSpace)
@@ -1019,9 +1028,25 @@ int TextIterator::rangeLength(const Range *r)
     return length;
 }
 
-PassRefPtr<Range> TextIterator::rangeFromLocationAndLength(Document *doc, int rangeLocation, int rangeLength)
+PassRefPtr<Range> TextIterator::subrange(Range* entireRange, int characterOffset, int characterCount)
 {
-    RefPtr<Range> resultRange = doc->createRange();
+    ExceptionCode ec = 0;
+    
+    PassRefPtr<Range> result(entireRange);
+    CharacterIterator chars(entireRange);
+    chars.advance(characterOffset);
+    result->setStart(chars.range()->startContainer(ec), chars.range()->startOffset(ec), ec);
+    ASSERT(ec == 0);
+    chars.advance(characterCount);
+    result->setEnd(chars.range()->startContainer(ec), chars.range()->startOffset(ec), ec);
+    ASSERT(ec == 0);
+    
+    return result;
+}
+
+PassRefPtr<Range> TextIterator::rangeFromLocationAndLength(Element *scope, int rangeLocation, int rangeLength)
+{
+    RefPtr<Range> resultRange = scope->document()->createRange();
 
     int docTextPosition = 0;
     int rangeEnd = rangeLocation + rangeLength;
@@ -1029,9 +1054,9 @@ PassRefPtr<Range> TextIterator::rangeFromLocationAndLength(Document *doc, int ra
 
     RefPtr<Range> textRunRange;
 
-    TextIterator it(rangeOfContents(doc).get());
+    TextIterator it(rangeOfContents(scope).get());
     
-    // FIXME: the atEnd() check shouldn't be necessary, workaround for <http://bugzilla.opendarwin.org/show_bug.cgi?id=6289>.
+    // FIXME: the atEnd() check shouldn't be necessary, workaround for <http://bugs.webkit.org/show_bug.cgi?id=6289>.
     if (rangeLocation == 0 && rangeLength == 0 && it.atEnd()) {
         int exception = 0;
         textRunRange = it.range();

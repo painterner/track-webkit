@@ -1,6 +1,7 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
+    Copyright (C) 2007 Eric Seidel <eric@webkit.org>
 
     This file is part of the KDE project
 
@@ -20,8 +21,8 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGAnimationElementImpl_H
-#define KSVG_SVGAnimationElementImpl_H
+#ifndef SVGAnimationElement_H
+#define SVGAnimationElement_H
 #ifdef SVG_SUPPORT
 
 #include "SVGExternalResourcesRequired.h"
@@ -75,44 +76,44 @@ namespace WebCore {
     };
 
     class SVGAnimationElement : public SVGElement,
-                                    public SVGTests,
-                                    public SVGExternalResourcesRequired
+                                public SVGTests,
+                                public SVGExternalResourcesRequired
     {
     public:
         SVGAnimationElement(const QualifiedName&, Document*);
         virtual ~SVGAnimationElement();
 
         // 'SVGAnimationElement' functions
-        SVGElement *targetElement() const;
+        SVGElement* targetElement() const;
+        
+        virtual bool hasValidTarget() const;
         
         virtual bool isValid() const { return SVGTests::isValid(); }
 
         double getEndTime() const;
         double getStartTime() const;
         double getCurrentTime() const;
-        double getSimpleDuration() const;
+        double getSimpleDuration(ExceptionCode&) const;
     
-        virtual void parseMappedAttribute(MappedAttribute *attr);
-        virtual bool rendererIsNeeded(RenderStyle *) { return false; }
+        virtual void parseMappedAttribute(MappedAttribute* attr);
+        virtual bool rendererIsNeeded(RenderStyle*) { return false; }
 
         virtual void closeRenderer();
 
         // Helpers
-        virtual void handleTimerEvent(double timePercentage) = 0;
+        bool updateForElapsedSeconds(double);
+        void handleTimerEvent(double timePercentage);
 
-        double parseClockValue(const DeprecatedString &data) const;
+        double parseClockValue(const String&) const;
 
         String targetAttribute() const;
-        void setTargetAttribute(StringImpl *value);
+        void setTargetAttribute(const String&);
 
-        static void setTargetAttribute(SVGElement *target,
-                                       StringImpl *name,
-                                       StringImpl *value,
-                                       EAttributeType type = ATTRIBUTETYPE_AUTO);
+        static void setTargetAttribute(SVGElement* target, const String& name, const String& value, EAttributeType = ATTRIBUTETYPE_AUTO);
 
-        DeprecatedString attributeName() const;
+        String attributeName() const;
 
-        bool connected() const;
+        bool connectedToTimer() const;
 
         bool isFrozen() const;
         bool isAdditive() const;
@@ -127,9 +128,19 @@ namespace WebCore {
         bool isIndefinite(double value) const;
 
     protected:
-        mutable SVGElement *m_targetElement;
+        mutable SVGElement* m_targetElement;
+        
+        void connectTimer();
+        void disconnectTimer();
+        
+        virtual bool updateCurrentValue(double timePercentage) = 0;
+        virtual bool handleStartCondition() = 0;
+        virtual void updateLastValueWithCurrent() { } // See bug 12075 for explaination of why this is a bad API
+        virtual void resetValues() { }
 
-        bool m_connected : 1;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired)
+
+        bool m_connectedToTimer : 1;
         
         double m_currentTime;
         double m_simpleDuration;
@@ -142,19 +153,19 @@ namespace WebCore {
         unsigned m_accumulate : 1; // EAccumulateMode
         unsigned m_attributeType : 2; // EAttributeType
         
-        DeprecatedString m_to;
-        DeprecatedString m_by;
-        DeprecatedString m_from;
-        DeprecatedString m_href;
-        DeprecatedString m_repeatDur;
-        DeprecatedString m_attributeName;
+        String m_to;
+        String m_by;
+        String m_from;
+        String m_href;
+        String m_repeatDur;
+        String m_attributeName;
 
         double m_max;
         double m_min;
         double m_end;
         double m_begin;
 
-        double m_repeations;
+        double m_repetitions;
         double m_repeatCount;
 
         RefPtr<SVGStringList> m_values;
@@ -165,6 +176,6 @@ namespace WebCore {
 } // namespace WebCore
 
 #endif // SVG_SUPPORT
-#endif // KSVG_SVGAnimationElementImpl_H
+#endif // SVGAnimationElement_H
 
 // vim:ts=4:noet

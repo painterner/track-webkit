@@ -76,11 +76,21 @@ static const int computedProperties[] = {
     CSS_PROP__WEBKIT_BOX_ORDINAL_GROUP,
     CSS_PROP__WEBKIT_BOX_ORIENT,
     CSS_PROP__WEBKIT_BOX_PACK,
+    CSS_PROP__WEBKIT_BOX_SHADOW,
     CSS_PROP_CAPTION_SIDE,
     CSS_PROP_CLEAR,
     CSS_PROP_COLOR,
+    CSS_PROP__WEBKIT_COLUMN_COUNT,
+    CSS_PROP__WEBKIT_COLUMN_GAP,
+    CSS_PROP__WEBKIT_COLUMN_RULE_COLOR,
+    CSS_PROP__WEBKIT_COLUMN_RULE_STYLE,
+    CSS_PROP__WEBKIT_COLUMN_RULE_WIDTH,
+    CSS_PROP__WEBKIT_COLUMN_BREAK_BEFORE,
+    CSS_PROP__WEBKIT_COLUMN_BREAK_AFTER,
+    CSS_PROP__WEBKIT_COLUMN_BREAK_INSIDE,
+    CSS_PROP__WEBKIT_COLUMN_WIDTH,
     CSS_PROP_CURSOR,
-#if __APPLE__
+#if PLATFORM(MAC)
     CSS_PROP__WEBKIT_DASHBOARD_REGION,
 #endif
     CSS_PROP_DIRECTION,
@@ -117,6 +127,7 @@ static const int computedProperties[] = {
     CSS_PROP__WEBKIT_NBSP_MODE,
     CSS_PROP_OPACITY,
     CSS_PROP_ORPHANS,
+    CSS_PROP_OUTLINE_COLOR,
     CSS_PROP_OUTLINE_STYLE,
     CSS_PROP_OVERFLOW_X,
     CSS_PROP_OVERFLOW_Y,
@@ -134,8 +145,12 @@ static const int computedProperties[] = {
     CSS_PROP_TEXT_ALIGN,
     CSS_PROP_TEXT_DECORATION,
     CSS_PROP__WEBKIT_TEXT_DECORATIONS_IN_EFFECT,
+    CSS_PROP__WEBKIT_TEXT_FILL_COLOR,
     CSS_PROP_TEXT_INDENT,
     CSS_PROP_TEXT_SHADOW,
+    CSS_PROP__WEBKIT_TEXT_SECURITY,
+    CSS_PROP__WEBKIT_TEXT_STROKE_COLOR,
+    CSS_PROP__WEBKIT_TEXT_STROKE_WIDTH,
     CSS_PROP_TEXT_TRANSFORM,
     CSS_PROP_TOP,
     CSS_PROP_UNICODE_BIDI,
@@ -158,15 +173,13 @@ static CSSValue* valueForLength(const Length& length)
         case Auto:
             return new CSSPrimitiveValue(CSS_VAL_AUTO);
         case WebCore::Fixed:
-            if (length.value() == undefinedLength)
-                return new CSSPrimitiveValue(CSS_VAL_NONE);
             return new CSSPrimitiveValue(length.value(), CSSPrimitiveValue::CSS_PX);
         case Intrinsic:
             return new CSSPrimitiveValue(CSS_VAL_INTRINSIC);
         case MinIntrinsic:
             return new CSSPrimitiveValue(CSS_VAL_MIN_INTRINSIC);
         case Percent:
-            return new CSSPrimitiveValue(length.value(), CSSPrimitiveValue::CSS_PERCENTAGE);
+            return new CSSPrimitiveValue(length.percent(), CSSPrimitiveValue::CSS_PERCENTAGE);
         case Relative:
         case Static:
             // Should never be reached.
@@ -174,6 +187,14 @@ static CSSValue* valueForLength(const Length& length)
     }
     // Should never be reached, but if we do, just return "auto".
     return new CSSPrimitiveValue(CSS_VAL_AUTO);
+}
+
+// Handles special value for "none".
+static CSSValue* valueForMaxLength(const Length& length)
+{
+    if (length.isFixed() && length.value() == undefinedLength)
+        return new CSSPrimitiveValue(CSS_VAL_NONE);
+    return valueForLength(length);
 }
 
 static CSSValue *valueForBorderStyle(EBorderStyle style)
@@ -282,6 +303,13 @@ static CSSValue *getPositionOffsetValue(RenderObject *renderer, int propertyID)
     return new CSSPrimitiveValue(CSS_VAL_AUTO);
 }
 
+static CSSPrimitiveValue* currentColorOrValidColor(RenderStyle* style, const Color& color)
+{
+    if (!color.isValid())
+        return new CSSPrimitiveValue(style->color().rgb());
+    return new CSSPrimitiveValue(color.rgb());
+}
+
 CSSComputedStyleDeclaration::CSSComputedStyleDeclaration(PassRefPtr<Node> n)
     : m_node(n)
 {
@@ -328,7 +356,7 @@ CSSPrimitiveValue* primitiveValueFromLength(Length length, RenderObject* rendere
 {
     String string;
     if (length.isPercent())
-        string = numberAsString(length.value()) + "%";
+        string = numberAsString(length.percent()) + "%";
     else if (length.isFixed())
         string = numberAsString(length.calcMinValue(0));
     else if (length.isAuto())
@@ -434,13 +462,13 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
         String string;
         Length length(style->backgroundXPosition());
         if (length.isPercent())
-            string = numberAsString(length.value()) + "%";
+            string = numberAsString(length.percent()) + "%";
         else
             string = numberAsString(length.calcMinValue(renderer->contentWidth()));
         string += " ";
         length = style->backgroundYPosition();
         if (length.isPercent())
-            string += numberAsString(length.value()) + "%";
+            string += numberAsString(length.percent()) + "%";
         else
             string += numberAsString(length.calcMinValue(renderer->contentWidth()));
         return new CSSPrimitiveValue(string, CSSPrimitiveValue::CSS_STRING);
@@ -449,7 +477,7 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
         return valueForLength(style->backgroundXPosition());
     case CSS_PROP_BACKGROUND_POSITION_Y:
         return valueForLength(style->backgroundYPosition());
-#ifndef KHTML_NO_XBL
+#ifdef XBL_SUPPORT
     case CSS_PROP__WEBKIT_BINDING:
         // FIXME: unimplemented
         break;
@@ -469,13 +497,13 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
     case CSS_PROP__WEBKIT_BORDER_VERTICAL_SPACING:
         return new CSSPrimitiveValue(style->verticalBorderSpacing(), CSSPrimitiveValue::CSS_PX);
     case CSS_PROP_BORDER_TOP_COLOR:
-        return new CSSPrimitiveValue(style->borderLeftColor().rgb());
+        return currentColorOrValidColor(style, style->borderTopColor());
     case CSS_PROP_BORDER_RIGHT_COLOR:
-        return new CSSPrimitiveValue(style->borderRightColor().rgb());
+        return currentColorOrValidColor(style, style->borderRightColor());
     case CSS_PROP_BORDER_BOTTOM_COLOR:
-        return new CSSPrimitiveValue(style->borderBottomColor().rgb());
+        return currentColorOrValidColor(style, style->borderBottomColor());
     case CSS_PROP_BORDER_LEFT_COLOR:
-        return new CSSPrimitiveValue(style->borderLeftColor().rgb());
+        return currentColorOrValidColor(style, style->borderLeftColor());
     case CSS_PROP_BORDER_TOP_STYLE:
         return valueForBorderStyle(style->borderTopStyle());
     case CSS_PROP_BORDER_RIGHT_STYLE:
@@ -560,6 +588,8 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
         }
         ASSERT_NOT_REACHED();
         return 0;
+    case CSS_PROP__WEBKIT_BOX_SHADOW:
+        return valueForShadow(style->boxShadow());
     case CSS_PROP_CAPTION_SIDE:
         switch (style->captionSide()) {
             case CAPLEFT:
@@ -591,66 +621,182 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
         break;
     case CSS_PROP_COLOR:
         return new CSSPrimitiveValue(style->color().rgb());
+    case CSS_PROP__WEBKIT_COLUMN_COUNT:
+        if (style->hasAutoColumnCount())
+            return new CSSPrimitiveValue(CSS_VAL_AUTO);
+        return new CSSPrimitiveValue(style->columnCount(), CSSPrimitiveValue::CSS_NUMBER);
+    case CSS_PROP__WEBKIT_COLUMN_GAP:
+        if (style->hasNormalColumnGap())
+            return new CSSPrimitiveValue(CSS_VAL_NORMAL);
+        return new CSSPrimitiveValue(style->columnGap(), CSSPrimitiveValue::CSS_NUMBER);
+    case CSS_PROP__WEBKIT_COLUMN_RULE_COLOR:
+        return currentColorOrValidColor(style, style->columnRuleColor());
+    case CSS_PROP__WEBKIT_COLUMN_RULE_STYLE:
+        return valueForBorderStyle(style->columnRuleStyle());
+    case CSS_PROP__WEBKIT_COLUMN_RULE_WIDTH:
+        return new CSSPrimitiveValue(style->columnRuleWidth(), CSSPrimitiveValue::CSS_PX);
+    case CSS_PROP__WEBKIT_COLUMN_BREAK_AFTER:
+        switch (style->columnBreakAfter()) {
+            case PBAUTO:
+                return new CSSPrimitiveValue(CSS_VAL_AUTO);
+            case PBALWAYS:
+                return new CSSPrimitiveValue(CSS_VAL_ALWAYS);
+            case PBAVOID:
+                return new CSSPrimitiveValue(CSS_VAL_AVOID);
+        }
+        ASSERT_NOT_REACHED();
+        return 0;
+    case CSS_PROP__WEBKIT_COLUMN_BREAK_BEFORE:
+        switch (style->columnBreakBefore()) {
+            case PBAUTO:
+                return new CSSPrimitiveValue(CSS_VAL_AUTO);
+            case PBALWAYS:
+                return new CSSPrimitiveValue(CSS_VAL_ALWAYS);
+            case PBAVOID:
+                return new CSSPrimitiveValue(CSS_VAL_AVOID);
+        }
+        ASSERT_NOT_REACHED();
+        return 0;
+    case CSS_PROP__WEBKIT_COLUMN_BREAK_INSIDE:
+        switch (style->columnBreakInside()) {
+            case PBAUTO:
+                return new CSSPrimitiveValue(CSS_VAL_AUTO);
+            case PBAVOID:
+                return new CSSPrimitiveValue(CSS_VAL_AVOID);
+            case PBALWAYS:
+                break; // not allowed
+        }
+        ASSERT_NOT_REACHED();
+        return 0;
+    case CSS_PROP__WEBKIT_COLUMN_WIDTH:
+        if (style->hasAutoColumnWidth())
+            return new CSSPrimitiveValue(CSS_VAL_AUTO);
+        return new CSSPrimitiveValue(style->columnWidth(), CSSPrimitiveValue::CSS_NUMBER);
     case CSS_PROP_CONTENT:
         // FIXME: unimplemented
         break;
     case CSS_PROP_COUNTER_INCREMENT:
         // FIXME: unimplemented
+        // Specification says "as specified", which means we'd need to keep a copy of the original CSS list around.
         break;
     case CSS_PROP_COUNTER_RESET:
         // FIXME: unimplemented
+        // Specification says "as specified", which means we'd need to keep a copy of the original CSS list around.
         break;
-    case CSS_PROP_CURSOR:
-        if (style->cursorImage())
-            return new CSSPrimitiveValue(style->cursorImage()->url(), CSSPrimitiveValue::CSS_URI);
+    case CSS_PROP_CURSOR: {
+        CSSValueList* list = 0;
+        CSSValue* value = 0;
+        CursorList* cursors = style->cursors();
+        if (cursors && cursors->size() > 0) {
+            list = new CSSValueList;
+            for (unsigned i = 0; i < cursors->size(); ++i)
+                list->append(new CSSPrimitiveValue((*cursors)[i].cursorImage->url(), CSSPrimitiveValue::CSS_URI));
+        }
         switch (style->cursor()) {
             case CURSOR_AUTO:
-                return new CSSPrimitiveValue(CSS_VAL_AUTO);
+                value = new CSSPrimitiveValue(CSS_VAL_AUTO);
+                break;
             case CURSOR_CROSS:
-                return new CSSPrimitiveValue(CSS_VAL_CROSSHAIR);
+                value = new CSSPrimitiveValue(CSS_VAL_CROSSHAIR);
+                break;
             case CURSOR_DEFAULT:
-                return new CSSPrimitiveValue(CSS_VAL_DEFAULT);
+                value = new CSSPrimitiveValue(CSS_VAL_DEFAULT);
+                break;
             case CURSOR_POINTER:
-                return new CSSPrimitiveValue(CSS_VAL_POINTER);
+                value = new CSSPrimitiveValue(CSS_VAL_POINTER);
+                break;
             case CURSOR_MOVE:
-                return new CSSPrimitiveValue(CSS_VAL_MOVE);
+                value = new CSSPrimitiveValue(CSS_VAL_MOVE);
+                break;
+            case CURSOR_CELL:
+                value = new CSSPrimitiveValue(CSS_VAL_CELL);
+                break;
+            case CURSOR_VERTICAL_TEXT:
+                value = new CSSPrimitiveValue(CSS_VAL_VERTICAL_TEXT);
+                break;
+            case CURSOR_CONTEXT_MENU:
+                value = new CSSPrimitiveValue(CSS_VAL_CONTEXT_MENU);
+                break;
+            case CURSOR_ALIAS:
+                value = new CSSPrimitiveValue(CSS_VAL_ALIAS);
+                break;
+            case CURSOR_COPY:
+                value = new CSSPrimitiveValue(CSS_VAL_COPY);
+                break;
+            case CURSOR_NONE:
+                value = new CSSPrimitiveValue(CSS_VAL_NONE);
+                break;
+            case CURSOR_PROGRESS:
+                value = new CSSPrimitiveValue(CSS_VAL_PROGRESS);
+                break;
+            case CURSOR_NO_DROP:
+                value = new CSSPrimitiveValue(CSS_VAL_NO_DROP);
+                break;
+            case CURSOR_NOT_ALLOWED:
+                value = new CSSPrimitiveValue(CSS_VAL_NOT_ALLOWED);
+                break;
             case CURSOR_E_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_E_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_E_RESIZE);
+                break;
             case CURSOR_NE_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_NE_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_NE_RESIZE);
+                break;
             case CURSOR_NW_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_NW_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_NW_RESIZE);
+                break;
             case CURSOR_N_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_N_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_N_RESIZE);
+                break;
             case CURSOR_SE_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_SE_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_SE_RESIZE);
+                break;
             case CURSOR_SW_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_SW_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_SW_RESIZE);
+                break;
             case CURSOR_S_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_S_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_S_RESIZE);
+                break;
             case CURSOR_W_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_W_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_W_RESIZE);
+                break;
             case CURSOR_EW_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_EW_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_EW_RESIZE);
+                break;
             case CURSOR_NS_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_NS_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_NS_RESIZE);
+                break;
             case CURSOR_NESW_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_NESW_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_NESW_RESIZE);
+                break;
             case CURSOR_NWSE_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_NWSE_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_NWSE_RESIZE);
+                break;
             case CURSOR_COL_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_COL_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_COL_RESIZE);
+                break;
             case CURSOR_ROW_RESIZE:
-                return new CSSPrimitiveValue(CSS_VAL_ROW_RESIZE);
+                value = new CSSPrimitiveValue(CSS_VAL_ROW_RESIZE);
+                break;
             case CURSOR_TEXT:
-                return new CSSPrimitiveValue(CSS_VAL_TEXT);
+                value = new CSSPrimitiveValue(CSS_VAL_TEXT);
+                break;
             case CURSOR_WAIT:
-                return new CSSPrimitiveValue(CSS_VAL_WAIT);
+                value = new CSSPrimitiveValue(CSS_VAL_WAIT);
+                break;
             case CURSOR_HELP:
-                return new CSSPrimitiveValue(CSS_VAL_HELP);
+                value = new CSSPrimitiveValue(CSS_VAL_HELP);
+                break;
+            case CURSOR_ALL_SCROLL:
+                value = new CSSPrimitiveValue(CSS_VAL_ALL_SCROLL);
+                break;
         }
-        ASSERT_NOT_REACHED();
-        return 0;
+        ASSERT(value);
+        if (list) {
+            list->append(value);
+            return list;
+        }
+        return value;
+    }
     case CSS_PROP_DIRECTION:
         switch (style->direction()) {
             case LTR:
@@ -784,7 +930,7 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
         return new CSSPrimitiveValue(style->lineClamp(), CSSPrimitiveValue::CSS_PERCENTAGE);
     case CSS_PROP_LINE_HEIGHT: {
         Length length(style->lineHeight());
-        if (length.value() < 0)
+        if (length.isNegative())
             return new CSSPrimitiveValue(CSS_VAL_NORMAL);
         if (length.isPercent()) {
             // This is imperfect, because it doesn't include the zoom factor and the real computation
@@ -792,7 +938,7 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
             // On the other hand, since font-size doesn't include the zoom factor, we really can't do
             // that here either.
             float fontSize = style->fontDescription().specifiedSize();
-            return new CSSPrimitiveValue((int)(length.value() * fontSize) / 100, CSSPrimitiveValue::CSS_PX);
+            return new CSSPrimitiveValue((int)(length.percent() * fontSize) / 100, CSSPrimitiveValue::CSS_PX);
         }
         else {
             return new CSSPrimitiveValue(length.value(), CSSPrimitiveValue::CSS_PX);
@@ -928,9 +1074,9 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
         ASSERT_NOT_REACHED();
         return 0;
     case CSS_PROP_MAX_HEIGHT:
-        return valueForLength(style->maxHeight());
+        return valueForMaxLength(style->maxHeight());
     case CSS_PROP_MAX_WIDTH:
-        return valueForLength(style->maxWidth());
+        return valueForMaxLength(style->maxWidth());
     case CSS_PROP_MIN_HEIGHT:
         return valueForLength(style->minHeight());
     case CSS_PROP_MIN_WIDTH:
@@ -940,8 +1086,7 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
     case CSS_PROP_ORPHANS:
         return new CSSPrimitiveValue(style->orphans(), CSSPrimitiveValue::CSS_NUMBER);
     case CSS_PROP_OUTLINE_COLOR:
-        // FIXME: unimplemented
-        break;
+        return currentColorOrValidColor(style, style->outlineColor());
     case CSS_PROP_OUTLINE_OFFSET:
         // FIXME: unimplemented
         break;
@@ -1106,15 +1251,36 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
             return new CSSPrimitiveValue(CSS_VAL_NONE);
         return new CSSPrimitiveValue(string, CSSPrimitiveValue::CSS_STRING);
     }
+    case CSS_PROP__WEBKIT_TEXT_FILL_COLOR:
+        return currentColorOrValidColor(style, style->textFillColor());
     case CSS_PROP_TEXT_INDENT:
         return valueForLength(style->textIndent());
     case CSS_PROP_TEXT_SHADOW:
         return valueForShadow(style->textShadow());
+    case CSS_PROP__WEBKIT_TEXT_SECURITY:
+    {
+        switch (style->textSecurity()) {
+            case TSNONE:
+                return new CSSPrimitiveValue(CSS_VAL_NONE);
+            case TSDISC:
+                return new CSSPrimitiveValue(CSS_VAL_DISC);
+            case TSCIRCLE:
+                return new CSSPrimitiveValue(CSS_VAL_CIRCLE);
+            case TSSQUARE:
+                return new CSSPrimitiveValue(CSS_VAL_SQUARE);
+        }
+        ASSERT_NOT_REACHED();
+        return 0;
+    }
     case CSS_PROP__WEBKIT_TEXT_SIZE_ADJUST:
         if (style->textSizeAdjust()) 
             return new CSSPrimitiveValue(CSS_VAL_AUTO);
         else
             return new CSSPrimitiveValue(CSS_VAL_NONE);
+    case CSS_PROP__WEBKIT_TEXT_STROKE_COLOR:
+        return currentColorOrValidColor(style, style->textStrokeColor());
+    case CSS_PROP__WEBKIT_TEXT_STROKE_WIDTH:
+        return new CSSPrimitiveValue(style->textStrokeWidth(), CSSPrimitiveValue::CSS_NUMBER);
     case CSS_PROP_TEXT_TRANSFORM:
         switch (style->textTransform()) {
             case CAPITALIZE:
@@ -1294,10 +1460,10 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
     case CSS_PROP_PADDING:
         // FIXME: unimplemented
         break;
-#if __APPLE__
+#if PLATFORM(MAC)
         case CSS_PROP__WEBKIT_DASHBOARD_REGION: {
-            DeprecatedValueList<StyleDashboardRegion> regions = style->dashboardRegions();
-            unsigned count = regions.count();
+            const Vector<StyleDashboardRegion>& regions = style->dashboardRegions();
+            unsigned count = regions.size();
             if (count == 1 && regions[0].type == StyleDashboardRegion::None)
                 return new CSSPrimitiveValue(CSS_VAL_NONE);
             
@@ -1395,8 +1561,11 @@ const int inheritableProperties[] = {
     CSS_PROP_LINE_HEIGHT,
     CSS_PROP_TEXT_ALIGN,
     CSS_PROP__WEBKIT_TEXT_DECORATIONS_IN_EFFECT,
+    CSS_PROP__WEBKIT_TEXT_FILL_COLOR,
     CSS_PROP_TEXT_INDENT,
     CSS_PROP__WEBKIT_TEXT_SIZE_ADJUST,
+    CSS_PROP__WEBKIT_TEXT_STROKE_COLOR,
+    CSS_PROP__WEBKIT_TEXT_STROKE_WIDTH,
     CSS_PROP_TEXT_TRANSFORM,
     CSS_PROP_ORPHANS,
     CSS_PROP_WHITE_SPACE,
@@ -1405,6 +1574,11 @@ const int inheritableProperties[] = {
 };
 
 const unsigned numInheritableProperties = sizeof(inheritableProperties) / sizeof(inheritableProperties[0]);
+
+void CSSComputedStyleDeclaration::removeComputedInheritablePropertiesFrom(CSSMutableStyleDeclaration* declaration)
+{
+    declaration->removePropertiesInSet(inheritableProperties, numInheritableProperties);
+}
 
 PassRefPtr<CSSMutableStyleDeclaration> CSSComputedStyleDeclaration::copyInheritableProperties() const
 {

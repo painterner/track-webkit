@@ -68,6 +68,7 @@ public:
         { return m_string.endsWith(s.domString(), caseSensitive); }
     
     int toInt(bool* ok = 0) const { return m_string.toInt(ok); }
+    double toDouble(bool* ok = 0) const { return m_string.toDouble(ok); }
     bool percentage(int& p) const { return m_string.percentage(p); }
     Length* toLengthArray(int& len) const { return m_string.toLengthArray(len); }
     Length* toCoordsArray(int& len) const { return m_string.toCoordsArray(len); }
@@ -80,6 +81,10 @@ public:
 #ifdef __OBJC__
     AtomicString(NSString* s) : m_string(add(String(s).impl())) { }
     operator NSString*() const { return m_string; }
+#endif
+#if PLATFORM(SYMBIAN)
+    AtomicString(const TDesC& s) : m_string(add(String(s).impl())) { }
+    operator TPtrC() const { return m_string; }
 #endif
 
     AtomicString(const DeprecatedString&);

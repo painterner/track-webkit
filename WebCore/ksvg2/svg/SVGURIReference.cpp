@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -22,17 +22,13 @@
 
 #include "config.h"
 #ifdef SVG_SUPPORT
-#include "Node.h"
-#include "Attr.h"
+#include "SVGURIReference.h"
 
 #include "SVGNames.h"
-#include "XLinkNames.h"
-#include "SVGHelper.h"
-#include "SVGURIReference.h"
 #include "SVGStyledElement.h"
-#include "SVGAnimatedString.h"
+#include "XLinkNames.h"
 
-using namespace WebCore;
+namespace WebCore {
 
 SVGURIReference::SVGURIReference()
 {
@@ -42,38 +38,32 @@ SVGURIReference::~SVGURIReference()
 {
 }
 
-SVGAnimatedString *SVGURIReference::href() const
-{
-    //const SVGStyledElement *context = dynamic_cast<const SVGStyledElement *>(this);
-    return lazy_create<SVGAnimatedString>(m_href, (const SVGStyledElement *)0); // FIXME: 0 is a hack
-}
+ANIMATED_PROPERTY_DEFINITIONS_WITH_CONTEXT(SVGURIReference, String, String, string, Href, href, XLinkNames::hrefAttr.localName(), m_href)
 
-bool SVGURIReference::parseMappedAttribute(MappedAttribute *attr)
+bool SVGURIReference::parseMappedAttribute(MappedAttribute* attr)
 {
     if (attr->name().matches(XLinkNames::hrefAttr)) {
-        href()->setBaseVal(attr->value().impl());
+        setHrefBaseValue(attr->value());
         return true;
     }
 
     return false;
 }
 
-DeprecatedString SVGURIReference::getTarget(const DeprecatedString &url)
+String SVGURIReference::getTarget(const String& url)
 {
-    if(url.startsWith("url(")) // URI References, ie. fill:url(#target)
-    {
+    if (url.startsWith("url(")) { // URI References, ie. fill:url(#target)
         unsigned int start = url.find('#') + 1;
-        unsigned int end = url.findRev(')');
+        unsigned int end = url.reverseFind(')');
 
-        return url.mid(start, end - start);
-    }
-    else if(url.find('#') > -1) // format is #target
-    {
+        return url.substring(start, end - start);
+    } else if (url.find('#') > -1) { // format is #target
         unsigned int start = url.find('#') + 1;
-        return url.mid(start, url.length() - start);
-    }
-    else // Normal Reference, ie. style="color-profile:changeColor"
+        return url.substring(start, url.length() - start);
+    } else // Normal Reference, ie. style="color-profile:changeColor"
         return url;
+}
+
 }
 
 // vim:ts=4:noet

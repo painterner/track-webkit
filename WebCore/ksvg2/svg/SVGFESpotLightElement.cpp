@@ -18,15 +18,15 @@
  */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGFESpotLightElement.h"
-
-#include "SVGAnimatedNumber.h"
+#include "SVGSpotLightSource.h"
 
 namespace WebCore {
 
-SVGFESpotLightElement::SVGFESpotLightElement(const QualifiedName& tagName, Document *doc) : 
-SVGFELightElement(tagName, doc)
+SVGFESpotLightElement::SVGFESpotLightElement(const QualifiedName& tagName, Document* doc)
+    : SVGFELightElement(tagName, doc)
 {
 }
 
@@ -34,17 +34,20 @@ SVGFESpotLightElement::~SVGFESpotLightElement()
 {
 }
 
-KCLightSource *SVGFESpotLightElement::lightSource() const
+SVGLightSource* SVGFESpotLightElement::lightSource() const
 {
-    KCanvasPoint3F pos(x()->baseVal(), y()->baseVal(), z()->baseVal());
-    //convert lookAt to a direction
-    KCanvasPoint3F direction(pointsAtX()->baseVal() - pos.x(), 
-                             pointsAtY()->baseVal() - pos.y(), 
-                             pointsAtZ()->baseVal() - pos.z());
+    FloatPoint3D pos(x(), y(), z());
+
+    // convert lookAt to a direction
+    FloatPoint3D direction(pointsAtX() - pos.x(), 
+                             pointsAtY() - pos.y(), 
+                             pointsAtZ() - pos.z());
     direction.normalize();
-    return new KCSpotLightSource(pos, direction, specularExponent()->baseVal(), limitingConeAngle()->baseVal());
+    return new SVGSpotLightSource(pos, direction, specularExponent(), limitingConeAngle());
 }
 
 }
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

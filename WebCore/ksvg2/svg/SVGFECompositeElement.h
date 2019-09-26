@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -24,14 +24,11 @@
 #define KSVG_SVGFECompositeElementImpl_H
 #ifdef SVG_SUPPORT
 
+#include "SVGFEComposite.h"
 #include "SVGFilterPrimitiveStandardAttributes.h"
-#include "KCanvasFilters.h"
 
 namespace WebCore
 {
-    class SVGAnimatedString;
-    class SVGAnimatedNumber;
-    class SVGAnimatedEnumeration;
 
     class SVGFECompositeElement : public SVGFilterPrimitiveStandardAttributes
     {
@@ -40,28 +37,23 @@ namespace WebCore
         virtual ~SVGFECompositeElement();
 
         // 'SVGFECompositeElement' functions
-        SVGAnimatedString *in1() const;
-        SVGAnimatedString *in2() const;
-        SVGAnimatedEnumeration *_operator() const;
-        SVGAnimatedNumber *k1() const;
-        SVGAnimatedNumber *k2() const;
-        SVGAnimatedNumber *k3() const;
-        SVGAnimatedNumber *k4() const;
-
         // Derived from: 'Element'
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute* attr);
 
-        virtual KCanvasFEComposite *filterEffect() const;
+        virtual SVGFEComposite* filterEffect() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedString> m_in1;
-        mutable RefPtr<SVGAnimatedString> m_in2;
-        mutable RefPtr<SVGAnimatedEnumeration> m_operator;
-        mutable RefPtr<SVGAnimatedNumber> m_k1;
-        mutable RefPtr<SVGAnimatedNumber> m_k2;
-        mutable RefPtr<SVGAnimatedNumber> m_k3;
-        mutable RefPtr<SVGAnimatedNumber> m_k4;
-        mutable KCanvasFEComposite *m_filterEffect;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFECompositeElement, String, String, In1, in1)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFECompositeElement, String, String, In2, in2)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFECompositeElement, int, int, _operator, _operator)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFECompositeElement, double, double, K1, k1)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFECompositeElement, double, double, K2, k2)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFECompositeElement, double, double, K3, k3)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFECompositeElement, double, double, K4, k4)
+        mutable SVGFEComposite* m_filterEffect;
     };
 
 } // namespace WebCore

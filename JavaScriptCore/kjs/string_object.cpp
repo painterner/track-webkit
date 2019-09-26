@@ -31,7 +31,15 @@
 #include "regexp_object.h"
 #include <wtf/unicode/Unicode.h>
 
-using namespace KJS;
+#if PLATFORM(CF)
+#include <CoreFoundation/CoreFoundation.h>
+#elif PLATFORM(WIN_OS)
+#include <windows.h>
+#endif
+
+using namespace WTF;
+
+namespace KJS {
 
 // ------------------------------ StringInstance ----------------------------
 
@@ -99,7 +107,7 @@ void StringInstance::getPropertyNames(ExecState* exec, PropertyNameArray& proper
 {
   int size = internalValue()->getString().size();
   for (int i = 0; i < size; i++)
-    propertyNames.add(Identifier(UString(i)));
+    propertyNames.add(Identifier(UString::from(i)));
   return JSObject::getPropertyNames(exec, propertyNames);
 }
 
@@ -125,6 +133,7 @@ const ClassInfo StringPrototype::info = {"String", &StringInstance::info, &strin
   toUpperCase           StringProtoFunc::ToUpperCase    DontEnum|Function       0
   toLocaleLowerCase     StringProtoFunc::ToLocaleLowerCase DontEnum|Function    0
   toLocaleUpperCase     StringProtoFunc::ToLocaleUpperCase DontEnum|Function    0
+  localeCompare         StringProtoFunc::LocaleCompare  DontEnum|Function       1
 #
 # Under here: html extension, should only exist if KJS_PURE_ECMA is not defined
 # I guess we need to generate two hashtables in the .lut.h file, and use #ifdef
@@ -276,6 +285,33 @@ static inline UString substituteBackreferences(const UString &replacement, const
 
   return substitutedReplacement;
 }
+
+#if PLATFORM(WIN_OS)
+static inline int localeCompare(const UString& a, const UString& b)
+{
+    return CompareStringW(LOCALE_USER_DEFAULT, 0, 
+                          reinterpret_cast<LPCWSTR>(a.data()), a.size(),
+                          reinterpret_cast<LPCWSTR>(b.data()), b.size());
+}
+#elif PLATFORM(CF)
+static inline int localeCompare(const UString& a, const UString& b)
+{
+    CFStringRef sa = CFStringCreateWithCharactersNoCopy(kCFAllocatorDefault, reinterpret_cast<const UniChar*>(a.data()), a.size(), kCFAllocatorNull);
+    CFStringRef sb = CFStringCreateWithCharactersNoCopy(kCFAllocatorDefault, reinterpret_cast<const UniChar*>(b.data()), b.size(), kCFAllocatorNull);
+    
+    int retval = CFStringCompare(sa, sb, kCFCompareLocalized);
+    
+    CFRelease(sa);
+    CFRelease(sb);
+    
+    return retval;
+}
+#else
+static inline int localeCompare(const UString& a, const UString& b)
+{
+    return compare(a, b);
+}
+#endif
 
 static JSValue *replace(ExecState *exec, const UString &source, JSValue *pattern, JSValue *replacement)
 {
@@ -646,12 +682,12 @@ JSValue *StringProtoFunc::callAsFunction(ExecState *exec, JSObject *thisObj, con
   case ToLocaleLowerCase: { // FIXME: See http://www.unicode.org/Public/UNIDATA/SpecialCasing.txt for locale-sensitive mappings that aren't implemented.
     u = s;
     u.copyForWriting();
-    uint16_t* dataPtr = reinterpret_cast<uint16_t*>(u.rep()->data());
-    uint16_t* destIfNeeded;
+    ::UChar* dataPtr = reinterpret_cast< ::UChar*>(u.rep()->data());
+    ::UChar* destIfNeeded;
 
-    int len = WTF::Unicode::toLower(dataPtr, u.size(), destIfNeeded);
+    int len = Unicode::toLower(dataPtr, u.size(), destIfNeeded);
     if (len >= 0)
-        result = jsString(UString(reinterpret_cast<UChar *>(destIfNeeded ? destIfNeeded : dataPtr), len));
+        result = jsString(UString(reinterpret_cast<UChar*>(destIfNeeded ? destIfNeeded : dataPtr), len));
     else
         result = jsString(s);
 
@@ -662,10 +698,10 @@ JSValue *StringProtoFunc::callAsFunction(ExecState *exec, JSObject *thisObj, con
   case ToLocaleUpperCase: { // FIXME: See http://www.unicode.org/Public/UNIDATA/SpecialCasing.txt for locale-sensitive mappings that aren't implemented.
     u = s;
     u.copyForWriting();
-    uint16_t* dataPtr = reinterpret_cast<uint16_t*>(u.rep()->data());
-    uint16_t* destIfNeeded;
+    ::UChar* dataPtr = reinterpret_cast< ::UChar*>(u.rep()->data());
+    ::UChar* destIfNeeded;
 
-    int len = WTF::Unicode::toUpper(dataPtr, u.size(), destIfNeeded);
+    int len = Unicode::toUpper(dataPtr, u.size(), destIfNeeded);
     if (len >= 0)
         result = jsString(UString(reinterpret_cast<UChar *>(destIfNeeded ? destIfNeeded : dataPtr), len));
     else
@@ -674,6 +710,8 @@ JSValue *StringProtoFunc::callAsFunction(ExecState *exec, JSObject *thisObj, con
     free(destIfNeeded);
     break;
   }
+  case LocaleCompare:
+    return jsNumber(localeCompare(s, a0->toString(exec)));
 #ifndef KJS_PURE_ECMA
   case Big:
     result = jsString("<big>" + s + "</big>");
@@ -752,7 +790,7 @@ JSObject *StringObjectImp::construct(ExecState *exec, const List &args)
 }
 
 // ECMA 15.5.1
-JSValue *StringObjectImp::callAsFunction(ExecState *exec, JSObject */*thisObj*/, const List &args)
+JSValue *StringObjectImp::callAsFunction(ExecState *exec, JSObject* /*thisObj*/, const List &args)
 {
   if (args.isEmpty())
     return jsString("");
@@ -771,7 +809,7 @@ StringObjectFuncImp::StringObjectFuncImp(ExecState*, FunctionPrototype* funcProt
   putDirect(lengthPropertyName, jsNumber(1), DontDelete|ReadOnly|DontEnum);
 }
 
-JSValue *StringObjectFuncImp::callAsFunction(ExecState *exec, JSObject */*thisObj*/, const List &args)
+JSValue *StringObjectFuncImp::callAsFunction(ExecState *exec, JSObject* /*thisObj*/, const List &args)
 {
   UString s;
   if (args.size()) {
@@ -788,4 +826,6 @@ JSValue *StringObjectFuncImp::callAsFunction(ExecState *exec, JSObject */*thisOb
     s = "";
 
   return jsString(s);
+}
+
 }

@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
                   2005 Oliver Hunt <ojh16@student.canterbury.ac.nz>
 
     This library is free software; you can redistribute it and/or
@@ -19,18 +19,16 @@
     Boston, MA 02111-1307, USA.
  */
 
-#ifndef KSVG_SVGFESpecularLightingElementImpl_H
-#define KSVG_SVGFESpecularLightingElementImpl_H
+#ifndef SVGFESpecularLightingElement_H
+#define SVGFESpecularLightingElement_H
 #ifdef SVG_SUPPORT
 
+#include "SVGFESpecularLighting.h"
 #include "SVGFilterPrimitiveStandardAttributes.h"
-#include "KCanvasFilters.h"
 
 namespace WebCore
 {
-    class SVGAnimatedNumber;
-    class SVGAnimatedString;
-    class SVGAnimatedColor;
+    class SVGColor;
     
     class SVGFESpecularLightingElement : public SVGFilterPrimitiveStandardAttributes
     {
@@ -39,28 +37,24 @@ namespace WebCore
         virtual ~SVGFESpecularLightingElement();
         
         // 'SVGFEDiffuseLightingElement' functions
-        SVGAnimatedString *in1() const;
-        SVGAnimatedNumber *specularConstant() const;
-        SVGAnimatedNumber *specularExponent() const;
-        SVGAnimatedNumber *surfaceScale() const;
-        SVGAnimatedNumber *kernelUnitLengthX() const;
-        SVGAnimatedNumber *kernelUnitLengthY() const;
-        SVGAnimatedColor  *lightingColor() const;
-        
         // Derived from: 'Element'
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute* attr);
         
-        virtual KCanvasFESpecularLighting *filterEffect() const;
+        virtual SVGFESpecularLighting* filterEffect() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
+
     private:
-        mutable RefPtr<SVGAnimatedString> m_in1;
-        mutable RefPtr<SVGAnimatedNumber> m_specularConstant;
-        mutable RefPtr<SVGAnimatedNumber> m_specularExponent;
-        mutable RefPtr<SVGAnimatedNumber> m_surfaceScale;
-        mutable RefPtr<SVGAnimatedColor>  m_lightingColor;
-        mutable RefPtr<SVGAnimatedNumber> m_kernelUnitLengthX;
-        mutable RefPtr<SVGAnimatedNumber> m_kernelUnitLengthY;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFESpecularLightingElement, String, String, In1, in1)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFESpecularLightingElement, double, double, SpecularConstant, specularConstant)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFESpecularLightingElement, double, double, SpecularExponent, specularExponent)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFESpecularLightingElement, double, double, SurfaceScale, surfaceScale)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFESpecularLightingElement, SVGColor*, RefPtr<SVGColor>, LightingColor, lightingColor)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFESpecularLightingElement, double, double, KernelUnitLengthX, kernelUnitLengthX)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFESpecularLightingElement, double, double, KernelUnitLengthY, kernelUnitLengthY)
         //need other properties here...
-        mutable KCanvasFESpecularLighting *m_filterEffect;
+        mutable SVGFESpecularLighting* m_filterEffect;
         
         //light management
         void updateLights() const;

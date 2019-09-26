@@ -28,6 +28,10 @@
 #include "ExceptionCode.h"
 #include "RenderText.h"
 
+#ifdef SVG_SUPPORT
+#include "RenderSVGInlineText.h"
+#endif // SVG_SUPPORT
+
 namespace WebCore {
 
 // DOM Section 1.1.1
@@ -52,6 +56,8 @@ Text *Text::splitText(unsigned offset, ExceptionCode& ec)
 {
     ec = 0;
 
+    // FIXME: This does not copy markers
+    
     // INDEX_SIZE_ERR: Raised if the specified offset is negative or greater than
     // the number of 16-bit units in data.
     if (offset > str->length()) {
@@ -149,6 +155,11 @@ bool Text::rendererIsNeeded(RenderStyle *style)
 
 RenderObject *Text::createRenderer(RenderArena *arena, RenderStyle *style)
 {
+#ifdef SVG_SUPPORT
+    if (parentNode()->isSVGElement())
+        return new (arena) RenderSVGInlineText(this, str);
+#endif // SVG_SUPPORT
+    
     return new (arena) RenderText(this, str);
 }
 

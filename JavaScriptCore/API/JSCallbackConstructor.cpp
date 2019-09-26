@@ -24,6 +24,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
+#include <wtf/Platform.h>
 #include "JSCallbackConstructor.h"
 
 #include "APICast.h"
@@ -64,9 +65,9 @@ JSObject* JSCallbackConstructor::construct(ExecState* exec, const List &args)
     JSObjectRef thisRef = toRef(this);
 
     if (m_callback) {
-        size_t argumentCount = args.size();
+        int argumentCount = static_cast<int>(args.size());
         Vector<JSValueRef, 16> arguments(argumentCount);
-        for (size_t i = 0; i < argumentCount; i++)
+        for (int i = 0; i < argumentCount; i++)
             arguments[i] = toRef(args[i]);
         return toJS(m_callback(ctx, thisRef, argumentCount, arguments, toRef(exec->exceptionSlot())));
     }

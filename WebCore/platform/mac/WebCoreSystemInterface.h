@@ -26,35 +26,36 @@
 #ifndef WebCoreSystemInterface_h
 #define WebCoreSystemInterface_h
 
-typedef signed char BOOL;
-
-#ifndef CGGEOMETRY_H_
-typedef struct CGRect CGRect;
-#endif
-
-#ifdef NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES
-typedef struct CGRect NSRect;
-#else
-typedef struct _NSRect NSRect;
-#endif
-
-#ifndef CGGEOMETRY_H_
-typedef struct CGPoint CGPoint;
-#endif
-
-#ifdef NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES
-typedef struct CGPoint NSPoint;
-#else
-typedef struct _NSPoint NSPoint;
-#endif
+#include <ApplicationServices/ApplicationServices.h>
+#include <objc/objc.h>
 
 typedef struct _NSRange NSRange;
 
-#ifndef __OBJC__
-class NSImage;
-class NSMenu;
-class NSString;
-class NSView;
+#ifdef NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES
+typedef struct CGPoint NSPoint;
+typedef struct CGRect NSRect;
+#else
+typedef struct _NSPoint NSPoint;
+typedef struct _NSRect NSRect;
+#endif
+
+#ifdef __OBJC__
+@class NSFont;
+@class NSMutableURLRequest;
+@class NSURLRequest;
+#else
+typedef struct NSDate NSDate;
+typedef struct NSFont NSFont;
+typedef struct NSImage NSImage;
+typedef struct NSMenu NSMenu;
+typedef struct NSMutableURLRequest NSMutableURLRequest;
+typedef struct NSURLRequest NSURLRequest;
+typedef struct NSString NSString;
+typedef struct NSTextFieldCell NSTextFieldCell;
+typedef struct NSURLConnection NSURLConnection;
+typedef struct NSURLResponse NSURLResponse;
+typedef struct NSView NSView;
+typedef struct objc_object *id;
 #endif
 
 #ifdef __cplusplus
@@ -67,8 +68,21 @@ extern "C" {
 
 extern BOOL (*wkCGContextGetShouldSmoothFonts)(CGContextRef);
 extern void (*wkClearGlyphVector)(void* glyphs);
+extern CFReadStreamRef (*wkCreateCustomCFReadStream)(void *(*formCreate)(CFReadStreamRef, void *), 
+    void (*formFinalize)(CFReadStreamRef, void *), 
+    Boolean (*formOpen)(CFReadStreamRef, CFStreamError *, Boolean *, void *), 
+    CFIndex (*formRead)(CFReadStreamRef, UInt8 *, CFIndex, CFStreamError *, Boolean *, void *), 
+    Boolean (*formCanRead)(CFReadStreamRef, void *), 
+    void (*formClose)(CFReadStreamRef, void *), 
+    void (*formSchedule)(CFReadStreamRef, CFRunLoopRef, CFStringRef, void *), 
+    void (*formUnschedule)(CFReadStreamRef, CFRunLoopRef, CFStringRef, void *),
+    void *context);
 extern OSStatus (*wkConvertCharToGlyphs)(void* styleGroup, const UniChar*, unsigned numCharacters, void* glyphs);
+extern id (*wkCreateNSURLConnectionDelegateProxy)(void);
+extern NSString* (*wkCreateURLPasteboardFlavorTypeName)(void);
+extern NSString* (*wkCreateURLNPasteboardFlavorTypeName)(void);
 extern void (*wkDrawBezeledTextFieldCell)(NSRect, BOOL enabled);
+extern void (*wkDrawTextFieldCellFocusRing)(NSTextFieldCell*, NSRect);
 extern void (*wkDrawBezeledTextArea)(NSRect, BOOL enabled);
 extern void (*wkDrawFocusRing)(CGContextRef, CGRect clipRect, CGColorRef, int radius);
 extern BOOL (*wkFontSmoothingModeIsLCD)(int mode);
@@ -84,27 +98,24 @@ extern int (*wkGetGlyphVectorNumGlyphs)(void* glyphVector);
 extern size_t (*wkGetGlyphVectorRecordSize)(void* glyphVector);
 extern NSString* (*wkGetMIMETypeForExtension)(NSString*);
 extern ATSUFontID (*wkGetNSFontATSUFontId)(NSFont*);
+extern double (*wkGetNSURLResponseCalculatedExpiration)(NSURLResponse *response);
+extern NSDate *(*wkGetNSURLResponseLastModifiedDate)(NSURLResponse *response);
+extern BOOL (*wkGetNSURLResponseMustRevalidate)(NSURLResponse *response);
 extern OSStatus (*wkInitializeGlyphVector)(int count, void* glyphs);
 extern NSString* (*wkPathFromFont)(NSFont*);
 extern void (*wkPopupMenu)(NSMenu*, NSPoint location, float width, NSView*, int selectedItem, NSFont*);
 extern void (*wkReleaseStyleGroup)(void* group);
 extern void (*wkSetCGFontRenderingMode)(CGContextRef, NSFont*);
 extern void (*wkSetDragImage)(NSImage*, NSPoint offset);
-extern void (*wkSetPatternPhaseInUserSpace)(CGContextRef, CGPoint point);
+extern void (*wkSetNSURLConnectionDefersCallbacks)(NSURLConnection *, BOOL);
+extern void (*wkSetPatternPhaseInUserSpace)(CGContextRef, CGPoint);
 extern void (*wkSetUpFontCache)(size_t);
 extern void (*wkSignalCFReadStreamEnd)(CFReadStreamRef stream);
-extern void (*wkSignalCFReadStreamHasBytes)(CFReadStreamRef stream);
 extern void (*wkSignalCFReadStreamError)(CFReadStreamRef stream, CFStreamError *error);
-extern CFReadStreamRef (*wkCreateCustomCFReadStream)(void *(*formCreate)(CFReadStreamRef, void *), 
-    void (*formFinalize)(CFReadStreamRef, void *), 
-    Boolean (*formOpen)(CFReadStreamRef, CFStreamError *, Boolean *, void *), 
-    CFIndex (*formRead)(CFReadStreamRef, UInt8 *, CFIndex, CFStreamError *, Boolean *, void *), 
-    Boolean (*formCanRead)(CFReadStreamRef, void *), 
-    void (*formClose)(CFReadStreamRef, void *), 
-    void (*formSchedule)(CFReadStreamRef, CFRunLoopRef, CFStringRef, void *), 
-    void (*formUnschedule)(CFReadStreamRef, CFRunLoopRef, CFStringRef, void *),
-    void *context);
-
+extern void (*wkSignalCFReadStreamHasBytes)(CFReadStreamRef stream);
+extern BOOL (*wkSupportsMultipartXMixedReplace)(NSMutableURLRequest *);
+extern Class (*wkNSURLProtocolClassForReqest)(NSURLRequest *);
+extern float (*wkSecondsSinceLastInputEvent)(void);
 #ifdef __cplusplus
 }
 #endif

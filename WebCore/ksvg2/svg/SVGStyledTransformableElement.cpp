@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,25 +21,25 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "RegularExpression.h"
-#include "DeprecatedStringList.h"
+
+#include "SVGStyledTransformableElement.h"
 
 #include "Attr.h"
-
-#include <kcanvas/RenderPath.h>
-
-#include "SVGHelper.h"
-#include "SVGMatrix.h"
+#include "RegularExpression.h"
+#include "RenderPath.h"
 #include "SVGDocument.h"
-#include "SVGStyledTransformableElement.h"
+#include "AffineTransform.h"
 #include "SVGStyledElement.h"
-#include "SVGAnimatedTransformList.h"
+#include "SVGTransformList.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGStyledTransformableElement::SVGStyledTransformableElement(const QualifiedName& tagName, Document *doc)
-: SVGStyledLocatableElement(tagName, doc), SVGTransformable()
+SVGStyledTransformableElement::SVGStyledTransformableElement(const QualifiedName& tagName, Document* doc)
+    : SVGStyledLocatableElement(tagName, doc)
+    , SVGTransformable()
+    , m_transform(new SVGTransformList)
 {
 }
 
@@ -47,67 +47,58 @@ SVGStyledTransformableElement::~SVGStyledTransformableElement()
 {
 }
 
-SVGAnimatedTransformList *SVGStyledTransformableElement::transform() const
+ANIMATED_PROPERTY_DEFINITIONS(SVGStyledTransformableElement, SVGTransformList*, TransformList, transformList, Transform, transform, SVGNames::transformAttr.localName(), m_transform.get())
+
+AffineTransform SVGStyledTransformableElement::localMatrix() const
 {
-    return lazy_create<SVGAnimatedTransformList>(m_transform, this);
+    return m_localMatrix;
 }
 
-SVGMatrix *SVGStyledTransformableElement::localMatrix() const
+AffineTransform SVGStyledTransformableElement::getCTM() const
 {
-    return lazy_create<SVGMatrix>(m_localMatrix);
+    return SVGTransformable::getCTM(this);
 }
 
-SVGMatrix *SVGStyledTransformableElement::getCTM() const
+AffineTransform SVGStyledTransformableElement::getScreenCTM() const
 {
-    SVGMatrix *ctm = SVGLocatable::getCTM(this);
-
-    if(m_localMatrix)
-        ctm->multiply(m_localMatrix.get());
-
-    return ctm;
+    return SVGTransformable::getScreenCTM(this);
 }
 
-SVGMatrix *SVGStyledTransformableElement::getScreenCTM() const
-{
-    SVGMatrix *ctm = SVGLocatable::getScreenCTM(this);
-
-    if(m_localMatrix)
-        ctm->multiply(m_localMatrix.get());
-
-    return ctm;
-}
-
-void SVGStyledTransformableElement::updateLocalTransform(SVGTransformList *localTransforms)
+void SVGStyledTransformableElement::updateLocalTransform(SVGTransformList* localTransforms)
 {
     // Update cached local matrix
     RefPtr<SVGTransform> localTransform = localTransforms->concatenate();
     if(localTransform) {
         m_localMatrix = localTransform->matrix();
         if (renderer()) {
-            renderer()->setLocalTransform(m_localMatrix->matrix());
+            renderer()->setLocalTransform(m_localMatrix);
             renderer()->setNeedsLayout(true);
         }
     }
 }
 
-void SVGStyledTransformableElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGStyledTransformableElement::parseMappedAttribute(MappedAttribute* attr)
 {
     if (attr->name() == SVGNames::transformAttr) {
-        SVGTransformList *localTransforms = transform()->baseVal();
-        localTransforms->clear();
-        
-        SVGTransformable::parseTransformAttribute(localTransforms, attr->value());
-        updateLocalTransform(localTransforms);
+        SVGTransformList* localTransforms = transformBaseValue();
+
+        ExceptionCode ec = 0;
+        localTransforms->clear(ec);
+ 
+        if (!SVGTransformable::parseTransformAttribute(localTransforms, attr->value()))
+            localTransforms->clear(ec);
+        else
+            updateLocalTransform(localTransforms);
     } else
         SVGStyledLocatableElement::parseMappedAttribute(attr);
 }
 
-SVGElement *SVGStyledTransformableElement::nearestViewportElement() const
+SVGElement* SVGStyledTransformableElement::nearestViewportElement() const
 {
     return SVGTransformable::nearestViewportElement(this);
 }
 
-SVGElement *SVGStyledTransformableElement::farthestViewportElement() const
+SVGElement* SVGStyledTransformableElement::farthestViewportElement() const
 {
     return SVGTransformable::farthestViewportElement(this);
 }
@@ -117,19 +108,15 @@ FloatRect SVGStyledTransformableElement::getBBox() const
     return SVGTransformable::getBBox(this);
 }
 
-SVGMatrix *SVGStyledTransformableElement::getTransformToElement(SVGElement *) const
-{
-    return 0;
-}
-
 void SVGStyledTransformableElement::attach()
 {
     SVGStyledElement::attach();
 
-    if (renderer() && m_localMatrix)
-        renderer()->setLocalTransform(m_localMatrix->matrix());
+    if (renderer() && !m_localMatrix.isIdentity())
+        renderer()->setLocalTransform(m_localMatrix);
 }
 
+}
 
 // vim:ts=4:noet
 #endif // SVG_SUPPORT

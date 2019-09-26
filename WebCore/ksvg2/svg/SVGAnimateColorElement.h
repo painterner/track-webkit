@@ -1,6 +1,7 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
+    Copyright (C) 2007 Eric Seidel <eric@webkit.org>
 
     This file is part of the KDE project
 
@@ -20,27 +21,40 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGAnimateColorElementImpl_H
-#define KSVG_SVGAnimateColorElementImpl_H
+#ifndef SVGAnimateColorElement_H
+#define SVGAnimateColorElement_H
 #ifdef SVG_SUPPORT
 
 #include "SVGAnimationElement.h"
+#include <wtf/RefPtr.h>
 
 namespace WebCore {
+
+    class SVGColor;
 
     class SVGAnimateColorElement : public SVGAnimationElement {
     public:
         SVGAnimateColorElement(const QualifiedName&, Document*);
         virtual ~SVGAnimateColorElement();
 
-        virtual void handleTimerEvent(double timePercentage);
+        void applyAnimationToValue(Color& currentColor);
 
         // Helper
-        Color clampColor(int r, int g, int b) const;
+        Color addColorsAndClamp(const Color&, const Color&);
+        Color clampColor(int r, int g, int b) const; // deprecated
         void calculateColor(double time, int &r, int &g, int &b) const;
 
         Color color() const;
         Color initialColor() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
+        void storeInitialValue();
+        virtual void resetValues();
+        
+        virtual bool updateCurrentValue(double timePercentage);
+        virtual bool handleStartCondition();
+        virtual void updateLastValueWithCurrent();
 
     private:
         Color m_lastColor;

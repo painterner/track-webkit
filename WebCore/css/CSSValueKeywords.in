@@ -266,6 +266,14 @@ crosshair
 default
 pointer
 move
+vertical-text
+cell
+context-menu
+alias
+# copy
+progress
+no-drop
+not-allowed
 e-resize
 ne-resize
 nw-resize
@@ -283,6 +291,8 @@ row-resize
 text
 wait
 help
+all-scroll
+# none
 #
 # CSS_PROP_DIRECTION:
 #
@@ -497,8 +507,10 @@ sliderthumb-horizontal
 sliderthumb-vertical
 caret
 searchfield
-searchfield-results
-searchfield-close
+searchfield-decoration
+searchfield-results-decoration
+searchfield-results-button
+searchfield-cancel-button
 textfield
 textarea
 

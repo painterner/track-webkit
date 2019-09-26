@@ -34,9 +34,9 @@
 namespace WebCore {
 
     class DocLoader;
-    class Decoder;
+    class TextResourceDecoder;
 
-#ifdef KHTML_XSLT
+#ifdef XSLT_SUPPORT
     class CachedXSLStyleSheet : public CachedResource {
     public:
         CachedXSLStyleSheet(DocLoader*, const String& url, CachePolicy, time_t expireDate);
@@ -44,9 +44,8 @@ namespace WebCore {
         const String& sheet() const { return m_sheet; }
         
         virtual void ref(CachedResourceClient*);
-        virtual void deref(CachedResourceClient*);
         
-        virtual void setCharset(const DeprecatedString&);
+        virtual void setEncoding(const String&);
         virtual void data(Vector<char>&, bool allDataReceived);
         virtual void error();
         
@@ -56,7 +55,7 @@ namespace WebCore {
         
     protected:
         String m_sheet;
-        RefPtr<Decoder> m_decoder;
+        RefPtr<TextResourceDecoder> m_decoder;
     };
 
 #endif

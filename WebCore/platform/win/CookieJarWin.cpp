@@ -56,7 +56,7 @@ String cookies(const KURL& url)
     UChar* buffer = new UChar[count];
     InternetGetCookie((UChar*)str.unicode(), 0, buffer, &count);
     String& result = String(buffer, count-1); // Ignore the null terminator.
-    delete buffer;
+    delete[] buffer;
     return result;
 }
 

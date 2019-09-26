@@ -26,11 +26,15 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGRenderStyleDefs_H
-#define KSVG_SVGRenderStyleDefs_H
+#ifndef SVGRenderStyleDefs_H
+#define SVGRenderStyleDefs_H
 #ifdef SVG_SUPPORT
 
-#include "DeprecatedString.h"
+#include "Color.h"
+#include "Path.h"
+#include "PlatformString.h"
+#include "Shared.h"
+#include <wtf/RefPtr.h>
 
 // Helper macros for 'SVGRenderStyle'
 #define SVG_RS_DEFINE_ATTRIBUTE(Data, Type, Name, Initial) \
@@ -44,18 +48,6 @@
     static Data initial##Type() { return Initial; }
 
 namespace WebCore {
-
-    enum EWindRule {
-        WR_NONZERO = 0, WR_EVENODD = 1
-    };
-
-    enum ECapStyle {
-        CS_BUTT = 1, CS_ROUND = 2, CS_SQUARE = 3
-    };
-
-    enum EJoinStyle {
-        JS_MITER = 1, JS_ROUND = 2, JS_BEVEL = 3
-    };
 
     enum ETextAnchor {
         TA_START, TA_MIDDLE, TA_END
@@ -119,7 +111,7 @@ namespace WebCore {
         }
 
         float opacity;
-        SVGPaint *paint;
+        RefPtr<SVGPaint> paint;
 
     private:
         StyleFillData &operator=(const StyleFillData &);
@@ -139,11 +131,11 @@ namespace WebCore {
         float opacity;
         unsigned int miterLimit;
 
-        CSSValue* width;
-        CSSValue* dashOffset;
+        RefPtr<CSSValue> width;
+        RefPtr<CSSValue> dashOffset;
 
-        SVGPaint* paint;
-        CSSValueList* dashArray;
+        RefPtr<SVGPaint> paint;
+        RefPtr<CSSValueList> dashArray;
 
     private:
         StyleStrokeData &operator=(const StyleStrokeData &);
@@ -178,7 +170,7 @@ namespace WebCore {
             return !(*this == other);
         }
 
-        DeprecatedString clipPath;
+        String clipPath;
 
     private:
         StyleClipData &operator=(const StyleClipData &);
@@ -192,7 +184,7 @@ namespace WebCore {
         bool operator==(const StyleMaskData &other) const;
         bool operator!=(const StyleMaskData &other) const { return !(*this == other); }
 
-        DeprecatedString maskElement;
+        String maskElement;
 
     private:
         StyleMaskData &operator=(const StyleMaskData &);
@@ -209,9 +201,9 @@ namespace WebCore {
             return !(*this == other);
         }
 
-        DeprecatedString startMarker;
-        DeprecatedString midMarker;
-        DeprecatedString endMarker;
+        String startMarker;
+        String midMarker;
+        String endMarker;
 
     private:
         StyleMarkerData &operator=(const StyleMarkerData &);
@@ -229,7 +221,7 @@ namespace WebCore {
             return !(*this == other);
         }
 
-        DeprecatedString filter;
+        String filter;
         Color floodColor;
         float floodOpacity;
 

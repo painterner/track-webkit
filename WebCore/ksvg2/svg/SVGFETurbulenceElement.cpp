@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,30 +21,25 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "DeprecatedStringList.h"
-
-#include "Attr.h"
-
-#include <kcanvas/KCanvasResources.h>
-#include <kcanvas/KCanvasFilters.h>
-#include <kcanvas/device/KRenderingDevice.h>
-#include <kcanvas/device/KRenderingPaintServerGradient.h>
-
-#include "ksvg.h"
-#include "SVGHelper.h"
-#include "SVGRenderStyle.h"
 #include "SVGFETurbulenceElement.h"
-#include "SVGAnimatedNumber.h"
-#include "SVGAnimatedEnumeration.h"
-#include "SVGAnimatedInteger.h"
 
-using namespace WebCore;
+#include "SVGParserUtilities.h"
+#include "SVGResourceFilter.h"
 
-SVGFETurbulenceElement::SVGFETurbulenceElement(const QualifiedName& tagName, Document *doc) : 
-SVGFilterPrimitiveStandardAttributes(tagName, doc)
+namespace WebCore {
+
+SVGFETurbulenceElement::SVGFETurbulenceElement(const QualifiedName& tagName, Document* doc)
+    : SVGFilterPrimitiveStandardAttributes(tagName, doc)
+    , m_baseFrequencyX(0.0)
+    , m_baseFrequencyY(0.0)
+    , m_numOctaves(0)
+    , m_seed(0.0)
+    , m_stitchTiles(0)
+    , m_type(0)
+    , m_filterEffect(0)
 {
-    m_filterEffect = 0;
 }
 
 SVGFETurbulenceElement::~SVGFETurbulenceElement()
@@ -52,93 +47,59 @@ SVGFETurbulenceElement::~SVGFETurbulenceElement()
     delete m_filterEffect;
 }
 
-SVGAnimatedNumber *SVGFETurbulenceElement::baseFrequencyX() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_baseFrequencyX, dummy);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGFETurbulenceElement, double, Number, number, BaseFrequencyX, baseFrequencyX, "baseFrequencyX", m_baseFrequencyX)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFETurbulenceElement, double, Number, number, BaseFrequencyY, baseFrequencyY, "baseFrequencyY", m_baseFrequencyY)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFETurbulenceElement, double, Number, number, Seed, seed, SVGNames::seedAttr.localName(), m_seed)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFETurbulenceElement, long, Integer, integer, NumOctaves, numOctaves, SVGNames::numOctavesAttr.localName(), m_numOctaves)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFETurbulenceElement, int, Enumeration, enumeration, StitchTiles, stitchTiles, SVGNames::stitchTilesAttr.localName(), m_stitchTiles)
+ANIMATED_PROPERTY_DEFINITIONS(SVGFETurbulenceElement, int, Enumeration, enumeration, Type, type, SVGNames::typeAttr.localName(), m_type)
 
-SVGAnimatedNumber *SVGFETurbulenceElement::baseFrequencyY() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_baseFrequencyY, dummy);
-}
-
-SVGAnimatedNumber *SVGFETurbulenceElement::seed() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_seed, dummy);
-}
-
-SVGAnimatedInteger *SVGFETurbulenceElement::numOctaves() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedInteger>(m_numOctaves, dummy);
-}
-
-SVGAnimatedEnumeration *SVGFETurbulenceElement::stitchTiles() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedEnumeration>(m_stitchTiles, dummy);
-}
-
-SVGAnimatedEnumeration *SVGFETurbulenceElement::type() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedEnumeration>(m_type, dummy);
-}
-
-void SVGFETurbulenceElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGFETurbulenceElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
-    if (attr->name() == SVGNames::typeAttr)
-    {
-        if(value == "fractalNoise")
-            type()->setBaseVal(SVG_TURBULENCE_TYPE_FRACTALNOISE);
-        else if(value == "turbulence")
-            type()->setBaseVal(SVG_TURBULENCE_TYPE_TURBULENCE);
-    }
-    else if (attr->name() == SVGNames::stitchTilesAttr)
-    {
-        if(value == "stitch")
-            stitchTiles()->setBaseVal(SVG_STITCHTYPE_STITCH);
-        else if(value == "nostitch")
-            stitchTiles()->setBaseVal(SVG_STITCHTYPE_NOSTITCH);
-    }
-    else if (attr->name() == SVGNames::baseFrequencyAttr)
-    {
-        DeprecatedStringList numbers = DeprecatedStringList::split(' ', value.deprecatedString());
-        baseFrequencyX()->setBaseVal(numbers[0].toDouble());
-        if(numbers.count() == 1)
-            baseFrequencyY()->setBaseVal(numbers[0].toDouble());
-        else
-            baseFrequencyY()->setBaseVal(numbers[1].toDouble());
-    }
-    else if (attr->name() == SVGNames::seedAttr)
-        seed()->setBaseVal(value.deprecatedString().toDouble());
+    if (attr->name() == SVGNames::typeAttr) {
+        if (value == "fractalNoise")
+            setTypeBaseValue(SVG_TURBULENCE_TYPE_FRACTALNOISE);
+        else if (value == "turbulence")
+            setTypeBaseValue(SVG_TURBULENCE_TYPE_TURBULENCE);
+    } else if (attr->name() == SVGNames::stitchTilesAttr) {
+        if (value == "stitch")
+            setStitchTilesBaseValue(SVG_STITCHTYPE_STITCH);
+        else if (value == "nostitch")
+            setStitchTilesBaseValue(SVG_STITCHTYPE_NOSTITCH);
+    } else if (attr->name() == SVGNames::baseFrequencyAttr) {
+        double x, y;
+        if (parseNumberOptionalNumber(value, x, y)) {
+            setBaseFrequencyXBaseValue(x);
+            setBaseFrequencyYBaseValue(y);
+        }
+    } else if (attr->name() == SVGNames::seedAttr)
+        setSeedBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::numOctavesAttr)
-        numOctaves()->setBaseVal(value.deprecatedString().toUInt());
+        setNumOctavesBaseValue(value.deprecatedString().toUInt());
     else
         SVGFilterPrimitiveStandardAttributes::parseMappedAttribute(attr);
 }
 
-KCanvasFETurbulence *SVGFETurbulenceElement::filterEffect() const
+SVGFETurbulence* SVGFETurbulenceElement::filterEffect() const
 {
     if (!m_filterEffect)
-        m_filterEffect = static_cast<KCanvasFETurbulence *>(renderingDevice()->createFilterEffect(FE_TURBULENCE));
+        m_filterEffect = static_cast<SVGFETurbulence*>(SVGResourceFilter::createFilterEffect(FE_TURBULENCE));
     if (!m_filterEffect)
         return 0;
     
-    m_filterEffect->setType((KCTurbulanceType)(type()->baseVal() - 1));
+    m_filterEffect->setType((SVGTurbulanceType) type());
     setStandardAttributes(m_filterEffect);
-    m_filterEffect->setBaseFrequencyX(baseFrequencyX()->baseVal());
-    m_filterEffect->setBaseFrequencyY(baseFrequencyY()->baseVal());
-    m_filterEffect->setNumOctaves(numOctaves()->baseVal());
-    m_filterEffect->setSeed(seed()->baseVal());
-    m_filterEffect->setStitchTiles(stitchTiles()->baseVal() == SVG_STITCHTYPE_STITCH);
+    m_filterEffect->setBaseFrequencyX(baseFrequencyX());
+    m_filterEffect->setBaseFrequencyY(baseFrequencyY());
+    m_filterEffect->setNumOctaves(numOctaves());
+    m_filterEffect->setSeed(seed());
+    m_filterEffect->setStitchTiles(stitchTiles() == SVG_STITCHTYPE_STITCH);
     return m_filterEffect;
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

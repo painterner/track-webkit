@@ -21,13 +21,10 @@
 #define KSVG_SVGFEDisplacementMapElementImpl_H
 #ifdef SVG_SUPPORT
 
+#include "SVGFEDisplacementMap.h"
 #include "SVGFilterPrimitiveStandardAttributes.h"
-#include "KCanvasFilters.h"
 
 namespace WebCore {
-    class SVGAnimatedNumber;
-    class SVGAnimatedString;
-    class SVGAnimatedEnumeration;
     
     class SVGFEDisplacementMapElement : public SVGFilterPrimitiveStandardAttributes {
     public:
@@ -35,26 +32,23 @@ namespace WebCore {
         virtual ~SVGFEDisplacementMapElement();
         
         // 'SVGFEDisplacementMapElement' functions
-        SVGAnimatedString* in1() const;
-        SVGAnimatedString* in2() const;
-        SVGAnimatedEnumeration* xChannelSelector() const;
-        SVGAnimatedEnumeration* yChannelSelector() const;
-        SVGAnimatedNumber* scale() const;
-        
-        static KCChannelSelectorType stringToChannel(const String&);
+        static SVGChannelSelectorType stringToChannel(const String&);
         
         // Derived from: 'Element'
         virtual void parseMappedAttribute(MappedAttribute*);
         
-        virtual KCanvasFEDisplacementMap* filterEffect() const;
+        virtual SVGFEDisplacementMap* filterEffect() const;
         
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
+
     private:
-        mutable RefPtr<SVGAnimatedString> m_in1;
-        mutable RefPtr<SVGAnimatedString> m_in2;
-        mutable RefPtr<SVGAnimatedEnumeration> m_xChannelSelector;
-        mutable RefPtr<SVGAnimatedEnumeration> m_yChannelSelector;
-        mutable RefPtr<SVGAnimatedNumber> m_scale;
-        mutable KCanvasFEDisplacementMap* m_filterEffect;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEDisplacementMapElement, String, String, In1, in1)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEDisplacementMapElement, String, String, In2, in2)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEDisplacementMapElement, int, int, XChannelSelector, xChannelSelector)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEDisplacementMapElement, int, int, YChannelSelector, yChannelSelector)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEDisplacementMapElement, double, double, Scale, scale)
+        mutable SVGFEDisplacementMap* m_filterEffect;
     };
 
 } // namespace WebCore

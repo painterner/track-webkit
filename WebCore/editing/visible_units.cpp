@@ -28,11 +28,12 @@
 
 #include "Document.h"
 #include "Element.h"
-#include "RenderBlock.h"
-#include "TextBoundaries.h"
-#include "htmlediting.h"
 #include "HTMLNames.h"
+#include "RenderBlock.h"
+#include "RenderLayer.h"
+#include "TextBoundaries.h"
 #include "TextIterator.h"
+#include "htmlediting.h"
 
 namespace WebCore {
 
@@ -70,9 +71,14 @@ static VisiblePosition previousBoundary(const VisiblePosition &c, unsigned (*sea
     SimplifiedBackwardsTextIterator it(searchRange.get());
     DeprecatedString string;
     unsigned next = 0;
+    bool inTextSecurityMode = start.node() && start.node()->renderer() && start.node()->renderer()->style()->textSecurity() != TSNONE;
     while (!it.atEnd() && it.length() > 0) {
         // iterate to get chunks until the searchFunction returns a non-zero value.
-        string.prepend(reinterpret_cast<const DeprecatedChar*>(it.characters()), it.length());
+        String iteratorString(it.characters(), it.length());
+        // Treat bullets used in the text security mode as regular characters when looking for boundaries
+        if (inTextSecurityMode)
+            iteratorString = iteratorString.impl()->secure('x');
+        string.prepend(iteratorString.deprecatedString());
         next = searchFunction(reinterpret_cast<const UChar*>(string.unicode()), string.length());
         if (next != 0)
             break;
@@ -80,8 +86,7 @@ static VisiblePosition previousBoundary(const VisiblePosition &c, unsigned (*sea
     }
     
     if (it.atEnd() && next == 0) {
-        RefPtr<Range> range(it.range());
-        pos = Position(range->startContainer(exception), range->startOffset(exception));
+        pos = it.range()->startPosition();
     } else if (!it.atEnd() && it.length() == 0) {
         // Got a zero-length chunk.
         // This means we have hit a replaced element.
@@ -140,10 +145,15 @@ static VisiblePosition nextBoundary(const VisiblePosition &c, unsigned (*searchF
     TextIterator it(searchRange.get(), RUNFINDER);
     DeprecatedString string;
     unsigned next = 0;
+    bool inTextSecurityMode = start.node() && start.node()->renderer() && start.node()->renderer()->style()->textSecurity() != TSNONE;
     while (!it.atEnd() && it.length() > 0) {
         // Keep asking the iterator for chunks until the search function
         // returns an end value not equal to the length of the string passed to it.
-        string.append(reinterpret_cast<const DeprecatedChar*>(it.characters()), it.length());
+        String iteratorString(it.characters(), it.length());
+        // Treat bullets used in the text security mode as regular characters when looking for boundaries
+        if (inTextSecurityMode)
+            iteratorString = iteratorString.impl()->secure('x');
+        string.append(iteratorString.deprecatedString());
         next = searchFunction(reinterpret_cast<const UChar*>(string.unicode()), string.length());
         if (next != string.length())
             break;
@@ -151,9 +161,7 @@ static VisiblePosition nextBoundary(const VisiblePosition &c, unsigned (*searchF
     }
     
     if (it.atEnd() && next == string.length()) {
-        RefPtr<Range> range(it.range());
-        int exception = 0;
-        pos = Position(range->startContainer(exception), range->startOffset(exception));
+        pos = it.range()->startPosition();
     } else if (!it.atEnd() && it.length() == 0) {
         // Got a zero-length chunk.
         // This means we have hit a replaced element.
@@ -175,7 +183,7 @@ static VisiblePosition nextBoundary(const VisiblePosition &c, unsigned (*searchF
         // Use the character iterator to translate the next value into a DOM position.
         CharacterIterator charIt(searchRange.get());
         charIt.advance(next - 1);
-        pos = Position(charIt.range()->endContainer(ec), charIt.range()->endOffset(ec));
+        pos = charIt.range()->endPosition();
     }
 
     // generate VisiblePosition, use UPSTREAM affinity if possible
@@ -276,11 +284,20 @@ static RootInlineBox *rootBoxForLine(const VisiblePosition &c)
     return box->root();
 }
 
-VisiblePosition startOfLine(const VisiblePosition &c)
+VisiblePosition startOfLine(const VisiblePosition& c)
 {
-    RootInlineBox *rootBox = rootBoxForLine(c);
-    if (!rootBox)
+    if (c.isNull())
         return VisiblePosition();
+        
+    RootInlineBox *rootBox = rootBoxForLine(c);
+    if (!rootBox) {
+        // There are VisiblePositions at offset 0 in blocks without
+        // RootInlineBoxes, like empty editable blocks and bordered blocks.
+        Position p = c.deepEquivalent();
+        if (p.node()->renderer() && p.node()->renderer()->isRenderBlock() && p.offset() == 0)
+            return c;
+        return VisiblePosition();
+    }
     
     // Generated content (e.g. list markers and CSS :before and :after
     // pseudoelements) have no corresponding DOM element, and so cannot be
@@ -311,11 +328,20 @@ VisiblePosition startOfLine(const VisiblePosition &c)
     return VisiblePosition(startNode, startOffset, DOWNSTREAM);
 }
 
-VisiblePosition endOfLine(const VisiblePosition &c)
+VisiblePosition endOfLine(const VisiblePosition& c)
 {
-    RootInlineBox *rootBox = rootBoxForLine(c);
-    if (!rootBox)
+    if (c.isNull())
         return VisiblePosition();
+        
+    RootInlineBox *rootBox = rootBoxForLine(c);
+    if (!rootBox) {
+        // There are VisiblePositions at offset 0 in blocks without
+        // RootInlineBoxes, like empty editable blocks and bordered blocks.
+        Position p = c.deepEquivalent();
+        if (p.node()->renderer() && p.node()->renderer()->isRenderBlock() && p.offset() == 0)
+            return c;
+        return VisiblePosition();
+    }
     
     // Generated content (e.g. list markers and CSS :before and :after
     // pseudoelements) have no corresponding DOM element, and so cannot be
@@ -342,7 +368,9 @@ VisiblePosition endOfLine(const VisiblePosition &c)
         endOffset = 0;
     } else if (endBox->isInlineTextBox()) {
         InlineTextBox *endTextBox = static_cast<InlineTextBox *>(endBox);
-        endOffset = endTextBox->m_start + endTextBox->m_len;
+        endOffset = endTextBox->m_start;
+        if (!endTextBox->isLineBreak())
+            endOffset += endTextBox->m_len;
     }
     
     return VisiblePosition(endNode, endOffset, VP_UPSTREAM_IF_POSSIBLE);
@@ -367,6 +395,7 @@ VisiblePosition previousLinePosition(const VisiblePosition &visiblePosition, int
 {
     Position p = visiblePosition.deepEquivalent();
     Node *node = p.node();
+    Node* highestRoot = highestEditableRoot(p);
     if (!node)
         return VisiblePosition();
     
@@ -389,15 +418,15 @@ VisiblePosition previousLinePosition(const VisiblePosition &visiblePosition, int
         // This containing editable block does not have a previous line.
         // Need to move back to previous containing editable block in this root editable
         // block and find the last root line box in that block.
-        Node *startBlock = node->enclosingBlockFlowElement();
+        Node* startBlock = enclosingBlock(node);
         Node *n = node->previousEditable();
-        while (n && startBlock == n->enclosingBlockFlowElement())
+        while (n && startBlock == enclosingBlock(n))
             n = n->previousEditable();
         while (n) {
-            if (!n->inSameRootEditableElement(node))
+            if (highestEditableRoot(Position(n, 0)) != highestRoot)
                 break;
             Position pos(n, n->caretMinOffset());
-            if (pos.inRenderedContent()) {
+            if (pos.isCandidate()) {
                 assert(n->renderer());
                 box = n->renderer()->inlineBox(n->caretMaxOffset());
                 if (box) {
@@ -435,6 +464,7 @@ VisiblePosition nextLinePosition(const VisiblePosition &visiblePosition, int x)
 {
     Position p = visiblePosition.deepEquivalent();
     Node *node = p.node();
+    Node* highestRoot = highestEditableRoot(p);
     if (!node)
         return VisiblePosition();
     
@@ -457,15 +487,15 @@ VisiblePosition nextLinePosition(const VisiblePosition &visiblePosition, int x)
         // This containing editable block does not have a next line.
         // Need to move forward to next containing editable block in this root editable
         // block and find the first root line box in that block.
-        Node *startBlock = node->enclosingBlockFlowElement();
+        Node* startBlock = enclosingBlock(node);
         Node *n = node->nextEditable(p.offset());
-        while (n && startBlock == n->enclosingBlockFlowElement())
+        while (n && startBlock == enclosingBlock(n))
             n = n->nextEditable();
         while (n) {
-            if (!n->inSameRootEditableElement(node))
+            if (highestEditableRoot(Position(n, 0)) != highestRoot)
                 break;
             Position pos(n, n->caretMinOffset());
-            if (pos.inRenderedContent()) {
+            if (pos.isCandidate()) {
                 assert(n->renderer());
                 box = n->renderer()->inlineBox(n->caretMinOffset());
                 if (box) {
@@ -549,6 +579,13 @@ VisiblePosition nextSentencePosition(const VisiblePosition &c)
 VisiblePosition startOfParagraph(const VisiblePosition &c)
 {
     Position p = c.deepEquivalent();
+    // FIXME: Use the leftmost candidate.  Canonicalization should give us the leftmost candidate,
+    // but it sometimes doesn't because of 8622.
+    if (p.upstream().isCandidate()) {
+        p = p.upstream();
+        ASSERT(VisiblePosition(p) == c);
+    }
+
     Node *startNode = p.node();
 
     if (!startNode)
@@ -560,7 +597,7 @@ VisiblePosition startOfParagraph(const VisiblePosition &c)
         && p.offset() == maxDeepOffset(startNode))
         return VisiblePosition(Position(startNode, 0));
 
-    Node *startBlock = startNode->enclosingBlockFlowElement();
+    Node* startBlock = enclosingBlock(startNode);
 
     Node *node = startNode;
     int offset = p.offset();
@@ -579,8 +616,8 @@ VisiblePosition startOfParagraph(const VisiblePosition &c)
             n = n->traversePreviousNodePostOrder(startBlock);
             continue;
         }
-        // FIXME: isBlockFlow should not exclude non-inline tables
-        if (r->isBR() || r->isBlockFlow() || (r->isTable() && !r->isInline()))
+        
+        if (r->isBR() || isBlock(n))
             break;
             
         if (r->isText()) {
@@ -622,7 +659,7 @@ VisiblePosition endOfParagraph(const VisiblePosition &c)
         && p.offset() == 0)
         return VisiblePosition(Position(startNode, maxDeepOffset(startNode)));
     
-    Node *startBlock = startNode->enclosingBlockFlowElement();
+    Node* startBlock = enclosingBlock(startNode);
     Node *stayInsideBlock = startBlock;
     
     Node *node = startNode;
@@ -643,8 +680,7 @@ VisiblePosition endOfParagraph(const VisiblePosition &c)
             continue;
         }
         
-        // FIXME: isBlockFlow should not exclude non-inline tables
-        if (r->isBR() || r->isBlockFlow() || (r->isTable() && !r->isInline()))
+        if (r->isBR() || isBlock(n))
             break;
             
         // FIXME: We avoid returning a position where the renderer can't accept the caret.
@@ -752,16 +788,31 @@ bool isEndOfBlock(const VisiblePosition &pos)
 
 // ---------
 
+VisiblePosition startOfDocument(const Node* node)
+{
+    if (!node)
+        return VisiblePosition();
+    
+    return VisiblePosition(node->document()->documentElement(), 0, DOWNSTREAM);
+}
+
 VisiblePosition startOfDocument(const VisiblePosition &c)
 {
-    Element* documentElement = c.deepEquivalent().documentElement();
-    return documentElement ? VisiblePosition(documentElement, 0, DOWNSTREAM) : VisiblePosition();
+    return startOfDocument(c.deepEquivalent().node());
+}
+
+VisiblePosition endOfDocument(const Node* node)
+{
+    if (!node || !node->document())
+        return VisiblePosition();
+    
+    Element* doc = node->document()->documentElement();
+    return VisiblePosition(doc, doc->childNodeCount(), DOWNSTREAM);
 }
 
 VisiblePosition endOfDocument(const VisiblePosition &c)
 {
-    Element* documentElement = c.deepEquivalent().documentElement();
-    return documentElement ? VisiblePosition(documentElement, documentElement->childNodeCount(), DOWNSTREAM) : VisiblePosition();
+    return endOfDocument(c.deepEquivalent().node());
 }
 
 bool inSameDocument(const VisiblePosition &a, const VisiblePosition &b)
@@ -790,56 +841,22 @@ bool isEndOfDocument(const VisiblePosition &p)
 
 // ---------
 
-VisiblePosition startOfEditableContent(const VisiblePosition &c)
+VisiblePosition startOfEditableContent(const VisiblePosition& visiblePosition)
 {
-    Position p = c.deepEquivalent();
-    Node *node = p.node();
-    if (!node)
+    Node* highestRoot = highestEditableRoot(visiblePosition.deepEquivalent());
+    if (!highestRoot)
         return VisiblePosition();
 
-    return VisiblePosition(node->rootEditableElement(), 0, DOWNSTREAM);
+    return VisiblePosition(highestRoot, 0, DOWNSTREAM);
 }
 
-VisiblePosition endOfEditableContent(const VisiblePosition &c)
+VisiblePosition endOfEditableContent(const VisiblePosition& visiblePosition)
 {
-    Position p = c.deepEquivalent();
-    Node *node = p.node();
-    if (!node)
+    Node* highestRoot = highestEditableRoot(visiblePosition.deepEquivalent());
+    if (!highestRoot)
         return VisiblePosition();
 
-    node = node->rootEditableElement();
-    if (!node)
-        return VisiblePosition();
-
-    return VisiblePosition(node, node->childNodeCount(), DOWNSTREAM);
-}
-
-bool inSameEditableContent(const VisiblePosition &a, const VisiblePosition &b)
-{
-    Position ap = a.deepEquivalent();
-    Node *an = ap.node();
-    if (!an)
-        return false;
-        
-    Position bp = b.deepEquivalent();
-    Node *bn = bp.node();
-    if (!bn)
-        return false;
-    
-    if (!an->isContentEditable() || !bn->isContentEditable())
-        return false;
-
-    return an->rootEditableElement() == bn->rootEditableElement();
-}
-
-bool isStartOfEditableContent(const VisiblePosition &p)
-{
-    return !inSameEditableContent(p, p.previous());
-}
-
-bool isEndOfEditableContent(const VisiblePosition &p)
-{
-    return !inSameEditableContent(p, p.next());
+    return VisiblePosition(highestRoot, maxDeepOffset(highestRoot), DOWNSTREAM);
 }
 
 }

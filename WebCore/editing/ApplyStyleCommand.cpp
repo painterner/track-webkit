@@ -109,6 +109,10 @@ void StyleChange::init(PassRefPtr<CSSStyleDeclaration> style, const Position &po
         if (position.isNotNull() && currentlyHasStyle(position, property))
             continue;
         
+        // Changing the whitespace style in a tab span would collapse the tab into a space.
+        if (property->id() == CSS_PROP_WHITE_SPACE && (isTabSpanTextNode(position.node()) || isTabSpanNode((position.node()))))
+            continue;
+        
         // If needed, figure out if this change is a legacy HTML style change.
         if (m_usesLegacyStyles && checkForLegacyHTMLStyleChange(property))
             continue;
@@ -124,7 +128,7 @@ void StyleChange::init(PassRefPtr<CSSStyleDeclaration> style, const Position &po
     }
 
     // Save the result for later
-    m_cssStyle = styleText.deprecatedString().stripWhiteSpace();
+    m_cssStyle = styleText.stripWhiteSpace();
 }
 
 StyleChange::ELegacyHTMLStyles StyleChange::styleModeForParseMode(bool isQuirksMode)
@@ -216,7 +220,7 @@ bool isStyleSpan(const Node *node)
     return elem->hasLocalName(spanAttr) && elem->getAttribute(classAttr) == styleSpanClassString();
 }
 
-static bool isEmptyStyleSpan(const Node *node)
+static bool isUnstyledStyleSpan(const Node *node)
 {
     if (!node || !node->isHTMLElement() || !node->hasTagName(spanTag))
         return false;
@@ -280,8 +284,8 @@ ApplyStyleCommand::ApplyStyleCommand(Document* document, CSSStyleDeclaration* st
 {
 }
 
-ApplyStyleCommand::ApplyStyleCommand(Document* document, Element* element, bool removeOnly, EditAction editingAction)
-    : CompositeEditCommand(document)
+ApplyStyleCommand::ApplyStyleCommand(Element* element, bool removeOnly, EditAction editingAction)
+    : CompositeEditCommand(element->document())
     , m_style(new CSSMutableStyleDeclaration())
     , m_editingAction(editingAction)
     , m_propertyLevel(PropertyDefault)
@@ -368,17 +372,25 @@ void ApplyStyleCommand::applyBlockStyle(CSSMutableStyleDeclaration *style)
 
     // remove current values, if any, of the specified styles from the blocks
     // NOTE: tracks the previous block to avoid repeated processing
-    // Also, gather up all the nodes we want to process in a DeprecatedPtrList before
+    // Also, gather up all the nodes we want to process in a Vector before
     // doing anything. This averts any bugs iterating over these nodes
     // once you start removing and applying style.
-    Node *beyondEnd = end.node()->traverseNextNode();
-    DeprecatedPtrList<Node> nodes;
+    
+    // If the end node is before the start node (can only happen if the end node is
+    // an ancestor of the start node), we gather nodes up to the next sibling of the end node
+    Node *beyondEnd;
+    if (start.node()->isDescendantOf(end.node()))
+        beyondEnd = end.node()->traverseNextSibling();
+    else
+        beyondEnd = end.node()->traverseNextNode();
+
+    Vector<Node*> nodes;
     for (Node *node = start.node(); node != beyondEnd; node = node->traverseNextNode())
         nodes.append(node);
         
     Node *prevBlock = 0;
-    for (DeprecatedPtrListIterator<Node> it(nodes); it.current(); ++it) {
-        Node *block = it.current()->enclosingBlockFlowElement();
+    for (unsigned i = 0; i < nodes.size(); i++) {
+        Node *block = nodes[i]->enclosingBlockFlowElement();
         if (block != prevBlock && block->isHTMLElement()) {
             removeCSSStyle(style, static_cast<HTMLElement *>(block));
             prevBlock = block;
@@ -390,8 +402,8 @@ void ApplyStyleCommand::applyBlockStyle(CSSMutableStyleDeclaration *style)
     
     // apply specified styles to the block flow elements in the selected range
     prevBlock = 0;
-    for (DeprecatedPtrListIterator<Node> it(nodes); it.current(); ++it) {
-        Node *node = it.current();
+    for (unsigned i = 0; i < nodes.size(); i++) {
+        Node *node = nodes[i];
         if (node->renderer()) {
             Node *block = node->enclosingBlockFlowElement();
             if (block != prevBlock) {
@@ -463,7 +475,15 @@ void ApplyStyleCommand::applyRelativeFontStyleChange(CSSMutableStyleDeclaration 
         end = endPosition();
     }
 
-    Node *beyondEnd = end.node()->traverseNextNode(); // Calculate loop end point.
+    // Calculate loop end point.
+    // If the end node is before the start node (can only happen if the end node is
+    // an ancestor of the start node), we gather nodes up to the next sibling of the end node
+    Node *beyondEnd;
+    if (start.node()->isDescendantOf(end.node()))
+        beyondEnd = end.node()->traverseNextSibling();
+    else
+        beyondEnd = end.node()->traverseNextNode();
+    
     start = start.upstream(); // Move upstream to ensure we do not add redundant spans.
     Node *startNode = start.node();
     if (startNode->isTextNode() && start.offset() >= startNode->caretMaxOffset()) // Move out of text node if range does not include its characters.
@@ -476,7 +496,7 @@ void ApplyStyleCommand::applyRelativeFontStyleChange(CSSMutableStyleDeclaration 
         startingFontSizes.set(node, computedFontSize(node));
 
     // These spans were added by us. If empty after font size changes, they can be removed.
-    DeprecatedPtrList<Node> emptySpans;
+    DeprecatedPtrList<Node> unstyledSpans;
     
     Node *lastStyledNode = 0;
     for (Node *node = startNode; node != beyondEnd; node = node->traverseNextNode()) {
@@ -513,25 +533,54 @@ void ApplyStyleCommand::applyRelativeFontStyleChange(CSSMutableStyleDeclaration 
         }
         if (inlineStyleDecl->length() == 0) {
             removeNodeAttribute(elem, styleAttr);
-            if (isEmptyStyleSpan(elem))
-                emptySpans.append(elem);
+            if (isUnstyledStyleSpan(elem))
+                unstyledSpans.append(elem);
         }
     }
 
-    for (DeprecatedPtrListIterator<Node> it(emptySpans); it.current(); ++it)
+    for (DeprecatedPtrListIterator<Node> it(unstyledSpans); it.current(); ++it)
         removeNodePreservingChildren(it.current());
 }
 
 #undef NoFontDelta
 #undef MinimumFontSize
 
+static Node* dummySpanAncestorForNode(const Node* node)
+{
+    while (node && !isStyleSpan(node))
+        node = node->parent();
+    
+    return node ? node->parent() : 0;
+}
+
+void ApplyStyleCommand::cleanupUnstyledAppleStyleSpans(Node* dummySpanAncestor)
+{
+    if (!dummySpanAncestor)
+        return;
+
+    // Dummy spans are created when text node is split, so that style information
+    // can be propagated, which can result in more splitting. If a dummy span gets
+    // cloned/split, the new node is always a sibling of it. Therefore, we scan
+    // all the children of the dummy's parent
+    Node* next;
+    for (Node* node = dummySpanAncestor->firstChild(); node; node = next) {
+        next = node->nextSibling();
+        if (isUnstyledStyleSpan(node))
+            removeNodePreservingChildren(node);
+        node = next;
+    }
+}
+
 void ApplyStyleCommand::applyInlineStyle(CSSMutableStyleDeclaration *style)
 {
+    Node* startDummySpanAncestor = 0;
+    Node* endDummySpanAncestor = 0;
+    
     // update document layout once before removing styles
     // so that we avoid the expense of updating before each and every call
     // to check a computed style
     updateLayout();
-    
+
     // adjust to the positions we want to use for applying style
     Position start = startPosition();
     Position end = endPosition();
@@ -546,6 +595,7 @@ void ApplyStyleCommand::applyInlineStyle(CSSMutableStyleDeclaration *style)
     if (splitStart) {
         start = startPosition();
         end = endPosition();
+        startDummySpanAncestor = dummySpanAncestorForNode(start.node());
     }
 
     // split the end node and containing element if the selection ends inside of it
@@ -553,6 +603,7 @@ void ApplyStyleCommand::applyInlineStyle(CSSMutableStyleDeclaration *style)
     if (splitEnd) {
         start = startPosition();
         end = endPosition();
+        endDummySpanAncestor = dummySpanAncestorForNode(end.node());
     }
 
     // Remove style from the selection.
@@ -601,7 +652,7 @@ void ApplyStyleCommand::applyInlineStyle(CSSMutableStyleDeclaration *style)
         endNode = end.node()->lastDescendant();
     // If the end node is an ancestor of the start node then a pre-order
     // traversal will never reach it.  Adjust it so that this won't happen.
-    if (node->isAncestor(endNode))
+    if (node->isDescendantOf(endNode))
         endNode = endNode->lastDescendant();
     
     if (node == endNode) {
@@ -631,9 +682,10 @@ void ApplyStyleCommand::applyInlineStyle(CSSMutableStyleDeclaration *style)
         }
     }
 
-    if (splitStart || splitEnd) {
-        cleanUpEmptyStyleSpans(start, end);
-    }
+    // remove dummy style spans created by splitting text elements
+    cleanupUnstyledAppleStyleSpans(startDummySpanAncestor);
+    if (endDummySpanAncestor != startDummySpanAncestor)
+        cleanupUnstyledAppleStyleSpans(endDummySpanAncestor);
 }
 
 bool ApplyStyleCommand::isHTMLStyleNode(CSSMutableStyleDeclaration *style, HTMLElement *elem)
@@ -712,7 +764,7 @@ void ApplyStyleCommand::removeCSSStyle(CSSMutableStyleDeclaration *style, HTMLEl
             removeCSSProperty(decl, propertyID);
     }
 
-    if (isEmptyStyleSpan(elem))
+    if (isUnstyledStyleSpan(elem))
         removeNodePreservingChildren(elem);
 }
 
@@ -847,7 +899,7 @@ void ApplyStyleCommand::pushDownTextDecorationStyleAroundNode(Node *node, const 
 
                 if (node == child) {
                     nextCurrent = child;
-                } else if (node->isAncestor(child)) {
+                } else if (node->isDescendantOf(child)) {
                     applyTextDecorationStyle(child, decoration.get());
                     nextCurrent = child;
                 } else {
@@ -1072,6 +1124,8 @@ bool ApplyStyleCommand::mergeStartWithPreviousIfIdentical(const Position &start,
         if (start.offset() != 0)
             return false;
 
+        // note: prior siblings could be unrendered elements. it's silly to miss the
+        // merge opportunity just for that.
         if (start.node()->previousSibling())
             return false;
 
@@ -1141,53 +1195,6 @@ bool ApplyStyleCommand::mergeEndWithNextIfIdentical(const Position &start, const
     }
 
     return false;
-}
-
-void ApplyStyleCommand::cleanUpEmptyStyleSpans(const Position &start, const Position &end)
-{
-    Node *node;
-    for (node = start.node(); node && !node->previousSibling(); node = node->parentNode()) {
-    }
-
-    if (node && isEmptyStyleSpan(node->previousSibling())) {
-        removeNodePreservingChildren(node->previousSibling());
-    }
-
-    if (start.node() == end.node()) {
-        if (start.node()->isTextNode()) {
-            for (Node *last = start.node(), *cur = last->parentNode(); cur && !last->previousSibling() && !last->nextSibling(); last = cur, cur = cur->parentNode()) {
-                if (isEmptyStyleSpan(cur)) {
-                    removeNodePreservingChildren(cur);
-                    break;
-                }
-            }
-
-        }
-    } else {
-        if (start.node()->isTextNode()) {
-            for (Node *last = start.node(), *cur = last->parentNode(); cur && !last->previousSibling(); last = cur, cur = cur->parentNode()) {
-                if (isEmptyStyleSpan(cur)) {
-                    removeNodePreservingChildren(cur);
-                    break;
-                }
-            }
-        }
-
-        if (end.node()->isTextNode()) {
-            for (Node *last = end.node(), *cur = last->parentNode(); cur && !last->nextSibling(); last = cur, cur = cur->parentNode()) {
-                if (isEmptyStyleSpan(cur)) {
-                    removeNodePreservingChildren(cur);
-                    break;
-                }
-            }
-        }
-    }
-    
-    for (node = end.node(); node && !node->nextSibling(); node = node->parentNode()) {
-    }
-    if (node && isEmptyStyleSpan(node->nextSibling())) {
-        removeNodePreservingChildren(node->nextSibling());
-    }
 }
 
 void ApplyStyleCommand::surroundNodeRangeWithElement(Node *startNode, Node *endNode, Element *element)

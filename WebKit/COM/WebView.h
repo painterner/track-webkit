@@ -393,10 +393,10 @@ public:
 
     // WebView
 
-    void mouseMoved(WPARAM, LPARAM);
-    void mouseDown(WPARAM, LPARAM);
-    void mouseUp(WPARAM, LPARAM);
-    void mouseDoubleClick(WPARAM, LPARAM);
+    void mouseMoved(UINT, WPARAM, LPARAM);
+    void mouseDown(UINT, WPARAM, LPARAM);
+    void mouseUp(UINT, WPARAM, LPARAM);
+    void mouseDoubleClick(UINT, WPARAM, LPARAM);
     bool keyPress(WPARAM, LPARAM);
     HRESULT goToItem(IWebHistoryItem* item, WebFrameLoadType withLoadType);
 
@@ -408,6 +408,7 @@ protected:
     HWND m_hostWindow;
     HWND m_viewWindow;
     WebFrame* m_mainFrame;
+    POINT m_lastMousePos;
     IWebFrameLoadDelegate* m_frameLoadDelegate;
     IWebUIDelegate* m_uiDelegate;
     IWebBackForwardList* m_backForwardList;

@@ -1,6 +1,7 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
+    Copyright (C) 2007 Eric Seidel <eric@webkit.org>
 
     This file is part of the KDE project
 
@@ -23,15 +24,18 @@
 #include "config.h"
 #ifdef SVG_SUPPORT
 #include "SVGAnimateColorElement.h"
-#include "KSVGTimeScheduler.h"
-#include "PlatformString.h"
+
 #include "Document.h"
-#include "SVGDocumentExtensions.h"
+#include "TimeScheduler.h"
+#include "PlatformString.h"
+#include "SVGColor.h"
 #include "SVGSVGElement.h"
+#include <math.h>
+#include <wtf/MathExtras.h>
 
 namespace WebCore {
 
-SVGAnimateColorElement::SVGAnimateColorElement(const QualifiedName& tagName, Document *doc)
+SVGAnimateColorElement::SVGAnimateColorElement(const QualifiedName& tagName, Document* doc)
     : SVGAnimationElement(tagName, doc)
     , m_toColor(new SVGColor())
     , m_fromColor(new SVGColor())
@@ -46,111 +50,44 @@ SVGAnimateColorElement::~SVGAnimateColorElement()
 {
 }
 
-void SVGAnimateColorElement::handleTimerEvent(double timePercentage)
+void calculateColorDifference(const Color& first, const Color& second, int& redDiff, int& greenDiff, int& blueDiff)
 {
-    // Start condition.
-    if (!m_connected) {
-        // Save initial color... (needed for fill="remove" or additve="sum")
-        RefPtr<SVGColor> temp = new SVGColor();
-        temp->setRGBColor(targetAttribute());
+    redDiff = first.red() - second.red();
+    greenDiff = first.green() - second.green();
+    blueDiff = first.blue() - second.blue();
+}
 
-        m_initialColor = temp->color();
+void SVGAnimateColorElement::storeInitialValue()
+{
+    m_initialColor = SVGColor::colorFromRGBColorString(targetAttribute());
+}
 
-        // Animation mode handling
-        switch(detectAnimationMode())
-        {
-            case TO_ANIMATION:
-            case FROM_TO_ANIMATION:
-            {
-                String toColorString(m_to);
-                m_toColor->setRGBColor(toColorString);
-    
-                String fromColorString;
-                if (!m_from.isEmpty()) // from-to animation
-                    fromColorString = m_from;
-                else // to animation
-                    fromColorString = m_initialColor.name();
-    
-                m_fromColor->setRGBColor(fromColorString);    
+void SVGAnimateColorElement::resetValues()
+{
+    m_currentItem = -1;
+    m_redDiff = 0;
+    m_greenDiff = 0;
+    m_blueDiff = 0;
+}
 
-                // Calculate color differences, once.
-                Color qTo = m_toColor->color();
-                Color qFrom = m_fromColor->color();
-    
-                m_redDiff = qTo.red() - qFrom.red();
-                m_greenDiff = qTo.green() - qFrom.green();
-                m_blueDiff = qTo.blue() - qFrom.blue();
-                
-                break;
-            }
-            case BY_ANIMATION:
-            case FROM_BY_ANIMATION:
-            {
-                String byColorString(m_by);
-                m_toColor->setRGBColor(byColorString);
-
-                String fromColorString;
-            
-                if (!m_from.isEmpty()) // from-by animation
-                    fromColorString = m_from;
-                else // by animation
-                    fromColorString = m_initialColor.name();
-
-                m_fromColor->setRGBColor(fromColorString);
-
-                Color qBy = m_toColor->color();
-                Color qFrom = m_fromColor->color();
-
-                // Calculate 'm_toColor' using relative values
-                int r = qFrom.red() + qBy.red();
-                int g = qFrom.green() + qBy.green();
-                int b = qFrom.blue() + qBy.blue();
-
-                Color qTo = clampColor(r, g, b);
-            
-                String toColorString(qTo.name());
-                m_toColor->setRGBColor(toColorString);
-            
-                m_redDiff = qTo.red() - qFrom.red();
-                m_greenDiff = qTo.green() - qFrom.green();
-                m_blueDiff = qTo.blue() - qFrom.blue();
-
-                break;
-            }
-            case VALUES_ANIMATION:
-                break;
-            default:
-            {
-                //kdError() << k_funcinfo << " Unable to detect animation mode! Aborting creation!" << endl;
-                return;
-            }
-        }
-
-        ownerSVGElement()->timeScheduler()->connectIntervalTimer(this);
-        m_connected = true;
-
-        return;
-    }
-
-    // Calculations...
-    if (timePercentage >= 1.0)
-        timePercentage = 1.0;
-
+bool SVGAnimateColorElement::updateCurrentValue(double timePercentage)
+{
     int r = 0, g = 0, b = 0;
     if ((m_redDiff != 0 || m_greenDiff != 0 || m_blueDiff != 0) && !m_values)
         calculateColor(timePercentage, r, g, b);
     else if (m_values) {
         int itemByPercentage = calculateCurrentValueItem(timePercentage);
-
+        
         if (itemByPercentage == -1)
-            return;
-
-        if (m_currentItem != itemByPercentage) // Item changed...
-        {
+            return false;
+        
+        if (m_currentItem != itemByPercentage) { // Item changed...
+            ExceptionCode ec = 0;
+            
             // Extract current 'from' / 'to' values
-            String value1 = String(m_values->getItem(itemByPercentage));
-            String value2 = String(m_values->getItem(itemByPercentage + 1));
-
+            String value1 = m_values->getItem(itemByPercentage, ec);
+            String value2 = m_values->getItem(itemByPercentage + 1, ec);
+            
             // Calculate r/g/b shifting values...
             if (!value1.isEmpty() && !value2.isEmpty()) {
                 bool apply = false;
@@ -158,91 +95,115 @@ void SVGAnimateColorElement::handleTimerEvent(double timePercentage)
                     r = m_toColor->color().red();
                     g = m_toColor->color().green();
                     b = m_toColor->color().blue();
-
+                    
                     apply = true;
                 }
-
-                String toColorString(value2);
-                m_toColor->setRGBColor(toColorString);
-    
-                String fromColorString(value1);
-                m_fromColor->setRGBColor(fromColorString);    
-
-                Color qTo = m_toColor->color();
-                Color qFrom = m_fromColor->color();
-
-                m_redDiff = qTo.red() - qFrom.red();
-                m_greenDiff = qTo.green() - qFrom.green();
-                m_blueDiff = qTo.blue() - qFrom.blue();
-
+                
+                m_toColor->setRGBColor(value2);
+                m_fromColor->setRGBColor(value1);
+                calculateColorDifference(m_toColor->color(), m_fromColor->color(), m_redDiff, m_greenDiff, m_blueDiff);
+                
                 m_currentItem = itemByPercentage;
-
+                
                 if (!apply)
-                    return;
+                    return false;
             }
-        }
-        else if (m_redDiff != 0 || m_greenDiff != 0 || m_blueDiff != 0)
-        {
+        } else if (m_redDiff != 0 || m_greenDiff != 0 || m_blueDiff != 0) {
             double relativeTime = calculateRelativeTimePercentage(timePercentage, m_currentItem);
             calculateColor(relativeTime, r, g, b);
         }
     }
     
-    if (!isFrozen() && timePercentage == 1.0)
-    {
+    if (!isFrozen() && timePercentage == 1.0) {
         r = m_initialColor.red();
         g = m_initialColor.green();
         b = m_initialColor.blue();
     }
-
-    if (isAccumulated() && repeations() != 0.0)
-    {
+    
+    if (isAccumulated() && repeations() != 0.0) {
         r += m_lastColor.red();
         g += m_lastColor.green();
         b += m_lastColor.blue();
     }
-
-    // Commit changes!
-    m_currentColor = clampColor(r, g, b);
     
-    // End condition.
-    if (timePercentage == 1.0) {
-        if ((m_repeatCount > 0 && m_repeations < m_repeatCount - 1) || isIndefinite(m_repeatCount)) {
-            m_lastColor = m_currentColor;
-            m_repeations++;
-            return;
+    m_currentColor = clampColor(r, g, b);
+    return true;
+}
+
+bool SVGAnimateColorElement::handleStartCondition()
+{
+    storeInitialValue();
+    
+    switch (detectAnimationMode()) {
+        case TO_ANIMATION:
+        case FROM_TO_ANIMATION:
+        {
+            m_toColor->setRGBColor(m_to);
+            if (!m_from.isEmpty()) // from-to animation
+                m_fromColor->setRGBColor(m_from);
+            else // to animation
+                m_fromColor->setRGBColor(m_initialColor.name());
+            
+            calculateColorDifference(m_toColor->color(), m_fromColor->color(), m_redDiff, m_greenDiff, m_blueDiff);
+            break;
         }
-
-        ownerSVGElement()->timeScheduler()->disconnectIntervalTimer(this);
-        m_connected = false;
-
-        // Reset...
-        m_currentItem = -1;
-
-        m_redDiff = 0;
-        m_greenDiff = 0;
-        m_blueDiff = 0;
+        case BY_ANIMATION:
+        case FROM_BY_ANIMATION:
+        {
+            if (!m_from.isEmpty()) // from-by animation
+                m_fromColor->setRGBColor(m_from);
+            else // by animation
+                m_fromColor->setRGBColor(m_initialColor.name());
+            
+            m_toColor->setRGBColor(addColorsAndClamp(m_fromColor->color(), SVGColor::colorFromRGBColorString(m_by)).name());
+            
+            calculateColorDifference(m_toColor->color(), m_fromColor->color(), m_redDiff, m_greenDiff, m_blueDiff);
+            break;
+        }
+        case VALUES_ANIMATION:
+            break;
+        default:
+        {
+            //kdError() << k_funcinfo << " Unable to detect animation mode! Aborting creation!" << endl;
+            return false;
+        }
     }
+    
+    return true;
+}
+
+void SVGAnimateColorElement::updateLastValueWithCurrent()
+{
+    m_lastColor = m_currentColor;
+}
+
+void SVGAnimateColorElement::applyAnimationToValue(Color& currentColor)
+{
+    if (isAdditive())
+        currentColor = addColorsAndClamp(currentColor, color());
+    else
+        currentColor = color();
+}
+
+static inline int clampColorValue(int v)
+{
+    if (v > 255)
+        v = 255;
+    else if (v < 0)
+        v = 0;
+    return v;
 }
 
 Color SVGAnimateColorElement::clampColor(int r, int g, int b) const
 {
-    if (r > 255)
-        r = 255;
-    else if (r < 0)
-        r = 0;
+    return Color(clampColorValue(r), clampColorValue(g), clampColorValue(b));
+}
 
-    if (g > 255)
-        g = 255;
-    else if (g < 0)
-        g = 0;
-
-    if (b > 255)
-        b = 255;
-    else if (b < 0)
-        b = 0;
-
-    return Color(r, g, b);
+Color SVGAnimateColorElement::addColorsAndClamp(const Color& first, const Color& second)
+{
+    return Color(clampColorValue(first.red() + second.red()),
+                 clampColorValue(first.green() + second.green()),
+                 clampColorValue(first.blue() + second.blue()));
 }
 
 void SVGAnimateColorElement::calculateColor(double time, int &r, int &g, int &b) const

@@ -28,6 +28,33 @@
 
 #import <WebKit/WebUIDelegate.h>
 
+// FIXME: These should move to WebUIDelegate.h as part of the WebMenuItemTag enum there, when we're not in API freeze 
+enum { 
+    WebMenuItemTagOpenLink = 1000,
+    WebMenuItemTagIgnoreGrammar,
+    WebtMenuItemTagSpellingMenu,
+    WebMenuItemTagShowSpellingPanel,
+    WebMenuItemTagCheckSpelling,
+    WebMenuItemTagCheckSpellingWhileTyping,
+    WebMenuItemTagCheckGrammarWithSpelling,
+    WebMenuItemTagFontMenu,
+    WebMenuItemTagShowFonts,
+    WebMenuItemTagBold,
+    WebMenuItemTagItalic,
+    WebMenuItemTagUnderline,
+    WebMenuItemTagOutline,
+    WebMenuItemTagStyles,
+    WebMenuItemTagShowColors,
+    WebMenuItemTagSpeechMenu,
+    WebMenuItemTagStartSpeaking,
+    WebMenuItemTagStopSpeaking,
+    WebMenuItemTagWritingDirectionMenu,
+    WebMenuItemTagDefaultDirection,
+    WebMenuItemTagLeftToRight,
+    WebMenuItemTagRightToLeft,
+    WebMenuItemTagBaseApplication = 10000
+};
+
 @interface NSObject (WebUIDelegatePrivate)
 
 - (void)webView:(WebView *)webView addMessageToConsole:(NSDictionary *)message;
@@ -41,5 +68,7 @@
 - (void)webView:(WebView *)sender didDrawRect:(NSRect)rect;
 - (void)webView:(WebView *)sender didScrollDocumentInFrameView:(WebFrameView *)frameView;
 - (BOOL)webViewShouldInterruptJavaScript:(WebView *)sender;
+- (void)webView:(WebView *)sender willPopupMenu:(NSMenu *)menu;
+- (void)webView:(WebView *)sender contextMenuItemSelected:(NSMenuItem *)item forElement:(NSDictionary *)element;
 
 @end

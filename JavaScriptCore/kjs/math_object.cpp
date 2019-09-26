@@ -22,40 +22,11 @@
 #include "config.h"
 #include "math_object.h"
 #include "math_object.lut.h"
+#include "wtf/MathExtras.h"
 
 #include "operations.h"
 #include <math.h>
 #include <time.h>
-
-#if PLATFORM(WIN_OS)
-
-#include <float.h>
-static int signbit(double d)
-{
-    // FIXME: Not sure if this is exactly right.
-    switch (_fpclass(d)) {
-        case _FPCLASS_NINF:
-        case _FPCLASS_NN:
-        case _FPCLASS_ND:
-        case _FPCLASS_NZ:
-            // It's one of wacky negatives, report as negative.
-            return 1;
-        case _FPCLASS_PINF:
-        case _FPCLASS_PN:
-        case _FPCLASS_PD:
-        case _FPCLASS_PZ:
-            // It's one of wacky positives, report as positive.
-            return 0;
-        default:
-            return d < 0;
-    }
-}
-
-#endif
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif  /*  M_PI  */
 
 using namespace KJS;
 
@@ -153,7 +124,7 @@ MathFuncImp::MathFuncImp(ExecState* exec, int i, int l, const Identifier& name)
   putDirect(lengthPropertyName, l, DontDelete|ReadOnly|DontEnum);
 }
 
-JSValue *MathFuncImp::callAsFunction(ExecState *exec, JSObject */*thisObj*/, const List &args)
+JSValue *MathFuncImp::callAsFunction(ExecState *exec, JSObject* /*thisObj*/, const List &args)
 {
   double arg = args[0]->toNumber(exec);
   double arg2 = args[1]->toNumber(exec);
@@ -164,31 +135,31 @@ JSValue *MathFuncImp::callAsFunction(ExecState *exec, JSObject */*thisObj*/, con
     result = ( arg < 0 || arg == -0) ? (-arg) : arg;
     break;
   case MathObjectImp::ACos:
-    result = ::acos(arg);
+    result = acos(arg);
     break;
   case MathObjectImp::ASin:
-    result = ::asin(arg);
+    result = asin(arg);
     break;
   case MathObjectImp::ATan:
-    result = ::atan(arg);
+    result = atan(arg);
     break;
   case MathObjectImp::ATan2:
-    result = ::atan2(arg, arg2);
+    result = atan2(arg, arg2);
     break;
   case MathObjectImp::Ceil:
-    result = ::ceil(arg);
+    result = ceil(arg);
     break;
   case MathObjectImp::Cos:
-    result = ::cos(arg);
+    result = cos(arg);
     break;
   case MathObjectImp::Exp:
-    result = ::exp(arg);
+    result = exp(arg);
     break;
   case MathObjectImp::Floor:
-    result = ::floor(arg);
+    result = floor(arg);
     break;
   case MathObjectImp::Log:
-    result = ::log(arg);
+    result = log(arg);
     break;
   case MathObjectImp::Max: {
     unsigned int argsCount = args.size();
@@ -226,14 +197,16 @@ JSValue *MathFuncImp::callAsFunction(ExecState *exec, JSObject */*thisObj*/, con
       result = NaN;
     else if (isNaN(arg) && arg2 != 0)
       result = NaN;
-    else if (::fabs(arg) == 1 && KJS::isInf(arg2))
+    else if (fabs(arg) == 1 && isInf(arg2))
       result = NaN;
+    else if (arg2 == 0 && arg != 0)
+      result = 1;
     else
       result = ::pow(arg, arg2);
     break;
   case MathObjectImp::Random:
       if (!randomSeeded) {
-          srand(time(0));
+          srand(static_cast<unsigned>(time(0)));
           randomSeeded = true;
       }
       result = (double)rand() / RAND_MAX;
@@ -242,16 +215,16 @@ JSValue *MathFuncImp::callAsFunction(ExecState *exec, JSObject */*thisObj*/, con
     if (signbit(arg) && arg >= -0.5)
         result = -0.0;
     else
-        result = ::floor(arg + 0.5);
+        result = floor(arg + 0.5);
     break;
   case MathObjectImp::Sin:
-    result = ::sin(arg);
+    result = sin(arg);
     break;
   case MathObjectImp::Sqrt:
-    result = ::sqrt(arg);
+    result = sqrt(arg);
     break;
   case MathObjectImp::Tan:
-    result = ::tan(arg);
+    result = tan(arg);
     break;
 
   default:

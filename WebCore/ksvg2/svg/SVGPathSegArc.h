@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,8 +20,9 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGPathSegArcImpl_H
-#define KSVG_SVGPathSegArcImpl_H
+#ifndef SVGPathSegArc_H
+#define SVGPathSegArc_H
+
 #ifdef SVG_SUPPORT
 
 #include "SVGPathSeg.h"
@@ -31,12 +32,12 @@ namespace WebCore
     class SVGPathSegArcAbs : public SVGPathSeg
     {
     public:
-        SVGPathSegArcAbs(const SVGStyledElement *context = 0);
+        SVGPathSegArcAbs(double x, double y, double r1, double r2, double angle, bool largeArcFlag, bool sweepFlag);
         virtual ~SVGPathSegArcAbs();
 
         virtual unsigned short pathSegType() const { return PATHSEG_ARC_ABS; }
         virtual String pathSegTypeAsLetter() const { return "A"; }
-        virtual String toString() const { return String::sprintf("A %.6lg %.6lg %.6lg %d %d %.6lg %.6lg", m_r1, m_r2, m_angle, m_largeArcFlag, m_sweepFlag, m_x, m_y); }
+        virtual String toString() const { return String::format("A %.6lg %.6lg %.6lg %d %d %.6lg %.6lg", m_r1, m_r2, m_angle, m_largeArcFlag, m_sweepFlag, m_x, m_y); }
 
         void setX(double x);
         double x() const;
@@ -73,12 +74,12 @@ namespace WebCore
     class SVGPathSegArcRel : public SVGPathSeg
     {
     public:
-        SVGPathSegArcRel(const SVGStyledElement *context = 0);
+        SVGPathSegArcRel(double x, double y, double r1, double r2, double angle, bool largeArcFlag, bool sweepFlag);
         virtual ~SVGPathSegArcRel();
 
         virtual unsigned short pathSegType() const { return PATHSEG_ARC_REL; }
         virtual String pathSegTypeAsLetter() const { return "a"; }
-        virtual String toString() const { return String::sprintf("a %.6lg %.6lg %.6lg %d %d %.6lg %.6lg", m_r1, m_r2, m_angle, m_largeArcFlag, m_sweepFlag, m_x, m_y); }
+        virtual String toString() const { return String::format("a %.6lg %.6lg %.6lg %d %d %.6lg %.6lg", m_r1, m_r2, m_angle, m_largeArcFlag, m_sweepFlag, m_x, m_y); }
 
         void setX(double x);
         double x() const;

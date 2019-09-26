@@ -61,6 +61,7 @@ void FrameTree::setName(const AtomicString& name)
 
 void FrameTree::appendChild(PassRefPtr<Frame> child)
 {
+    ASSERT(child->page() == m_thisFrame->page());
     child->tree()->m_parent = m_thisFrame;
 
     Frame* oldLast = m_lastChild;
@@ -81,6 +82,9 @@ void FrameTree::removeChild(Frame* child)
 {
     child->tree()->m_parent = 0;
     child->setView(0);
+    if (child->ownerElement())
+        child->page()->decrementFrameCount();
+    child->pageDestroyed();
 
     // Slightly tricky way to prevent deleting the child until we are done with it, w/o
     // extra refs. These swaps leave the child in a circular list by itself. Clearing its
@@ -89,7 +93,8 @@ void FrameTree::removeChild(Frame* child)
     RefPtr<Frame>& newLocationForNext = m_firstChild == child ? m_firstChild : child->tree()->m_previousSibling->tree()->m_nextSibling;
     Frame*& newLocationForPrevious = m_lastChild == child ? m_lastChild : child->tree()->m_nextSibling->tree()->m_previousSibling;
     swap(newLocationForNext, child->tree()->m_nextSibling);
-    swap(newLocationForPrevious, child->tree()->m_previousSibling);
+    // For some inexplicable reason, the following line does not compile without the explicit std:: namepsace
+    std::swap(newLocationForPrevious, child->tree()->m_previousSibling);
 
     child->tree()->m_previousSibling = 0;
     child->tree()->m_nextSibling = 0;
@@ -204,7 +209,7 @@ Frame* FrameTree::find(const AtomicString& name) const
     return 0;
 }
 
-bool FrameTree::isDescendantOf(Frame* ancestor) const
+bool FrameTree::isDescendantOf(const Frame* ancestor) const
 {
     for (Frame* frame = m_thisFrame; frame; frame = frame->tree()->parent())
         if (frame == ancestor)
@@ -212,7 +217,7 @@ bool FrameTree::isDescendantOf(Frame* ancestor) const
     return false;
 }
 
-Frame* FrameTree::traverseNext(Frame* stayWithin) const
+Frame* FrameTree::traverseNext(const Frame* stayWithin) const
 {
     Frame* child = firstChild();
     if (child) {

@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -24,45 +24,49 @@
 #define KSVG_SVGTextContentElementImpl_H
 #ifdef SVG_SUPPORT
 
+#include "SVGExternalResourcesRequired.h"
+#include "SVGLangSpace.h"
 #include "SVGStyledElement.h"
 #include "SVGTests.h"
-#include "SVGLangSpace.h"
-#include "SVGExternalResourcesRequired.h"
 
 namespace WebCore {
-    class SVGAnimatedLength;
-    class SVGAnimatedEnumeration;
+    class SVGLength;
 
     class SVGTextContentElement : public SVGStyledElement,
-                                      public SVGTests,
-                                      public SVGLangSpace,
-                                      public SVGExternalResourcesRequired
+                                  public SVGTests,
+                                  public SVGLangSpace,
+                                  public SVGExternalResourcesRequired
     {
     public:
+        enum SVGLengthAdjustType {
+            LENGTHADJUST_UNKNOWN            = 0,
+            LENGTHADJUST_SPACING            = 1,
+            LENGTHADJUST_SPACINGANDGLYPHS   = 2
+        };
+
         SVGTextContentElement(const QualifiedName&, Document*);
         virtual ~SVGTextContentElement();
         
         virtual bool isValid() const { return SVGTests::isValid(); }
 
         // 'SVGTextContentElement' functions
-        SVGAnimatedLength *textLength() const;
-        SVGAnimatedEnumeration *lengthAdjust() const;
-
         long getNumberOfChars() const;
         float getComputedTextLength() const;
-        float getSubStringLength(unsigned long charnum, unsigned long nchars) const;
-        FloatPoint getStartPositionOfChar(unsigned long charnum) const;
-        FloatPoint getEndPositionOfChar(unsigned long charnum) const;
-        FloatRect getExtentOfChar(unsigned long charnum) const;
-        float getRotationOfChar(unsigned long charnum) const;
+        float getSubStringLength(unsigned long charnum, unsigned long nchars, ExceptionCode&) const;
+        FloatPoint getStartPositionOfChar(unsigned long charnum, ExceptionCode&) const;
+        FloatPoint getEndPositionOfChar(unsigned long charnum, ExceptionCode&) const;
+        FloatRect getExtentOfChar(unsigned long charnum, ExceptionCode&) const;
+        float getRotationOfChar(unsigned long charnum, ExceptionCode&) const;
         long getCharNumAtPosition(const FloatPoint&) const;
-        void selectSubString(unsigned long charnum, unsigned long nchars) const;
+        void selectSubString(unsigned long charnum, unsigned long nchars, ExceptionCode&) const;
 
         virtual void parseMappedAttribute(MappedAttribute*);
 
     private:
-        mutable RefPtr<SVGAnimatedLength> m_textLength;
-        mutable RefPtr<SVGAnimatedEnumeration> m_lengthAdjust;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired)
+
+        ANIMATED_PROPERTY_DECLARATIONS(SVGTextContentElement, SVGLength, SVGLength, TextLength, textLength)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGTextContentElement, int, int, LengthAdjust, lengthAdjust)
     };
 
 } // namespace WebCore

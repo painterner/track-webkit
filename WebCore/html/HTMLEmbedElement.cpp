@@ -26,6 +26,7 @@
 
 #include "CSSPropertyNames.h"
 #include "Frame.h"
+#include "FrameView.h"
 #include "HTMLDocument.h"
 #include "HTMLNames.h"
 #include "csshelper.h"
@@ -47,13 +48,13 @@ HTMLEmbedElement::HTMLEmbedElement(Document* doc)
 
 HTMLEmbedElement::~HTMLEmbedElement()
 {
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
     // m_instance should have been cleaned up in detach().
     assert(!m_instance);
 #endif
 }
 
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
 KJS::Bindings::Instance *HTMLEmbedElement::getInstance() const
 {
     Frame* frame = document()->frame();
@@ -94,37 +95,33 @@ bool HTMLEmbedElement::mapToEntry(const QualifiedName& attrName, MappedAttribute
     return HTMLPlugInElement::mapToEntry(attrName, result);
 }
 
-void HTMLEmbedElement::parseMappedAttribute(MappedAttribute *attr)
+void HTMLEmbedElement::parseMappedAttribute(MappedAttribute* attr)
 {
-    DeprecatedString val = attr->value().deprecatedString();
+    String val = attr->value();
   
-    int pos;
     if (attr->name() == typeAttr) {
-        serviceType = val.lower();
-        pos = serviceType.find( ";" );
-        if ( pos!=-1 )
-            serviceType = serviceType.left( pos );
-    } else if (attr->name() == codeAttr ||
-               attr->name() == srcAttr) {
-         url = parseURL(attr->value()).deprecatedString();
-    } else if (attr->name() == pluginpageAttr ||
-               attr->name() == pluginspageAttr) {
-        pluginPage = val;
-    } else if (attr->name() == hiddenAttr) {
-        if (val.lower()=="yes" || val.lower()=="true") {
+        m_serviceType = val.lower();
+        int pos = m_serviceType.find(";");
+        if (pos != -1)
+            m_serviceType = m_serviceType.left(pos);
+    } else if (attr->name() == codeAttr || attr->name() == srcAttr)
+         url = parseURL(val).deprecatedString();
+    else if (attr->name() == pluginpageAttr || attr->name() == pluginspageAttr)
+        m_pluginPage = val;
+    else if (attr->name() == hiddenAttr) {
+        if (val.lower() == "yes" || val.lower() == "true") {
             // FIXME: Not dynamic, but it's not really important that such a rarely-used
             // feature work dynamically.
-            addCSSLength( attr, CSS_PROP_WIDTH, "0" );
-            addCSSLength( attr, CSS_PROP_HEIGHT, "0" );
+            addCSSLength(attr, CSS_PROP_WIDTH, "0");
+            addCSSLength(attr, CSS_PROP_HEIGHT, "0");
         }
     } else if (attr->name() == nameAttr) {
-        String newNameAttr = attr->value();
         if (inDocument() && document()->isHTMLDocument()) {
             HTMLDocument* doc = static_cast<HTMLDocument*>(document());
             doc->removeNamedItem(oldNameAttr);
-            doc->addNamedItem(newNameAttr);
+            doc->addNamedItem(val);
         }
-        oldNameAttr = newNameAttr;
+        oldNameAttr = val;
     } else
         HTMLPlugInElement::parseMappedAttribute(attr);
 }
@@ -132,7 +129,7 @@ void HTMLEmbedElement::parseMappedAttribute(MappedAttribute *attr)
 bool HTMLEmbedElement::rendererIsNeeded(RenderStyle *style)
 {
     Frame *frame = document()->frame();
-    if (!frame || !frame->pluginsEnabled())
+    if (!frame)
         return false;
 
     Node *p = parentNode();
@@ -159,7 +156,7 @@ void HTMLEmbedElement::attach()
 
 void HTMLEmbedElement::detach()
 {
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
     m_instance = 0;
 #endif
     HTMLPlugInElement::detach();
@@ -211,26 +208,6 @@ void HTMLEmbedElement::setType(const String& value)
 }
 
 #ifdef SVG_SUPPORT
-Document* HTMLEmbedElement::contentDocument() const
-{
-    // FIXME: The frame loading code should be moved out of the render tree
-    // and into the DOM.  Once that happens, this function should look more like
-    // HTMLFrameElement::contentDocument() and not depend on the renderer.
-    RenderObject* object = renderer();
-    if (object && object->isWidget()) {
-        RenderWidget* renderWidget = static_cast<RenderWidget*>(object);
-        if (renderWidget) {
-            Widget* widget = renderWidget->widget();
-            if (widget && widget->isFrameView()) {
-                FrameView* frameView = static_cast<FrameView*>(widget);
-                if (frameView->frame())
-                    return frameView->frame()->document();
-            }
-        }
-    }
-    return 0;
-}
-
 SVGDocument* HTMLEmbedElement::getSVGDocument(ExceptionCode& ec) const
 {
     Document* doc = contentDocument();

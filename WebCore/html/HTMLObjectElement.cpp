@@ -27,6 +27,7 @@
 #include "EventNames.h"
 #include "ExceptionCode.h"
 #include "Frame.h"
+#include "FrameView.h"
 #include "HTMLFormElement.h"
 #include "HTMLDocument.h"
 #include "HTMLImageLoader.h"
@@ -49,7 +50,7 @@ using namespace HTMLNames;
 
 HTMLObjectElement::HTMLObjectElement(Document *doc) 
     : HTMLPlugInElement(objectTag, doc)
-    , needWidgetUpdate(false)
+    , m_needWidgetUpdate(false)
     , m_useFallbackContent(false)
     , m_imageLoader(0)
     , m_complete(false)
@@ -59,7 +60,7 @@ HTMLObjectElement::HTMLObjectElement(Document *doc)
 
 HTMLObjectElement::~HTMLObjectElement()
 {
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
     // m_instance should have been cleaned up in detach().
     assert(!m_instance);
 #endif
@@ -67,7 +68,7 @@ HTMLObjectElement::~HTMLObjectElement()
     delete m_imageLoader;
 }
 
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
 KJS::Bindings::Instance *HTMLObjectElement::getInstance() const
 {
     Frame* frame = document()->frame();
@@ -109,29 +110,29 @@ void HTMLObjectElement::parseMappedAttribute(MappedAttribute *attr)
     String val = attr->value();
     int pos;
     if (attr->name() == typeAttr) {
-        serviceType = val.deprecatedString().lower();
-        pos = serviceType.find(";");
+        m_serviceType = val.lower();
+        pos = m_serviceType.find(";");
         if (pos != -1)
-          serviceType = serviceType.left(pos);
+          m_serviceType = m_serviceType.left(pos);
         if (renderer())
-          needWidgetUpdate = true;
+          m_needWidgetUpdate = true;
         if (!isImageType() && m_imageLoader) {
           delete m_imageLoader;
           m_imageLoader = 0;
         }
     } else if (attr->name() == dataAttr) {
-        url = parseURL(val).deprecatedString();
+        m_url = parseURL(val);
         if (renderer())
-          needWidgetUpdate = true;
+          m_needWidgetUpdate = true;
         if (renderer() && isImageType()) {
           if (!m_imageLoader)
               m_imageLoader = new HTMLImageLoader(this);
           m_imageLoader->updateFromElement();
         }
     } else if (attr->name() == classidAttr) {
-        classId = val;
+        m_classId = val;
         if (renderer())
-          needWidgetUpdate = true;
+          m_needWidgetUpdate = true;
     } else if (attr->name() == onloadAttr) {
         setHTMLEventListener(loadEvent, attr);
     } else if (attr->name() == onunloadAttr) {
@@ -158,34 +159,13 @@ void HTMLObjectElement::parseMappedAttribute(MappedAttribute *attr)
         HTMLPlugInElement::parseMappedAttribute(attr);
 }
 
-Document* HTMLObjectElement::contentDocument() const
-{
-    // FIXME: The frame loading code should be moved out of the render tree
-    // and into the DOM.  Once that happens, this function should look more like
-    // HTMLFrameElement::contentDocument() and not depend on the renderer.
-    RenderObject* object = renderer();
-    if (object && object->isWidget()) {
-        RenderWidget* renderWidget = static_cast<RenderWidget*>(object);
-        if (renderWidget) {
-            Widget* widget = renderWidget->widget();
-            if (widget && widget->isFrameView()) {
-                FrameView* frameView = static_cast<FrameView*>(widget);
-                if (frameView->frame())
-                    return frameView->frame()->document();
-            }
-        }
-    }
-    return 0;
-}
-
 bool HTMLObjectElement::rendererIsNeeded(RenderStyle* style)
 {
     if (m_useFallbackContent || isImageType())
         return HTMLPlugInElement::rendererIsNeeded(style);
 
-    // FIXME: This check is WRONG.  We should check the content before disabling, or do so at a later stage.
     Frame* frame = document()->frame();
-    if (!frame || !frame->pluginsEnabled())
+    if (!frame)
         return false;
     
     return true;
@@ -214,13 +194,13 @@ void HTMLObjectElement::attach()
                 imageObj->setCachedImage(m_imageLoader->image());
             }
         } else {
-            if (needWidgetUpdate) {
-                // Set needWidgetUpdate to false before calling updateWidget because updateWidget may cause
+            if (m_needWidgetUpdate) {
+                // Set m_needWidgetUpdate to false before calling updateWidget because updateWidget may cause
                 // this method or recalcStyle (which also calls updateWidget) to be called.
-                needWidgetUpdate = false;
+                m_needWidgetUpdate = false;
                 static_cast<RenderPartObject*>(renderer())->updateWidget();
             } else {
-                needWidgetUpdate = true;
+                m_needWidgetUpdate = true;
                 setChanged();
             }
         }
@@ -240,7 +220,7 @@ void HTMLObjectElement::setComplete(bool complete)
     if (complete != m_complete) {
         m_complete = complete;
         if (complete && !m_useFallbackContent) {
-            needWidgetUpdate = true;
+            m_needWidgetUpdate = true;
             if (inDocument())
                 setChanged();
         }
@@ -251,10 +231,10 @@ void HTMLObjectElement::detach()
 {
     if (attached() && renderer() && !m_useFallbackContent) {
         // Update the widget the next time we attach (detaching destroys the plugin).
-        needWidgetUpdate = true;
+        m_needWidgetUpdate = true;
     }
 
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
     m_instance = 0;
 #endif
     HTMLPlugInElement::detach();
@@ -284,7 +264,7 @@ void HTMLObjectElement::removedFromDocument()
 
 void HTMLObjectElement::recalcStyle(StyleChange ch)
 {
-    if (!m_useFallbackContent && needWidgetUpdate && renderer() && !isImageType()) {
+    if (!m_useFallbackContent && m_needWidgetUpdate && renderer() && !isImageType()) {
         detach();
         attach();
     }
@@ -295,7 +275,7 @@ void HTMLObjectElement::childrenChanged()
 {
     updateDocNamedItem();
     if (inDocument() && !m_useFallbackContent) {
-        needWidgetUpdate = true;
+        m_needWidgetUpdate = true;
         setChanged();
     }
 }
@@ -307,21 +287,21 @@ bool HTMLObjectElement::isURLAttribute(Attribute *attr) const
 
 bool HTMLObjectElement::isImageType()
 {
-    if (serviceType.isEmpty() && url.startsWith("data:")) {
+    if (m_serviceType.isEmpty() && m_url.startsWith("data:")) {
         // Extract the MIME type from the data URL.
-        int index = url.find(';');
+        int index = m_url.find(';');
         if (index == -1)
-            index = url.find(',');
+            index = m_url.find(',');
         if (index != -1) {
             int len = index - 5;
             if (len > 0)
-                serviceType = url.mid(5, len);
+                m_serviceType = m_url.substring(5, len);
             else
-                serviceType = "text/plain"; // Data URLs with no MIME type are considered text/plain.
+                m_serviceType = "text/plain"; // Data URLs with no MIME type are considered text/plain.
         }
     }
     
-    return Image::supportsType(serviceType);
+    return Image::supportsType(m_serviceType);
 }
 
 void HTMLObjectElement::renderFallbackContent()
@@ -458,11 +438,6 @@ String HTMLObjectElement::standby() const
 void HTMLObjectElement::setStandby(const String& value)
 {
     setAttribute(standbyAttr, value);
-}
-
-int HTMLObjectElement::tabIndex() const
-{
-    return getAttribute(tabindexAttr).toInt();
 }
 
 void HTMLObjectElement::setTabIndex(int tabIndex)

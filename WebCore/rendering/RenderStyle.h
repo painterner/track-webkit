@@ -4,7 +4,8 @@
  * Copyright (C) 2000 Lars Knoll (knoll@kde.org)
  *           (C) 2000 Antti Koivisto (koivisto@kde.org)
  *           (C) 2000 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2003, 2005, 2006 Apple Computer, Inc.
+ * Copyright (C) 2003, 2005, 2006, 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2006 Graham Dennis (graham.dennis@gmail.com)
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -35,14 +36,20 @@
  * and produce invaliud results.
  */
 
+#include "CSSPrimitiveValue.h"
+#include "CSSValueList.h"
 #include "Color.h"
+#include "CSSCursorImageValue.h"
 #include "DataRef.h"
 #include "Font.h"
 #include "GraphicsTypes.h"
 #include "IntRect.h"
 #include "Length.h"
+#include "Pair.h"
 #include "Shared.h"
-#include "DeprecatedValueList.h"
+#include "TextDirection.h"
+#include <wtf/HashMap.h>
+#include <wtf/Vector.h>
 
 #ifdef SVG_SUPPORT
 #include "SVGRenderStyle.h"
@@ -59,11 +66,16 @@ namespace WebCore {
 using std::max;
 
 class CSSStyleSelector;
+class CSSValueList;
 class CachedImage;
 class CachedResource;
+class CursorList;
+class Pair;
 class RenderArena;
 class ShadowValue;
 class StringImpl;
+
+struct CursorData;
 
 enum PseudoState { PseudoUnknown, PseudoNone, PseudoAnyLink, PseudoLink, PseudoVisited};
 
@@ -97,7 +109,7 @@ struct LengthBox {
     }
 
 
-    bool nonZero() const { return left.value() || right.value() || top.value() || bottom.value(); }
+    bool nonZero() const { return !(left.isZero() && right.isZero() && top.isZero() && bottom.isZero()); }
 };
 
 enum EPosition {
@@ -117,8 +129,7 @@ enum EBorderStyle {
     BNONE, BHIDDEN, INSET, GROOVE, RIDGE, OUTSET, DOTTED, DASHED, SOLID, DOUBLE
 };
 
-class BorderValue
-{
+class BorderValue {
 public:
     BorderValue() {
         width = 3; // medium is default value
@@ -138,7 +149,11 @@ public:
     bool isTransparent() const {
         return color.isValid() && color.alpha() == 0;
     }
-    
+
+    bool isVisible(bool checkStyle = true) const {
+        return nonZero(checkStyle) && !isTransparent() && (!checkStyle || m_style != BHIDDEN);
+    }
+
     bool operator==(const BorderValue& o) const
     {
         return width == o.width && m_style == o.m_style && color == o.color;
@@ -150,8 +165,7 @@ public:
     }
 };
 
-class OutlineValue : public BorderValue
-{
+class OutlineValue : public BorderValue {
 public:
     OutlineValue()
     {
@@ -175,9 +189,8 @@ public:
 
 enum EBorderPrecedence { BOFF, BTABLE, BCOLGROUP, BCOL, BROWGROUP, BROW, BCELL };
 
-struct CollapsedBorderValue
-{
-    CollapsedBorderValue() :border(0), precedence(BOFF) {}
+struct CollapsedBorderValue {
+    CollapsedBorderValue() : border(0), precedence(BOFF) {}
     CollapsedBorderValue(const BorderValue* b, EBorderPrecedence p) :border(b), precedence(p) {}
     
     int width() const { return border && border->nonZero() ? border->width : 0; }
@@ -201,8 +214,7 @@ enum EBorderImageRule {
     BI_STRETCH, BI_ROUND, BI_REPEAT
 };
 
-class BorderImage
-{
+class BorderImage {
 public:
     BorderImage() :m_image(0), m_horizontalRule(BI_STRETCH), m_verticalRule(BI_STRETCH) {}
     BorderImage(CachedImage* image, LengthBox slices, EBorderImageRule h, EBorderImageRule v) 
@@ -226,8 +238,7 @@ public:
     unsigned m_verticalRule : 2; // EBorderImageRule
 };
 
-class BorderData
-{
+class BorderData {
 public:
     BorderValue left;
     BorderValue right;
@@ -296,8 +307,7 @@ public:
 
 enum EMarginCollapse { MCOLLAPSE, MSEPARATE, MDISCARD };
 
-class StyleSurroundData : public Shared<StyleSurroundData>
-{
+class StyleSurroundData : public Shared<StyleSurroundData> {
 public:
     StyleSurroundData();
     StyleSurroundData(const StyleSurroundData& o);
@@ -319,8 +329,7 @@ public:
 
 enum EBoxSizing { CONTENT_BOX, BORDER_BOX };
 
-class StyleBoxData : public Shared<StyleBoxData>
-{
+class StyleBoxData : public Shared<StyleBoxData> {
 public:
     StyleBoxData();
     StyleBoxData(const StyleBoxData& o);
@@ -353,8 +362,7 @@ public:
 //------------------------------------------------
 // Dashboard region attributes. Not inherited.
 
-struct StyleDashboardRegion
-{
+struct StyleDashboardRegion {
     String label;
     LengthBox offset;
     int type;
@@ -395,24 +403,21 @@ enum EUnicodeBidi {
     UBNormal, Embed, Override
 };
 
-class StyleVisualData : public Shared<StyleVisualData>
-{
+class StyleVisualData : public Shared<StyleVisualData> {
 public:
     StyleVisualData();
     ~StyleVisualData();
-    StyleVisualData(const StyleVisualData& o );
+    StyleVisualData(const StyleVisualData&);
 
-    bool operator==( const StyleVisualData &o ) const {
+    bool operator==(const StyleVisualData& o) const {
         return ( clip == o.clip &&
                  hasClip == o.hasClip &&
                  colspan == o.colspan &&
-                 counter_increment == o.counter_increment &&
-                 counter_reset == o.counter_reset &&
+                 counterIncrement == o.counterIncrement &&
+                 counterReset == o.counterReset &&
                  textDecoration == o.textDecoration);
     }
-    bool operator!=( const StyleVisualData &o ) const {
-        return !(*this == o);
-    }
+    bool operator!=(const StyleVisualData& o) const { return !(*this == o); }
 
     LengthBox clip;
     bool hasClip : 1;
@@ -420,8 +425,8 @@ public:
     
     short colspan; // for html, not a css2 attribute
 
-    short counter_increment; //ok, so these are not visual mode spesific
-    short counter_reset;     //can't go to inherited, since these are not inherited
+    short counterIncrement; // ok, so these are not visual mode specific
+    short counterReset;     // can't go to inherited, since these are not inherited
 
 };
 
@@ -539,8 +544,7 @@ public:
     BackgroundLayer* m_next;
 };
 
-class StyleBackgroundData : public Shared<StyleBackgroundData>
-{
+class StyleBackgroundData : public Shared<StyleBackgroundData> {
 public:
     StyleBackgroundData();
     ~StyleBackgroundData() {}
@@ -562,8 +566,7 @@ public:
 enum EMarqueeBehavior { MNONE, MSCROLL, MSLIDE, MALTERNATE, MUNFURL };
 enum EMarqueeDirection { MAUTO = 0, MLEFT = 1, MRIGHT = -1, MUP = 2, MDOWN = -2, MFORWARD = 3, MBACKWARD = -3 };
 
-class StyleMarqueeData : public Shared<StyleMarqueeData>
-{
+class StyleMarqueeData : public Shared<StyleMarqueeData> {
 public:
     StyleMarqueeData();
     StyleMarqueeData(const StyleMarqueeData& o);
@@ -581,7 +584,38 @@ public:
     unsigned behavior : 3; // EMarqueeBehavior 
     EMarqueeDirection direction : 3; // not unsigned because EMarqueeDirection has negative values
 };
+  
+// CSS3 Multi Column Layout
+
+class StyleMultiColData : public Shared<StyleMultiColData> {
+public:
+    StyleMultiColData();
+    StyleMultiColData(const StyleMultiColData& o);
+
+    bool operator==(const StyleMultiColData& o) const;
+    bool operator!=(const StyleMultiColData &o) const {
+        return !(*this == o);
+    }
+
+    unsigned short ruleWidth() const {
+        if (m_rule.style() == BNONE || m_rule.style() == BHIDDEN)
+            return 0; 
+        return m_rule.width;
+    }
+
+    float m_width;
+    unsigned short m_count;
+    float m_gap;
+    BorderValue m_rule;
     
+    bool m_autoWidth : 1;
+    bool m_autoCount : 1;
+    bool m_normalGap : 1;
+    unsigned m_breakBefore : 2; // EPageBreak
+    unsigned m_breakAfter : 2; // EPageBreak
+    unsigned m_breakInside : 2; // EPageBreak
+};
+
 //------------------------------------------------
 // CSS3 Flexible Box Properties
 
@@ -590,8 +624,7 @@ enum EBoxOrient { HORIZONTAL, VERTICAL };
 enum EBoxLines { SINGLE, MULTIPLE };
 enum EBoxDirection { BNORMAL, BREVERSE };
 
-class StyleFlexibleBoxData : public Shared<StyleFlexibleBoxData>
-{
+class StyleFlexibleBoxData : public Shared<StyleFlexibleBoxData> {
 public:
     StyleFlexibleBoxData();
     StyleFlexibleBoxData(const StyleFlexibleBoxData& o);
@@ -631,7 +664,7 @@ struct ShadowData {
     ShadowData* next;
 };
 
-#ifndef KHTML_NO_XBL
+#ifdef XBL_SUPPORT
 struct BindingURI {
     BindingURI(StringImpl*);
     ~BindingURI();
@@ -654,6 +687,11 @@ struct BindingURI {
 #endif
 
 //------------------------------------------------
+
+enum ETextSecurity {
+    TSNONE, TSDISC, TSCIRCLE, TSSQUARE
+};
+
 // CSS3 User Modify Properties
 
 enum EUserModify {
@@ -704,75 +742,141 @@ enum EAppearance {
     ScrollbarThumbHorizontalAppearance, ScrollbarThumbVerticalAppearance,
     ScrollbarGripperHorizontalAppearance, ScrollbarGripperVerticalAppearance,
     SliderHorizontalAppearance, SliderVerticalAppearance, SliderThumbHorizontalAppearance,
-    SliderThumbVerticalAppearance, CaretAppearance, SearchFieldAppearance, SearchFieldResultsAppearance,
-    SearchFieldCloseAppearance, TextFieldAppearance, TextAreaAppearance
+    SliderThumbVerticalAppearance, CaretAppearance, SearchFieldAppearance, SearchFieldDecorationAppearance,
+    SearchFieldResultsDecorationAppearance, SearchFieldResultsButtonAppearance,
+    SearchFieldCancelButtonAppearance, TextFieldAppearance, TextAreaAppearance
 };
 
-// This struct is for rarely used non-inherited CSS3 properties.  By grouping them together,
-// we save space, and only allocate this object when someone actually uses
-// a non-inherited CSS3 property.
-class StyleCSS3NonInheritedData : public Shared<StyleCSS3NonInheritedData>
-{
-public:
-    StyleCSS3NonInheritedData();
-    ~StyleCSS3NonInheritedData();
-    StyleCSS3NonInheritedData(const StyleCSS3NonInheritedData& o);
+enum EListStyleType {
+     DISC, CIRCLE, SQUARE, LDECIMAL, DECIMAL_LEADING_ZERO,
+     LOWER_ROMAN, UPPER_ROMAN, LOWER_GREEK,
+     LOWER_ALPHA, LOWER_LATIN, UPPER_ALPHA, UPPER_LATIN,
+     HEBREW, ARMENIAN, GEORGIAN, CJK_IDEOGRAPHIC,
+     HIRAGANA, KATAKANA, HIRAGANA_IROHA, KATAKANA_IROHA, LNONE
+};
 
-#ifndef KHTML_NO_XBL
-    bool bindingsEquivalent(const StyleCSS3NonInheritedData& o) const;
+struct CounterDirectives {
+    CounterDirectives() : m_reset(false), m_increment(false) { }
+
+    bool m_reset;
+    int m_resetValue;
+    bool m_increment;
+    int m_incrementValue;
+};
+
+bool operator==(const CounterDirectives&, const CounterDirectives&);
+inline bool operator!=(const CounterDirectives& a, const CounterDirectives& b) { return !(a == b); }
+
+typedef HashMap<RefPtr<AtomicStringImpl>, CounterDirectives> CounterDirectiveMap;
+
+class CounterContent {
+public:
+    CounterContent(const AtomicString& identifier, EListStyleType style, const AtomicString& separator)
+        : m_identifier(identifier), m_listStyle(style), m_separator(separator)
+    {
+    }
+
+    const AtomicString& identifier() const { return m_identifier; }
+    EListStyleType listStyle() const { return m_listStyle; }
+    const AtomicString& separator() const { return m_separator; }
+
+private:
+    AtomicString m_identifier;
+    EListStyleType m_listStyle;
+    AtomicString m_separator;
+};
+
+enum ContentType {
+    CONTENT_NONE, CONTENT_OBJECT, CONTENT_TEXT, CONTENT_COUNTER
+};
+
+struct ContentData : Noncopyable {
+    ContentData() : m_type(CONTENT_NONE), m_next(0) { }
+    ~ContentData() { clear(); }
+
+    void clear();
+
+    ContentType m_type;
+    union {
+        CachedResource* m_object;
+        StringImpl* m_text;
+        CounterContent* m_counter;
+    } m_content;
+    ContentData* m_next;
+};
+
+// This struct is for rarely used non-inherited CSS3, CSS2, and WebKit-specific properties.
+// By grouping them together, we save space, and only allocate this object when someone
+// actually uses one of these properties.
+class StyleRareNonInheritedData : public Shared<StyleRareNonInheritedData> {
+public:
+    StyleRareNonInheritedData();
+    ~StyleRareNonInheritedData();
+    StyleRareNonInheritedData(const StyleRareNonInheritedData&);
+
+#ifdef XBL_SUPPORT
+    bool bindingsEquivalent(const StyleRareNonInheritedData&) const;
 #endif
 
-    bool operator==(const StyleCSS3NonInheritedData& o) const;
-    bool operator!=(const StyleCSS3NonInheritedData &o) const {
-        return !(*this == o);
-    }
-    
-    int lineClamp;         // An Apple extension.  Not really CSS3 but not worth making a new struct over.
-    DeprecatedValueList<StyleDashboardRegion> m_dashboardRegions;
-    float opacity;         // Whether or not we're transparent.
+    bool operator==(const StyleRareNonInheritedData&) const;
+    bool operator!=(const StyleRareNonInheritedData& o) const { return !(*this == o); }
+ 
+    bool shadowDataEquivalent(const StyleRareNonInheritedData& o) const;
+
+    int lineClamp; // An Apple extension.
+    Vector<StyleDashboardRegion> m_dashboardRegions;
+    float opacity; // Whether or not we're transparent.
+
     DataRef<StyleFlexibleBoxData> flexibleBox; // Flexible box properties 
     DataRef<StyleMarqueeData> marquee; // Marquee properties
+    DataRef<StyleMultiColData> m_multiCol; //  CSS3 multicol properties
+
+    ContentData* m_content;
+    CounterDirectiveMap* m_counterDirectives;
+
     unsigned userDrag : 2; // EUserDrag
     unsigned userSelect : 2;  // EUserSelect
     bool textOverflow : 1; // Whether or not lines that spill out should be truncated with "..."
     unsigned marginTopCollapse : 2; // EMarginCollapse
     unsigned marginBottomCollapse : 2; // EMarginCollapse
-    unsigned matchNearestMailBlockquoteColor : 1; // EMatchNearestMailBlockquoteColor
-
+    unsigned matchNearestMailBlockquoteColor : 1; // EMatchNearestMailBlockquoteColor, FIXME: This property needs to be eliminated. It should never have been added.
     unsigned m_appearance : 6; // EAppearance
 
-#ifndef KHTML_NO_XBL
+    ShadowData* m_boxShadow;  // For box-shadow decorations.
+    
+#ifdef XBL_SUPPORT
     BindingURI* bindingURI; // The XBL binding URI list.
 #endif
 };
 
-// This struct is for rarely used inherited CSS3 properties.  By grouping them together,
-// we save space, and only allocate this object when someone actually uses
-// an inherited CSS3 property.
-class StyleCSS3InheritedData : public Shared<StyleCSS3InheritedData>
-{
+// This struct is for rarely used inherited CSS3, CSS2, and WebKit-specific properties.
+// By grouping them together, we save space, and only allocate this object when someone
+// actually uses one of these properties.
+class StyleRareInheritedData : public Shared<StyleRareInheritedData> {
 public:
-    StyleCSS3InheritedData();
-    ~StyleCSS3InheritedData();
-    StyleCSS3InheritedData(const StyleCSS3InheritedData& o);
+    StyleRareInheritedData();
+    ~StyleRareInheritedData();
+    StyleRareInheritedData(const StyleRareInheritedData& o);
 
-    bool operator==(const StyleCSS3InheritedData& o) const;
-    bool operator!=(const StyleCSS3InheritedData &o) const {
+    bool operator==(const StyleRareInheritedData& o) const;
+    bool operator!=(const StyleRareInheritedData &o) const {
         return !(*this == o);
     }
-    bool shadowDataEquivalent(const StyleCSS3InheritedData& o) const;
+    bool shadowDataEquivalent(const StyleRareInheritedData&) const;
 
-    ShadowData* textShadow;  // Our text shadow information for shadowed text drawing.
+    Color textStrokeColor;
+    float textStrokeWidth;
+    Color textFillColor;
+
+    ShadowData* textShadow; // Our text shadow information for shadowed text drawing.
     AtomicString highlight; // Apple-specific extension for custom highlight rendering.
-    unsigned userModify : 2; // EUserModify  (editing)
+    unsigned textSecurity : 2; // ETextSecurity
+    unsigned userModify : 2; // EUserModify (editing)
     unsigned wordWrap : 1; // EWordWrap 
     unsigned nbspMode : 1; // ENBSPMode
     unsigned khtmlLineBreak : 1; // EKHTMLLineBreak
-    bool textSizeAdjust : 1;    // An Apple extension.  Not really CSS3 but not worth making a new struct over.
+    bool textSizeAdjust : 1; // An Apple extension.
     unsigned resize : 2; // EResize
-    
-private:
-    StyleCSS3InheritedData &operator=(const StyleCSS3InheritedData &);
 };
 
 //------------------------------------------------
@@ -799,8 +903,7 @@ enum EPageBreak {
     PBAUTO, PBALWAYS, PBAVOID
 };
 
-class StyleInheritedData : public Shared<StyleInheritedData>
-{
+class StyleInheritedData : public Shared<StyleInheritedData> {
 public:
     StyleInheritedData();
     ~StyleInheritedData();
@@ -817,7 +920,7 @@ public:
     Length line_height;
 
     CachedImage *style_image;
-    CachedImage *cursor_image;
+    RefPtr<CursorList> cursorData;
 
     Font font;
     Color color;
@@ -836,18 +939,8 @@ enum EEmptyCell {
     SHOW, HIDE
 };
 
-enum ECaptionSide
-{
+enum ECaptionSide {
     CAPTOP, CAPBOTTOM, CAPLEFT, CAPRIGHT
-};
-
-
-enum EListStyleType {
-     DISC, CIRCLE, SQUARE, LDECIMAL, DECIMAL_LEADING_ZERO,
-     LOWER_ROMAN, UPPER_ROMAN, LOWER_GREEK,
-     LOWER_ALPHA, LOWER_LATIN, UPPER_ALPHA, UPPER_LATIN,
-     HEBREW, ARMENIAN, GEORGIAN, CJK_IDEOGRAPHIC,
-     HIRAGANA, KATAKANA, HIRAGANA_IROHA, KATAKANA_IROHA, LNONE
 };
 
 enum EListStylePosition { OUTSIDE, INSIDE };
@@ -855,35 +948,35 @@ enum EListStylePosition { OUTSIDE, INSIDE };
 enum EVisibility { VISIBLE, HIDDEN, COLLAPSE };
 
 enum ECursor {
-    CURSOR_AUTO, CURSOR_CROSS, CURSOR_DEFAULT, CURSOR_POINTER, CURSOR_MOVE,
+    CURSOR_AUTO, CURSOR_CROSS, CURSOR_DEFAULT, CURSOR_POINTER, CURSOR_MOVE, CURSOR_VERTICAL_TEXT, CURSOR_CELL, CURSOR_CONTEXT_MENU,
+    CURSOR_ALIAS, CURSOR_PROGRESS, CURSOR_NO_DROP, CURSOR_NOT_ALLOWED,
     CURSOR_E_RESIZE, CURSOR_NE_RESIZE, CURSOR_NW_RESIZE, CURSOR_N_RESIZE, CURSOR_SE_RESIZE, CURSOR_SW_RESIZE,
     CURSOR_S_RESIZE, CURSOR_W_RESIZE, CURSOR_EW_RESIZE, CURSOR_NS_RESIZE, CURSOR_NESW_RESIZE, CURSOR_NWSE_RESIZE,
-    CURSOR_COL_RESIZE, CURSOR_ROW_RESIZE, CURSOR_TEXT, CURSOR_WAIT, CURSOR_HELP
+    CURSOR_COL_RESIZE, CURSOR_ROW_RESIZE, CURSOR_TEXT, CURSOR_WAIT, CURSOR_HELP, CURSOR_ALL_SCROLL, 
+    CURSOR_COPY, CURSOR_NONE
 };
 
-enum ContentType {
-    CONTENT_NONE, CONTENT_OBJECT, CONTENT_TEXT, CONTENT_COUNTER
-};
-
-struct ContentData {
-    ContentData() :_contentType(CONTENT_NONE), _nextContent(0) {}
-    ~ContentData();
-    void clearContent();
-
-    ContentType contentType() { return _contentType; }
-
-    StringImpl* contentText() { if (contentType() == CONTENT_TEXT) return _content.text; return 0; }
-    CachedResource* contentObject() { if (contentType() == CONTENT_OBJECT) return _content.object; return 0; }
+struct CursorData {
+    CursorData()
+        : cursorImage(0)
+    {}
     
-    ContentType _contentType;
+    IntPoint hotSpot; // for CSS3 support
+    CachedImage* cursorImage; // weak pointer, the CSSValueImage takes care of deleting cursorImage
+    String cursorFragmentId; // only used for SVGCursorElement, a direct pointer would get stale
+};
 
-    union {
-        CachedResource* object;
-        StringImpl* text;
-        // counters...
-    } _content ;
+class CursorList : public Shared<CursorList> {
+public:
+    const CursorData& operator[](int i) const {
+        return m_vector[i];
+    }
 
-    ContentData* _nextContent;
+    size_t size() const { return m_vector.size(); }
+    void append(const CursorData& cursorData) { m_vector.append(cursorData); }
+
+private:
+    Vector<CursorData> m_vector;
 };
 
 //------------------------------------------------
@@ -896,13 +989,13 @@ enum EDisplay {
     TABLE_CAPTION, BOX, INLINE_BOX, NONE
 };
 
-class RenderStyle
-{
+class RenderStyle {
     friend class CSSStyleSelector;
 
 public:
     // static pseudo styles. Dynamic ones are produced on the fly.
-    enum PseudoId { NOPSEUDO, FIRST_LINE, FIRST_LETTER, BEFORE, AFTER, SELECTION, FIRST_LINE_INHERITED };
+    enum PseudoId { NOPSEUDO, FIRST_LINE, FIRST_LETTER, BEFORE, AFTER, SELECTION, FIRST_LINE_INHERITED, FILE_UPLOAD_BUTTON, SLIDER_THUMB, 
+                    SEARCH_CANCEL_BUTTON, SEARCH_DECORATION, SEARCH_RESULTS_DECORATION, SEARCH_RESULTS_BUTTON };
 
     void ref() { m_ref++;  }
     void deref(RenderArena* arena) { 
@@ -1014,11 +1107,11 @@ protected:
         unsigned _page_break_before : 2; // EPageBreak
         unsigned _page_break_after : 2; // EPageBreak
 
-        unsigned _styleType : 3; // PseudoId
+        unsigned _styleType : 4; // PseudoId
         bool _affectedByHover : 1;
         bool _affectedByActive : 1;
         bool _affectedByDrag : 1;
-        unsigned _pseudoBits : 6;
+        unsigned _pseudoBits : 12;
         unsigned _unicodeBidi : 2; // EUnicodeBidi
     } noninherited_flags;
 
@@ -1027,19 +1120,15 @@ protected:
     DataRef<StyleVisualData> visual;
     DataRef<StyleBackgroundData> background;
     DataRef<StyleSurroundData> surround;
-    DataRef<StyleCSS3NonInheritedData> css3NonInheritedData;
+    DataRef<StyleRareNonInheritedData> rareNonInheritedData;
 
 // inherited attributes
-    DataRef<StyleCSS3InheritedData> css3InheritedData;
+    DataRef<StyleRareInheritedData> rareInheritedData;
     DataRef<StyleInheritedData> inherited;
     
 // list of associated pseudo styles
     RenderStyle* pseudoStyle;
     
-    // added this here, so we can get rid of the vptr in this class.
-    // makes up for the same size.
-    ContentData *content;
-
     unsigned m_pseudoState : 3; // PseudoState
     bool m_affectedByAttributeSelectors : 1;
     bool m_unique : 1;
@@ -1072,6 +1161,7 @@ protected:
         inherited_flags._force_backgrounds_to_white = false;
         
         noninherited_flags._effectiveDisplay = noninherited_flags._originalDisplay = initialDisplay();
+        noninherited_flags._bg_repeat = initialBackgroundRepeat();
         noninherited_flags._overflowX = initialOverflowX();
         noninherited_flags._overflowY = initialOverflowY();
         noninherited_flags._vertical_align = initialVerticalAlign();
@@ -1191,6 +1281,7 @@ public:
             return 0;
         return background->m_outline.width;
     }
+    bool hasOutline() const { return outlineWidth() > 0 && outlineStyle() > BHIDDEN; }
     EBorderStyle   outlineStyle() const {  return background->m_outline.style(); }
     bool outlineStyleIsAuto() const { return background->m_outline._auto; }
     const Color &  outlineColor() const {  return background->m_outline.color; }
@@ -1288,8 +1379,8 @@ public:
     EEmptyCell emptyCells() const { return static_cast<EEmptyCell>(inherited_flags._empty_cells); }
     ECaptionSide captionSide() const { return static_cast<ECaptionSide>(inherited_flags._caption_side); }
 
-    short counterIncrement() const { return visual->counter_increment; }
-    short counterReset() const { return visual->counter_reset; }
+    short counterIncrement() const { return visual->counterIncrement; }
+    short counterReset() const { return visual->counterReset; }
 
     EListStyleType listStyleType() const { return static_cast<EListStyleType>(inherited_flags._list_style_type); }
     CachedImage *listStyleImage() const { return inherited->style_image; }
@@ -1307,7 +1398,7 @@ public:
 
     ECursor cursor() const { return static_cast<ECursor>(inherited_flags._cursor_style); }
     
-    CachedImage *cursorImage() const { return inherited->cursor_image; }
+    CursorList* cursors() const { return inherited->cursorData.get(); }
 
     short widows() const { return inherited->widows; }
     short orphans() const { return inherited->orphans; }
@@ -1316,48 +1407,65 @@ public:
     EPageBreak pageBreakAfter() const { return static_cast<EPageBreak>(noninherited_flags._page_break_after); }
     
     // CSS3 Getter Methods
-#ifndef KHTML_NO_XBL
-    BindingURI* bindingURIs() const { return css3NonInheritedData->bindingURI; }
+#ifdef XBL_SUPPORT
+    BindingURI* bindingURIs() const { return rareNonInheritedData->bindingURI; }
 #endif
     int outlineOffset() const { 
         if (background->m_outline.style() == BNONE || background->m_outline.style() == BHIDDEN)
             return 0;
         return background->m_outline._offset;
     }
-    ShadowData* textShadow() const { return css3InheritedData->textShadow; }
-    float opacity() const { return css3NonInheritedData->opacity; }
-    EAppearance appearance() const { return static_cast<EAppearance>(css3NonInheritedData->m_appearance); }
-    EBoxAlignment boxAlign() const { return static_cast<EBoxAlignment>(css3NonInheritedData->flexibleBox->align); }
+    ShadowData* textShadow() const { return rareInheritedData->textShadow; }
+    Color textStrokeColor() const { return rareInheritedData->textStrokeColor; }
+    float textStrokeWidth() const { return rareInheritedData->textStrokeWidth; }
+    Color textFillColor() const { return rareInheritedData->textFillColor; }
+    float opacity() const { return rareNonInheritedData->opacity; }
+    EAppearance appearance() const { return static_cast<EAppearance>(rareNonInheritedData->m_appearance); }
+    EBoxAlignment boxAlign() const { return static_cast<EBoxAlignment>(rareNonInheritedData->flexibleBox->align); }
     EBoxDirection boxDirection() const { return static_cast<EBoxDirection>(inherited_flags._box_direction); }
-    float boxFlex() { return css3NonInheritedData->flexibleBox->flex; }
-    unsigned int boxFlexGroup() const { return css3NonInheritedData->flexibleBox->flex_group; }
-    EBoxLines boxLines() { return static_cast<EBoxLines>(css3NonInheritedData->flexibleBox->lines); }
-    unsigned int boxOrdinalGroup() const { return css3NonInheritedData->flexibleBox->ordinal_group; }
-    EBoxOrient boxOrient() const { return static_cast<EBoxOrient>(css3NonInheritedData->flexibleBox->orient); }
-    EBoxAlignment boxPack() const { return static_cast<EBoxAlignment>(css3NonInheritedData->flexibleBox->pack); }
+    float boxFlex() { return rareNonInheritedData->flexibleBox->flex; }
+    unsigned int boxFlexGroup() const { return rareNonInheritedData->flexibleBox->flex_group; }
+    EBoxLines boxLines() { return static_cast<EBoxLines>(rareNonInheritedData->flexibleBox->lines); }
+    unsigned int boxOrdinalGroup() const { return rareNonInheritedData->flexibleBox->ordinal_group; }
+    EBoxOrient boxOrient() const { return static_cast<EBoxOrient>(rareNonInheritedData->flexibleBox->orient); }
+    EBoxAlignment boxPack() const { return static_cast<EBoxAlignment>(rareNonInheritedData->flexibleBox->pack); }
+    ShadowData* boxShadow() const { return rareNonInheritedData->m_boxShadow; }
     EBoxSizing boxSizing() const { return static_cast<EBoxSizing>(box->boxSizing); }
-    Length marqueeIncrement() const { return css3NonInheritedData->marquee->increment; }
-    int marqueeSpeed() const { return css3NonInheritedData->marquee->speed; }
-    int marqueeLoopCount() const { return css3NonInheritedData->marquee->loops; }
-    EMarqueeBehavior marqueeBehavior() const { return static_cast<EMarqueeBehavior>(css3NonInheritedData->marquee->behavior); }
-    EMarqueeDirection marqueeDirection() const { return static_cast<EMarqueeDirection>(css3NonInheritedData->marquee->direction); }
-    EUserModify userModify() const { return static_cast<EUserModify>(css3InheritedData->userModify); }
-    EUserDrag userDrag() const { return static_cast<EUserDrag>(css3NonInheritedData->userDrag); }
-    EUserSelect userSelect() const { return static_cast<EUserSelect>(css3NonInheritedData->userSelect); }
-    bool textOverflow() const { return css3NonInheritedData->textOverflow; }
-    EMarginCollapse marginTopCollapse() const { return static_cast<EMarginCollapse>(css3NonInheritedData->marginTopCollapse); }
-    EMarginCollapse marginBottomCollapse() const { return static_cast<EMarginCollapse>(css3NonInheritedData->marginBottomCollapse); }
-    EWordWrap wordWrap() const { return static_cast<EWordWrap>(css3InheritedData->wordWrap); }
-    ENBSPMode nbspMode() const { return static_cast<ENBSPMode>(css3InheritedData->nbspMode); }
-    EKHTMLLineBreak khtmlLineBreak() const { return static_cast<EKHTMLLineBreak>(css3InheritedData->khtmlLineBreak); }
-    EMatchNearestMailBlockquoteColor matchNearestMailBlockquoteColor() const { return static_cast<EMatchNearestMailBlockquoteColor>(css3NonInheritedData->matchNearestMailBlockquoteColor); }
-    const AtomicString& highlight() const { return css3InheritedData->highlight; }
-    EResize resize() const { return static_cast<EResize>(css3InheritedData->resize); }
+    Length marqueeIncrement() const { return rareNonInheritedData->marquee->increment; }
+    int marqueeSpeed() const { return rareNonInheritedData->marquee->speed; }
+    int marqueeLoopCount() const { return rareNonInheritedData->marquee->loops; }
+    EMarqueeBehavior marqueeBehavior() const { return static_cast<EMarqueeBehavior>(rareNonInheritedData->marquee->behavior); }
+    EMarqueeDirection marqueeDirection() const { return static_cast<EMarqueeDirection>(rareNonInheritedData->marquee->direction); }
+    EUserModify userModify() const { return static_cast<EUserModify>(rareInheritedData->userModify); }
+    EUserDrag userDrag() const { return static_cast<EUserDrag>(rareNonInheritedData->userDrag); }
+    EUserSelect userSelect() const { return static_cast<EUserSelect>(rareNonInheritedData->userSelect); }
+    bool textOverflow() const { return rareNonInheritedData->textOverflow; }
+    EMarginCollapse marginTopCollapse() const { return static_cast<EMarginCollapse>(rareNonInheritedData->marginTopCollapse); }
+    EMarginCollapse marginBottomCollapse() const { return static_cast<EMarginCollapse>(rareNonInheritedData->marginBottomCollapse); }
+    EWordWrap wordWrap() const { return static_cast<EWordWrap>(rareInheritedData->wordWrap); }
+    ENBSPMode nbspMode() const { return static_cast<ENBSPMode>(rareInheritedData->nbspMode); }
+    EKHTMLLineBreak khtmlLineBreak() const { return static_cast<EKHTMLLineBreak>(rareInheritedData->khtmlLineBreak); }
+    EMatchNearestMailBlockquoteColor matchNearestMailBlockquoteColor() const { return static_cast<EMatchNearestMailBlockquoteColor>(rareNonInheritedData->matchNearestMailBlockquoteColor); }
+    const AtomicString& highlight() const { return rareInheritedData->highlight; }
+    EResize resize() const { return static_cast<EResize>(rareInheritedData->resize); }
+    float columnWidth() const { return rareNonInheritedData->m_multiCol->m_width; }
+    bool hasAutoColumnWidth() const { return rareNonInheritedData->m_multiCol->m_autoWidth; }
+    unsigned short columnCount() const { return rareNonInheritedData->m_multiCol->m_count; }
+    bool hasAutoColumnCount() const { return rareNonInheritedData->m_multiCol->m_autoCount; }
+    float columnGap() const { return rareNonInheritedData->m_multiCol->m_gap; }
+    bool hasNormalColumnGap() const { return rareNonInheritedData->m_multiCol->m_normalGap; }
+    const Color& columnRuleColor() const { return rareNonInheritedData->m_multiCol->m_rule.color; }
+    EBorderStyle columnRuleStyle() const { return rareNonInheritedData->m_multiCol->m_rule.style(); }
+    unsigned short columnRuleWidth() const { return rareNonInheritedData->m_multiCol->ruleWidth(); }
+    EPageBreak columnBreakBefore() const { return static_cast<EPageBreak>(rareNonInheritedData->m_multiCol->m_breakBefore); }
+    EPageBreak columnBreakInside() const { return static_cast<EPageBreak>(rareNonInheritedData->m_multiCol->m_breakInside); }
+    EPageBreak columnBreakAfter() const { return static_cast<EPageBreak>(rareNonInheritedData->m_multiCol->m_breakAfter); }
     // End CSS3 Getters
 
     // Apple-specific property getter methods
-    int lineClamp() const { return css3NonInheritedData->lineClamp; }
-    bool textSizeAdjust() const { return css3InheritedData->textSizeAdjust; }
+    int lineClamp() const { return rareNonInheritedData->lineClamp; }
+    bool textSizeAdjust() const { return rareInheritedData->textSizeAdjust; }
+    ETextSecurity textSecurity() const { return static_cast<ETextSecurity>(rareInheritedData->textSecurity); }
 
 // attribute setter methods
 
@@ -1379,8 +1487,8 @@ public:
     void setMinHeight(Length v) { SET_VAR(box,min_height,v) }
     void setMaxHeight(Length v) { SET_VAR(box,max_height,v) }
 
-    DeprecatedValueList<StyleDashboardRegion> dashboardRegions() const { return css3NonInheritedData->m_dashboardRegions; }
-    void setDashboardRegions(DeprecatedValueList<StyleDashboardRegion> regions) { SET_VAR(css3NonInheritedData,m_dashboardRegions,regions); }
+    Vector<StyleDashboardRegion> dashboardRegions() const { return rareNonInheritedData->m_dashboardRegions; }
+    void setDashboardRegions(Vector<StyleDashboardRegion> regions) { SET_VAR(rareNonInheritedData,m_dashboardRegions,regions); }
     void setDashboardRegion(int type, const String& label, Length t, Length r, Length b, Length l, bool append) {
         StyleDashboardRegion region;
         region.label = label;
@@ -1390,8 +1498,8 @@ public:
         region.offset.left = l;
         region.type = type;
         if (!append)
-            css3NonInheritedData.access()->m_dashboardRegions.clear();
-        css3NonInheritedData.access()->m_dashboardRegions.append(region);
+            rareNonInheritedData.access()->m_dashboardRegions.clear();
+        rareNonInheritedData.access()->m_dashboardRegions.append(region);
     }
 
     void resetBorder() { resetBorderImage(); resetBorderTop(); resetBorderRight(); resetBorderBottom(); resetBorderLeft(); resetBorderRadius(); }
@@ -1493,8 +1601,8 @@ public:
     void setCaptionSide(ECaptionSide v) { inherited_flags._caption_side = v; }
 
 
-    void setCounterIncrement(short v) {  SET_VAR(visual,counter_increment,v) }
-    void setCounterReset(short v) {  SET_VAR(visual,counter_reset,v) }
+    void setCounterIncrement(short v) {  SET_VAR(visual,counterIncrement,v) }
+    void setCounterReset(short v) {  SET_VAR(visual,counterReset,v) }
 
     void setListStyleType(EListStyleType v) { inherited_flags._list_style_type = v; }
     void setListStyleImage(CachedImage *v) {  SET_VAR(inherited,style_image,v)}
@@ -1513,7 +1621,10 @@ public:
     void setPaddingRight(Length v)  {  SET_VAR(surround,padding.right,v) }
 
     void setCursor( ECursor c ) { inherited_flags._cursor_style = c; }
-    void setCursorImage( CachedImage *v ) { SET_VAR(inherited,cursor_image,v) }
+    void addCursor(CachedImage*, const IntPoint& = IntPoint());
+    void addSVGCursor(const String&);
+    void setCursorList(PassRefPtr<CursorList>);
+    void clearCursorList();
 
     bool forceBackgroundsToWhite() const { return inherited_flags._force_backgrounds_to_white; }
     void setForceBackgroundsToWhite(bool b=true) { inherited_flags._force_backgrounds_to_white = b; }
@@ -1533,63 +1644,86 @@ public:
     void setPageBreakAfter(EPageBreak b) { noninherited_flags._page_break_after = b; }
     
     // CSS3 Setters
-#ifndef KHTML_NO_XBL
+#ifdef XBL_SUPPORT
     void deleteBindingURIs() { 
-        delete css3NonInheritedData->bindingURI; 
-        SET_VAR(css3NonInheritedData, bindingURI, 0);
+        delete rareNonInheritedData->bindingURI; 
+        SET_VAR(rareNonInheritedData, bindingURI, (BindingURI*) 0);
     }
     void inheritBindingURIs(BindingURI* other) {
-        SET_VAR(css3NonInheritedData, bindingURI, other->copy());
+        SET_VAR(rareNonInheritedData, bindingURI, other->copy());
     }
     void addBindingURI(StringImpl* uri);
 #endif
     void setOutlineOffset(int v) { SET_VAR(background, m_outline._offset, v) }
     void setTextShadow(ShadowData* val, bool add=false);
-    void setOpacity(float f) { SET_VAR(css3NonInheritedData, opacity, f); }
-    void setAppearance(EAppearance a) { SET_VAR(css3NonInheritedData, m_appearance, a); }
-    void setBoxAlign(EBoxAlignment a) { SET_VAR(css3NonInheritedData.access()->flexibleBox, align, a); }
+    void setTextStrokeColor(const Color& c) { SET_VAR(rareInheritedData, textStrokeColor, c) }
+    void setTextStrokeWidth(float w) { SET_VAR(rareInheritedData, textStrokeWidth, w) }
+    void setTextFillColor(const Color& c) { SET_VAR(rareInheritedData, textFillColor, c) }
+    void setOpacity(float f) { SET_VAR(rareNonInheritedData, opacity, f); }
+    void setAppearance(EAppearance a) { SET_VAR(rareNonInheritedData, m_appearance, a); }
+    void setBoxAlign(EBoxAlignment a) { SET_VAR(rareNonInheritedData.access()->flexibleBox, align, a); }
     void setBoxDirection(EBoxDirection d) { inherited_flags._box_direction = d; }
-    void setBoxFlex(float f) { SET_VAR(css3NonInheritedData.access()->flexibleBox, flex, f); }
-    void setBoxFlexGroup(unsigned int fg) { SET_VAR(css3NonInheritedData.access()->flexibleBox, flex_group, fg); }
-    void setBoxLines(EBoxLines l) { SET_VAR(css3NonInheritedData.access()->flexibleBox, lines, l); }
-    void setBoxOrdinalGroup(unsigned int og) { SET_VAR(css3NonInheritedData.access()->flexibleBox, ordinal_group, og); }
-    void setBoxOrient(EBoxOrient o) { SET_VAR(css3NonInheritedData.access()->flexibleBox, orient, o); }
-    void setBoxPack(EBoxAlignment p) { SET_VAR(css3NonInheritedData.access()->flexibleBox, pack, p); }
+    void setBoxFlex(float f) { SET_VAR(rareNonInheritedData.access()->flexibleBox, flex, f); }
+    void setBoxFlexGroup(unsigned int fg) { SET_VAR(rareNonInheritedData.access()->flexibleBox, flex_group, fg); }
+    void setBoxLines(EBoxLines l) { SET_VAR(rareNonInheritedData.access()->flexibleBox, lines, l); }
+    void setBoxOrdinalGroup(unsigned int og) { SET_VAR(rareNonInheritedData.access()->flexibleBox, ordinal_group, og); }
+    void setBoxOrient(EBoxOrient o) { SET_VAR(rareNonInheritedData.access()->flexibleBox, orient, o); }
+    void setBoxPack(EBoxAlignment p) { SET_VAR(rareNonInheritedData.access()->flexibleBox, pack, p); }
+    void setBoxShadow(ShadowData* val, bool add=false);
     void setBoxSizing(EBoxSizing s) { SET_VAR(box, boxSizing, s); }
-    void setMarqueeIncrement(const Length& f) { SET_VAR(css3NonInheritedData.access()->marquee, increment, f); }
-    void setMarqueeSpeed(int f) { SET_VAR(css3NonInheritedData.access()->marquee, speed, f); }
-    void setMarqueeDirection(EMarqueeDirection d) { SET_VAR(css3NonInheritedData.access()->marquee, direction, d); }
-    void setMarqueeBehavior(EMarqueeBehavior b) { SET_VAR(css3NonInheritedData.access()->marquee, behavior, b); }
-    void setMarqueeLoopCount(int i) { SET_VAR(css3NonInheritedData.access()->marquee, loops, i); }
-    void setUserModify(EUserModify u) { SET_VAR(css3InheritedData, userModify, u); }
-    void setUserDrag(EUserDrag d) { SET_VAR(css3NonInheritedData, userDrag, d); }
-    void setUserSelect(EUserSelect s) { SET_VAR(css3NonInheritedData, userSelect, s); }
-    void setTextOverflow(bool b) { SET_VAR(css3NonInheritedData, textOverflow, b); }
-    void setMarginTopCollapse(EMarginCollapse c) { SET_VAR(css3NonInheritedData, marginTopCollapse, c); }
-    void setMarginBottomCollapse(EMarginCollapse c) { SET_VAR(css3NonInheritedData, marginBottomCollapse, c); }
-    void setWordWrap(EWordWrap b) { SET_VAR(css3InheritedData, wordWrap, b); }
-    void setNBSPMode(ENBSPMode b) { SET_VAR(css3InheritedData, nbspMode, b); }
-    void setKHTMLLineBreak(EKHTMLLineBreak b) { SET_VAR(css3InheritedData, khtmlLineBreak, b); }
-    void setMatchNearestMailBlockquoteColor(EMatchNearestMailBlockquoteColor c)  { SET_VAR(css3NonInheritedData, matchNearestMailBlockquoteColor, c); }
-    void setHighlight(const AtomicString& h) { SET_VAR(css3InheritedData, highlight, h); }
-    void setResize(EResize r) { SET_VAR(css3InheritedData, resize, r); }
+    void setMarqueeIncrement(const Length& f) { SET_VAR(rareNonInheritedData.access()->marquee, increment, f); }
+    void setMarqueeSpeed(int f) { SET_VAR(rareNonInheritedData.access()->marquee, speed, f); }
+    void setMarqueeDirection(EMarqueeDirection d) { SET_VAR(rareNonInheritedData.access()->marquee, direction, d); }
+    void setMarqueeBehavior(EMarqueeBehavior b) { SET_VAR(rareNonInheritedData.access()->marquee, behavior, b); }
+    void setMarqueeLoopCount(int i) { SET_VAR(rareNonInheritedData.access()->marquee, loops, i); }
+    void setUserModify(EUserModify u) { SET_VAR(rareInheritedData, userModify, u); }
+    void setUserDrag(EUserDrag d) { SET_VAR(rareNonInheritedData, userDrag, d); }
+    void setUserSelect(EUserSelect s) { SET_VAR(rareNonInheritedData, userSelect, s); }
+    void setTextOverflow(bool b) { SET_VAR(rareNonInheritedData, textOverflow, b); }
+    void setMarginTopCollapse(EMarginCollapse c) { SET_VAR(rareNonInheritedData, marginTopCollapse, c); }
+    void setMarginBottomCollapse(EMarginCollapse c) { SET_VAR(rareNonInheritedData, marginBottomCollapse, c); }
+    void setWordWrap(EWordWrap b) { SET_VAR(rareInheritedData, wordWrap, b); }
+    void setNBSPMode(ENBSPMode b) { SET_VAR(rareInheritedData, nbspMode, b); }
+    void setKHTMLLineBreak(EKHTMLLineBreak b) { SET_VAR(rareInheritedData, khtmlLineBreak, b); }
+    void setMatchNearestMailBlockquoteColor(EMatchNearestMailBlockquoteColor c)  { SET_VAR(rareNonInheritedData, matchNearestMailBlockquoteColor, c); }
+    void setHighlight(const AtomicString& h) { SET_VAR(rareInheritedData, highlight, h); }
+    void setResize(EResize r) { SET_VAR(rareInheritedData, resize, r); }
+    void setColumnWidth(float f) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_autoWidth, false); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_width, f); }
+    void setHasAutoColumnWidth() { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_autoWidth, true); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_width, 0); }
+    void setColumnCount(unsigned short c) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_autoCount, false); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_count, c); }
+    void setHasAutoColumnCount() { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_autoCount, true); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_count, 0); }
+    void setColumnGap(float f) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_normalGap, false); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_gap, f); }
+    void setHasNormalColumnGap() { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_normalGap, true); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_gap, 0); }
+    void setColumnRuleColor(const Color& c) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_rule.color, c); }
+    void setColumnRuleStyle(EBorderStyle b) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_rule.m_style, b); }
+    void setColumnRuleWidth(unsigned short w) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_rule.width, w); }
+    void resetColumnRule() { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_rule, BorderValue()) }
+    void setColumnBreakBefore(EPageBreak p) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_breakBefore, p); }
+    void setColumnBreakInside(EPageBreak p) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_breakInside, p); }
+    void setColumnBreakAfter(EPageBreak p) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_breakAfter, p); }
     // End CSS3 Setters
    
     // Apple-specific property setters
-    void setLineClamp(int c) { SET_VAR(css3NonInheritedData, lineClamp, c); }
-    void setTextSizeAdjust(bool b) { SET_VAR(css3InheritedData, textSizeAdjust, b); }
+    void setLineClamp(int c) { SET_VAR(rareNonInheritedData, lineClamp, c); }
+    void setTextSizeAdjust(bool b) { SET_VAR(rareInheritedData, textSizeAdjust, b); }
+    void setTextSecurity(ETextSecurity aTextSecurity) { SET_VAR(rareInheritedData, textSecurity, aTextSecurity); } 
 
 #ifdef SVG_SUPPORT
     const SVGRenderStyle* svgStyle() const { return m_svgStyle.get(); }
     SVGRenderStyle* accessSVGStyle() { return m_svgStyle.access(); }
 #endif
 
-    ContentData* contentData() { return content; }
-    bool contentDataEquivalent(const RenderStyle *otherStyle) const;
-    void setContent(StringImpl* s, bool add = false);
-    void setContent(CachedResource* o, bool add = false);
+    const ContentData* contentData() const { return rareNonInheritedData->m_content; }
+    bool contentDataEquivalent(const RenderStyle* otherStyle) const;
+    void clearContent();
+    void setContent(StringImpl*, bool add = false);
+    void setContent(CachedResource*, bool add = false);
+    void setContent(CounterContent*, bool add = false);
 
-    bool inheritedNotEqual( RenderStyle *other ) const;
+    const CounterDirectiveMap* counterDirectives() const;
+    CounterDirectiveMap& accessCounterDirectives();
+
+    bool inheritedNotEqual(RenderStyle* other) const;
 
     // The difference between two styles.  The following values are used:
     // (1) Equal - The two styles are identical
@@ -1669,7 +1803,7 @@ public:
     static EVerticalAlign initialVerticalAlign() { return BASELINE; }
     static int initialWidows() { return 2; }
     static int initialOrphans() { return 2; }
-    static Length initialLineHeight() { return Length(-100, Percent); }
+    static Length initialLineHeight() { return Length(-100.0, Percent); }
     static ETextAlign initialTextAlign() { return TAAUTO; }
     static ETextDecoration initialTextDecoration() { return TDNONE; }
     static int initialOutlineOffset() { return 0; }
@@ -1702,12 +1836,15 @@ public:
     static EResize initialResize() { return RESIZE_NONE; }
     static EAppearance initialAppearance() { return NoAppearance; }
     static bool initialVisuallyOrdered() { return false; }
+    static float initialTextStrokeWidth() { return 0; }
+    static unsigned short initialColumnCount() { return 1; }
 
     // Keep these at the end.
     static int initialLineClamp() { return -1; }
     static bool initialTextSizeAdjust() { return true; }
-    static const DeprecatedValueList<StyleDashboardRegion>& initialDashboardRegions();
-    static const DeprecatedValueList<StyleDashboardRegion>& noneDashboardRegions();
+    static ETextSecurity initialTextSecurity() { return TSNONE; }
+    static const Vector<StyleDashboardRegion>& initialDashboardRegions();
+    static const Vector<StyleDashboardRegion>& noneDashboardRegions();
 };
 
 } // namespace WebCore

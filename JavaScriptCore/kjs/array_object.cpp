@@ -4,6 +4,7 @@
  *  Copyright (C) 1999-2000 Harri Porten (porten@kde.org)
  *  Copyright (C) 2003 Apple Computer, Inc.
  *  Copyright (C) 2003 Peter Kelly (pmk@post.com)
+ *  Copyright (C) 2006 Alexey Proskuryakov (ap@nypop.com)
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -67,6 +68,18 @@ ArrayInstance::ArrayInstance(JSObject *proto, const List &list)
 ArrayInstance::~ArrayInstance()
 {
   fastFree(storage);
+}
+
+JSValue* ArrayInstance::getItem(unsigned i) const
+{
+    if (i >= length)
+        return jsUndefined();
+    
+    JSValue* val = (i < storageLength) ? 
+                            storage[i] :
+                            getDirect(Identifier::from(i));
+
+    return val ? val : jsUndefined();
 }
 
 JSValue *ArrayInstance::lengthGetter(ExecState*, JSObject*, const Identifier&, const PropertySlot& slot)
@@ -403,6 +416,7 @@ const ClassInfo ArrayPrototype::info = {"Array", &ArrayInstance::info, &arrayTab
   forEach        ArrayProtoFunc::ForEach        DontEnum|Function 1
   some           ArrayProtoFunc::Some           DontEnum|Function 1
   indexOf        ArrayProtoFunc::IndexOf        DontEnum|Function 1
+  lastIndexOf    ArrayProtoFunc::LastIndexOf    DontEnum|Function 1
   filter         ArrayProtoFunc::Filter         DontEnum|Function 1
   map            ArrayProtoFunc::Map            DontEnum|Function 1
 @end
@@ -455,50 +469,37 @@ JSValue *ArrayProtoFunc::callAsFunction(ExecState *exec, JSObject *thisObj, cons
   case Join: {
     static HashSet<JSObject*> visitedElems;
     if (visitedElems.contains(thisObj))
-      return jsString("");
+        return jsString("");
     UString separator = ",";
     UString str = "";
 
     visitedElems.add(thisObj);
     if (id == Join && !args[0]->isUndefined())
-      separator = args[0]->toString(exec);
+        separator = args[0]->toString(exec);
     for (unsigned int k = 0; k < length; k++) {
-      if (k >= 1)
-        str += separator;
-      
-      JSValue *element = thisObj->get(exec, k);
-      if (element->isUndefinedOrNull())
-        continue;
+        if (k >= 1)
+            str += separator;
 
-      bool fallback = false;
-      if (id == ToLocaleString) {
-        JSObject *o = element->toObject(exec);
-        JSValue *conversionFunction = o->get(exec, toLocaleStringPropertyName);
-        if (conversionFunction->isObject() && static_cast<JSObject *>(conversionFunction)->implementsCall()) {
-          str += static_cast<JSObject *>(conversionFunction)->call(exec, o, List())->toString(exec);
-        } else {
-          // try toString() fallback
-          fallback = true;
+        JSValue* element = thisObj->get(exec, k);
+        if (element->isUndefinedOrNull())
+            continue;
+
+        bool fallback = false;
+        if (id == ToLocaleString) {
+            JSObject* o = element->toObject(exec);
+            JSValue* conversionFunction = o->get(exec, toLocaleStringPropertyName);
+            if (conversionFunction->isObject() && static_cast<JSObject*>(conversionFunction)->implementsCall())
+                str += static_cast<JSObject*>(conversionFunction)->call(exec, o, List())->toString(exec);
+            else
+                // try toString() fallback
+                fallback = true;
         }
-      }
 
-      if (id == ToString || id == Join || fallback) {
-        if (element->isObject()) {
-          JSObject *o = static_cast<JSObject *>(element);
-          JSValue *conversionFunction = o->get(exec, toStringPropertyName);
-          if (conversionFunction->isObject() && static_cast<JSObject *>(conversionFunction)->implementsCall()) {
-            str += static_cast<JSObject *>(conversionFunction)->call(exec, o, List())->toString(exec);
-          } else {
-            visitedElems.remove(thisObj);
-            return throwError(exec, RangeError, "Can't convert " + o->className() + " object to string");
-          }
-        } else {
-          str += element->toString(exec);
-        }
-      }
+        if (id == ToString || id == Join || fallback)
+            str += element->toString(exec);
 
-      if ( exec->hadException() )
-        break;
+        if (exec->hadException())
+            break;
     }
     visitedElems.remove(thisObj);
     result = jsString(str);
@@ -891,7 +892,32 @@ JSValue *ArrayProtoFunc::callAsFunction(ExecState *exec, JSObject *thisObj, cons
 
     return jsNumber(-1);
   }
+  case LastIndexOf: {
+       // JavaScript 1.6 Extension by Mozilla
+      // Documentation: http://developer.mozilla.org/en/docs/Core_JavaScript_1.5_Reference:Global_Objects:Array:lastIndexOf 
 
+    int index = length - 1;
+    double d = args[1]->toInteger(exec);
+
+    if (d < 0) {
+        d += length;
+        if (d < 0) 
+            return jsNumber(-1);
+    }
+    if (d < length)
+        index = static_cast<int>(d);
+          
+    JSValue* searchElement = args[0];
+    for (; index >= 0; --index) {
+        JSValue* e = getProperty(exec, thisObj, index);
+        if (!e)
+            e = jsUndefined();
+        if (strictEqual(exec, searchElement, e))
+            return jsNumber(index);
+    }
+          
+    return jsNumber(-1);
+}
   default:
     assert(0);
     result = 0;
@@ -935,7 +961,7 @@ JSObject *ArrayObjectImp::construct(ExecState *exec, const List &args)
 }
 
 // ECMA 15.6.1
-JSValue *ArrayObjectImp::callAsFunction(ExecState *exec, JSObject */*thisObj*/, const List &args)
+JSValue *ArrayObjectImp::callAsFunction(ExecState *exec, JSObject *, const List &args)
 {
   // equivalent to 'new Array(....)'
   return construct(exec,args);

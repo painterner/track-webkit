@@ -34,6 +34,8 @@
 #include "DocumentFragment.h"
 #include "EventNames.h"
 #include "Frame.h"
+#include "FrameLoader.h"
+#include "FrameView.h"
 #include "HTMLViewSourceDocument.h"
 #include "HTMLElement.h"
 #include "SystemTime.h"
@@ -46,7 +48,14 @@
 
 // #define INSTRUMENT_LAYOUT_SCHEDULING 1
 
+#if MOBILE
+// The mobile device needs to be responsive, as such the tokenizer chunk size is reduced.
+// This value is used to define how many characters the tokenizer will process before 
+// yeilding control.
+#define TOKENIZER_CHUNK_SIZE  256
+#else
 #define TOKENIZER_CHUNK_SIZE  4096
+#endif
 
 using namespace std;
 
@@ -55,10 +64,17 @@ namespace WebCore {
 using namespace HTMLNames;
 using namespace EventNames;
 
+#if MOBILE
+// As the chunks are smaller (above), the tokenizer should not yield for as long a period, otherwise
+// it will take way to long to load a page.
+const double tokenizerTimeDelay = 0.300;
+
+#else
 // FIXME: We would like this constant to be 200ms.
 // Yielding more aggressively results in increased responsiveness and better incremental rendering.
 // It slows down overall page-load on slower machines, though, so for now we set a value of 500.
 const double tokenizerTimeDelay = 0.500;
+#endif
 
 static const char commentStart [] = "<!--";
 static const char scriptEnd [] = "</script";
@@ -369,7 +385,7 @@ HTMLTokenizer::State HTMLTokenizer::scriptHandler(State state)
 #endif
                 // The parser might have been stopped by for example a window.close call in an earlier script.
                 // If so, we don't want to load scripts.
-                if (!m_parserStopped && (cs = m_doc->docLoader()->requestScript(scriptSrc, scriptSrcCharset) ))
+                if (!m_parserStopped && (cs = m_doc->docLoader()->requestScript(scriptSrc, scriptSrcCharset)))
                     pendingScripts.enqueue(cs);
                 else
                     scriptNode = 0;
@@ -482,7 +498,7 @@ HTMLTokenizer::State HTMLTokenizer::scriptExecution(const DeprecatedString& str,
 #endif
 
     m_state = state;
-    m_doc->frame()->executeScript(url,baseLine,0,str);
+    m_doc->frame()->loader()->executeScript(url, baseLine, 0, str);
     state = m_state;
 
     state.setAllowYield(true);
@@ -1133,18 +1149,14 @@ HTMLTokenizer::State HTMLTokenizer::parseTag(SegmentedString &src, State state)
                 Attribute* a = 0;
                 bool foundTypeAttribute = false;
                 scriptSrc = DeprecatedString::null;
-                scriptSrcCharset = DeprecatedString::null;
-                if ( currToken.attrs && /* potentially have a ATTR_SRC ? */
-                     m_doc->frame() &&
-                     m_doc->frame()->jScriptEnabled() && /* jscript allowed at all? */
-                     !m_fragment /* are we a regular tokenizer or just for innerHTML ? */
-                    ) {
+                scriptSrcCharset = String();
+                if (currToken.attrs && !m_fragment && m_doc->frame() && m_doc->frame()->settings()->isJavaScriptEnabled()) {
                     if ((a = currToken.attrs->getAttributeItem(srcAttr)))
                         scriptSrc = m_doc->completeURL(parseURL(a->value()).deprecatedString());
                     if ((a = currToken.attrs->getAttributeItem(charsetAttr)))
-                        scriptSrcCharset = a->value().deprecatedString().stripWhiteSpace();
-                    if ( scriptSrcCharset.isEmpty() )
-                        scriptSrcCharset = m_doc->frame()->encoding();
+                        scriptSrcCharset = a->value().domString().stripWhiteSpace();
+                    if (scriptSrcCharset.isEmpty())
+                        scriptSrcCharset = m_doc->frame()->loader()->encoding();
                     /* Check type before language, since language is deprecated */
                     if ((a = currToken.attrs->getAttributeItem(typeAttr)) != 0 && !a->value().isEmpty())
                         foundTypeAttribute = true;
@@ -1165,7 +1177,7 @@ HTMLTokenizer::State HTMLTokenizer::parseTag(SegmentedString &src, State state)
                         Mozilla 1.5 and WinIE 6 both accept the empty string, but neither accept a whitespace-only string.
                         We want to accept all the values that either of these browsers accept, but not other values.
                      */
-                    DeprecatedString type = a->value().deprecatedString().stripWhiteSpace().lower();
+                    DeprecatedString type = a->value().domString().stripWhiteSpace().lower().deprecatedString();
                     if( type.compare("application/x-javascript") != 0 &&
                         type.compare("text/javascript") != 0 &&
                         type.compare("text/javascript1.0") != 0 &&
@@ -1303,7 +1315,7 @@ inline bool HTMLTokenizer::continueProcessing(int& processedCount, double startT
     return true;
 }
 
-bool HTMLTokenizer::write(const SegmentedString &str, bool appendData)
+bool HTMLTokenizer::write(const SegmentedString& str, bool appendData)
 {
 #ifdef TOKEN_DEBUG
     kdDebug( 6036 ) << this << " Tokenizer::write(\"" << str.toString() << "\"," << appendData << ")" << endl;
@@ -1349,7 +1361,7 @@ bool HTMLTokenizer::write(const SegmentedString &str, bool appendData)
 
     State state = m_state;
 
-    while (!src.isEmpty() && (!frame || !frame->isScheduledLocationChangePending())) {
+    while (!src.isEmpty() && (!frame || !frame->loader()->isScheduledLocationChangePending())) {
         if (!continueProcessing(processedCount, startTime, state))
             break;
 
@@ -1479,7 +1491,7 @@ void HTMLTokenizer::stopParsing()
     // The part needs to know that the tokenizer has finished with its data,
     // regardless of whether it happened naturally or due to manual intervention.
     if (!m_fragment && m_doc->frame())
-        m_doc->frame()->tokenizerProcessedData();
+        m_doc->frame()->loader()->tokenizerProcessedData();
 }
 
 bool HTMLTokenizer::processingData() const
@@ -1508,7 +1520,7 @@ void HTMLTokenizer::timerFired(Timer<HTMLTokenizer>*)
   
     // If we called end() during the write,  we need to let WebKit know that we're done processing the data.
     if (didCallEnd && frame)
-        frame->tokenizerProcessedData();
+        frame->loader()->tokenizerProcessedData();
 }
 
 void HTMLTokenizer::end()
@@ -1548,15 +1560,15 @@ void HTMLTokenizer::finish()
         scriptCode[scriptCodeSize] = 0;
         scriptCode[scriptCodeSize + 1] = 0;
         int pos;
-        DeprecatedString food;
+        String food;
         if (m_state.inScript() || m_state.inStyle())
-            food.setUnicode(reinterpret_cast<DeprecatedChar*>(scriptCode), scriptCodeSize);
+            food = String(scriptCode, scriptCodeSize);
         else if (m_state.inServer()) {
             food = "<";
-            food += DeprecatedString(reinterpret_cast<DeprecatedChar*>(scriptCode), scriptCodeSize);
+            food.append(String(scriptCode, scriptCodeSize));
         } else {
             pos = DeprecatedConstString(reinterpret_cast<DeprecatedChar*>(scriptCode), scriptCodeSize).string().find('>');
-            food.setUnicode(reinterpret_cast<DeprecatedChar*>(scriptCode) + pos + 1, scriptCodeSize - pos - 1); // deep copy
+            food = String(scriptCode + pos + 1, scriptCodeSize - pos - 1);
         }
         fastFree(scriptCode);
         scriptCode = 0;
@@ -1575,7 +1587,7 @@ void HTMLTokenizer::finish()
 
 PassRefPtr<Node> HTMLTokenizer::processToken()
 {
-    KJSProxy* jsProxy = (!m_fragment && m_doc->frame()) ? m_doc->frame()->jScript() : 0;
+    KJSProxy* jsProxy = (!m_fragment && m_doc->frame()) ? m_doc->frame()->scriptProxy() : 0;
     if (jsProxy)
         jsProxy->setEventHandlerLineno(tagStartLineno);
     if (dest > buffer) {
@@ -1739,11 +1751,11 @@ void HTMLTokenizer::setSrc(const SegmentedString &source)
     src.resetLineCount();
 }
 
-void parseHTMLDocumentFragment(const String &source, DocumentFragment *fragment)
+void parseHTMLDocumentFragment(const String& source, DocumentFragment* fragment)
 {
     HTMLTokenizer tok(fragment);
     tok.setForceSynchronous(true);
-    tok.write(source.deprecatedString(), true);
+    tok.write(source, true);
     tok.finish();
     ASSERT(!tok.processingData());      // make sure we're done (see 3963151)
 }

@@ -111,7 +111,7 @@ namespace WebCore {
         void parseSheet(CSSStyleSheet*, const String&);
         PassRefPtr<CSSRule> parseRule(CSSStyleSheet*, const String&);
         bool parseValue(CSSMutableStyleDeclaration*, int id, const String&, bool important);
-        static RGBA32 parseColor(const String&);
+        static RGBA32 parseColor(const String&, bool strict = false);
         bool parseColor(CSSMutableStyleDeclaration*, const String&);
         bool parseDeclaration(CSSMutableStyleDeclaration*, const String&);
         bool parseMediaQuery(MediaList*, const String&);
@@ -120,7 +120,7 @@ namespace WebCore {
 
         Document* document() const;
 
-        void addProperty(int propId, CSSValue*, bool important);
+        void addProperty(int propId, PassRefPtr<CSSValue>, bool important);
         void rollbackLastProperties(int num);
         bool hasProperties() const { return numParsedProperties > 0; }
 
@@ -140,17 +140,19 @@ namespace WebCore {
 
         void addBackgroundValue(CSSValue*& lval, CSSValue* rval);
       
-#if __APPLE__
+#if PLATFORM(MAC)
         bool parseDashboardRegions(int propId, bool important);
 #endif
 
         bool parseShape(int propId, bool important);
         bool parseFont(bool important);
+        bool parseCounter(int propId, int defaultValue, bool important);
         CSSValueList* parseFontFamily();
         bool parseColorParameters(Value*, int* colorValues, bool parseAlpha);
         bool parseHSLParameters(Value*, double* colorValues, bool parseAlpha);
-        CSSPrimitiveValue* parseColor();
-        CSSPrimitiveValue* parseColorFromValue(Value*);
+        CSSPrimitiveValue* parseColor(Value* = 0);
+        bool parseColorFromValue(Value*, RGBA32&, bool = false);
+        PassRefPtr<CSSValue> parseCounterContent(ValueList* args, bool counters);
         
 #ifdef SVG_SUPPORT
         bool parseSVGValue(int propId, bool important);
@@ -159,7 +161,7 @@ namespace WebCore {
         CSSValue* parseSVGStrokeDasharray();
 #endif
 
-        static bool parseColor(const DeprecatedString&, RGBA32& rgb);
+        static bool parseColor(const String&, RGBA32& rgb, bool strict);
 
         // CSS3 Parsing Routines (for properties specific to CSS3)
         bool parseShadow(int propId, bool important);
@@ -179,6 +181,7 @@ namespace WebCore {
         Value& sinkFloatingValue(Value&);
 
         MediaList* createMediaList();
+        CSSRule* createCharsetRule(const ParseString&);
         CSSRule* createImportRule(const ParseString&, MediaList*);
         CSSRule* createMediaRule(MediaList*, CSSRuleList*);
         CSSRuleList* createRuleList();

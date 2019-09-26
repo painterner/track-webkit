@@ -34,39 +34,18 @@
 #include "CachedResource.h"
 #include "DocLoader.h"
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "HTMLDocument.h"
 #include "LoaderFunctions.h"
 #include "Request.h"
-#include "ResourceLoader.h"
+#include "ResourceHandle.h"
+#include "ResourceRequest.h"
+#include "ResourceResponse.h"
+#include "SubresourceLoader.h"
 #include <wtf/Assertions.h>
 #include <wtf/Vector.h>
 
 namespace WebCore {
-
-static bool crossDomain(const DeprecatedString& a, const DeprecatedString& b)
-{
-    if (a == b)
-        return false;
-
-    DeprecatedStringList l1 = DeprecatedStringList::split('.', a);
-    DeprecatedStringList l2 = DeprecatedStringList::split('.', b);
-
-    while (l1.count() > l2.count())
-        l1.pop_front();
-
-    while (l2.count() > l1.count())
-        l2.pop_front();
-
-    while (l2.count() >= 2) {
-        if (l1 == l2)
-            return false;
-
-        l1.pop_front();
-        l2.pop_front();
-    }
-
-    return true;
-}
 
 Loader::Loader()
 {
@@ -93,92 +72,103 @@ void Loader::servePendingRequests()
     // get the first pending request
     Request* req = m_requestsPending.take(0);
 
-    KURL u(req->cachedObject()->url().deprecatedString());
-    ResourceLoader* job = new ResourceLoader(this, "GET", u);
+    ResourceRequest request(req->cachedResource()->url());
 
-    if (!req->cachedObject()->accept().isEmpty())
-        job->addMetaData("accept", req->cachedObject()->accept());
+    if (!req->cachedResource()->accept().isEmpty())
+        request.setHTTPAccept(req->cachedResource()->accept());
     if (req->docLoader())  {
         KURL r = req->docLoader()->doc()->URL();
         if (r.protocol().startsWith("http") && r.path().isEmpty())
             r.setPath("/");
-        job->addMetaData("referrer", r.url());
+        request.setHTTPReferrer(r.url());
         DeprecatedString domain = r.host();
         if (req->docLoader()->doc()->isHTMLDocument())
             domain = static_cast<HTMLDocument*>(req->docLoader()->doc())->domain().deprecatedString();
-        if (crossDomain(u.host(), domain))
-            job->addMetaData("cross-domain", "true");
     }
+    
+    RefPtr<SubresourceLoader> loader = SubresourceLoader::create(req->docLoader()->doc()->frame(), this, request);
 
-    if (job->start(req->docLoader()))
-        m_requestsLoading.add(job, req);
+    if (loader)
+        m_requestsLoading.add(loader.release(), req);
 }
 
-void Loader::receivedAllData(ResourceLoader* job, PlatformData allData)
+void Loader::didFinishLoading(SubresourceLoader* loader)
 {
-    RequestMap::iterator i = m_requestsLoading.find(job);
+    RequestMap::iterator i = m_requestsLoading.find(loader);
     if (i == m_requestsLoading.end())
         return;
 
     Request* req = i->second;
     m_requestsLoading.remove(i);
 
-    CachedResource* object = req->cachedObject();
+    CachedResource* object = req->cachedResource();
     DocLoader* docLoader = req->docLoader();
 
-    if (job->error() || job->isErrorPage()) {
-        docLoader->setLoadInProgress(true);
-        object->error();
-        docLoader->setLoadInProgress(false);
-        Cache::remove(object);
-    } else {
-        docLoader->setLoadInProgress(true);
-        object->data(req->buffer(), true);
-#ifdef __APPLE__
-        object->setAllData(allData);
-#endif
-        docLoader->setLoadInProgress(false);
-        object->finish();
-    }
+    docLoader->setLoadInProgress(true);
+    object->data(req->buffer(), true);
+    object->setAllData(loader->resourceData());
+    docLoader->setLoadInProgress(false);
+    object->finish();
 
     delete req;
 
     servePendingRequests();
 }
 
-void Loader::receivedResponse(ResourceLoader* job, PlatformResponse response)
+void Loader::didFail(SubresourceLoader* loader, const ResourceError& error)
 {
-#ifdef __APPLE__
-    Request* req = m_requestsLoading.get(job);
-    ASSERT(req);
-    ASSERT(response);
-    req->cachedObject()->setResponse(response);
-    req->cachedObject()->setExpireDate(CacheObjectExpiresTime(req->docLoader(), response), false);
-    
-    DeprecatedString chs = job->queryMetaData("charset").deprecatedString();
-    if (!chs.isNull())
-        req->cachedObject()->setCharset(chs);
-    
-    if (req->isMultipart()) {
-        ASSERT(req->cachedObject()->isImage());
-        static_cast<CachedImage*>(req->cachedObject())->clear();
-        if (req->docLoader()->frame())
-            req->docLoader()->frame()->checkCompleted();
-    } else if (ResponseIsMultipart(response)) {
-        req->setIsMultipart(true);
-        if (!req->cachedObject()->isImage())
-            job->cancel();
-    }
-#endif
+    ASSERT(loader->handle());
+    RequestMap::iterator i = m_requestsLoading.find(loader);
+    if (i == m_requestsLoading.end())
+        return;
+
+    Request* req = i->second;
+    m_requestsLoading.remove(i);
+
+    CachedResource* object = req->cachedResource();
+    DocLoader* docLoader = req->docLoader();
+
+    docLoader->setLoadInProgress(true);
+    object->error();
+    docLoader->setLoadInProgress(false);
+    cache()->remove(object);
+
+    delete req;
+
+    servePendingRequests();
 }
 
-void Loader::receivedData(ResourceLoader* job, const char* data, int size)
+void Loader::didReceiveResponse(SubresourceLoader* loader, const ResourceResponse& response)
 {
-    Request* request = m_requestsLoading.get(job);
+    ASSERT(loader->handle());
+    Request* req = m_requestsLoading.get(loader);
+    ASSERT(req);
+    req->cachedResource()->setResponse(response);
+    
+    String encoding = response.textEncodingName();
+    if (!encoding.isNull())
+        req->cachedResource()->setEncoding(encoding);
+    
+    if (req->isMultipart()) {
+        ASSERT(req->cachedResource()->isImage());
+        static_cast<CachedImage*>(req->cachedResource())->clear();
+        if (req->docLoader()->frame())
+            req->docLoader()->frame()->loader()->checkCompleted();
+    } else if (response.isMultipart()) {
+        req->setIsMultipart(true);
+        if (!req->cachedResource()->isImage())
+            loader->handle()->cancel();
+    }
+}
+
+void Loader::didReceiveData(SubresourceLoader* loader, const char* data, int size)
+{
+    ASSERT(loader->handle());
+    Request* request = m_requestsLoading.get(loader);
     if (!request)
         return;
 
-    CachedResource* object = request->cachedObject();    
+    CachedResource* object = request->cachedResource();    
     Vector<char>& buffer = object->bufferData(data, size, request);
 
     // Set the data.
@@ -223,33 +213,32 @@ void Loader::cancelRequests(DocLoader* dl)
     DeprecatedPtrListIterator<Request> pIt(m_requestsPending);
     while (pIt.current()) {
         if (pIt.current()->docLoader() == dl) {
-            Cache::remove(pIt.current()->cachedObject());
+            cache()->remove(pIt.current()->cachedResource());
             m_requestsPending.remove(pIt);
         } else
             ++pIt;
     }
 
-    Vector<ResourceLoader*, 256> jobsToCancel;
+    Vector<SubresourceLoader*, 256> loadersToCancel;
 
     RequestMap::iterator end = m_requestsLoading.end();
     for (RequestMap::iterator i = m_requestsLoading.begin(); i != end; ++i) {
         Request* r = i->second;
         if (r->docLoader() == dl)
-            jobsToCancel.append(i->first);
+            loadersToCancel.append(i->first.get());
     }
 
-    for (unsigned i = 0; i < jobsToCancel.size(); ++i) {
-        ResourceLoader* job = jobsToCancel[i];
-        Request* r = m_requestsLoading.get(job);
-        m_requestsLoading.remove(job);
-        Cache::remove(r->cachedObject());
-        job->kill();
+    for (unsigned i = 0; i < loadersToCancel.size(); ++i) {
+        SubresourceLoader* loader = loadersToCancel[i];
+        Request* r = m_requestsLoading.get(loader);
+        m_requestsLoading.remove(loader);
+        cache()->remove(r->cachedResource());
     }
 
     DeprecatedPtrListIterator<Request> bdIt(m_requestsBackgroundDecoding);
     while (bdIt.current()) {
         if (bdIt.current()->docLoader() == dl) {
-            Cache::remove(bdIt.current()->cachedObject());
+            cache()->remove(bdIt.current()->cachedResource());
             m_requestsBackgroundDecoding.remove(bdIt);
         } else
             ++bdIt;
@@ -260,17 +249,6 @@ void Loader::removeBackgroundDecodingRequest(Request* r)
 {
     if (m_requestsBackgroundDecoding.containsRef(r))
         m_requestsBackgroundDecoding.remove(r);
-}
-
-ResourceLoader* Loader::jobForRequest(const String& URL) const
-{
-    RequestMap::const_iterator end = m_requestsLoading.end();
-    for (RequestMap::const_iterator i = m_requestsLoading.begin(); i != end; ++i) {
-        CachedResource* obj = i->second->cachedObject();
-        if (obj && obj->url() == URL)
-            return i->first;
-    }
-    return 0;
 }
 
 } //namespace WebCore

@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,203 +21,154 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "Attr.h"
-
-#include "ksvg.h"
-#include "SVGNames.h"
-#include "SVGHelper.h"
-#include "SVGMatrix.h"
-#include "SVGTransform.h"
-#include "SVGStopElement.h"
-#include "SVGTransformList.h"
-#include "SVGAnimatedLength.h"
-#include "SVGAnimatedNumber.h"
-#include "SVGAnimatedString.h"
-#include "SVGAnimatedEnumeration.h"
 #include "SVGRadialGradientElement.h"
-#include "SVGAnimatedTransformList.h"
 
-#include <kcanvas/KCanvasMatrix.h>
-#include <kcanvas/device/KRenderingDevice.h>
-#include <kcanvas/device/KRenderingPaintServerGradient.h>
+#include "RadialGradientAttributes.h"
+#include "SVGPaintServerRadialGradient.h"
+#include "SVGLength.h"
+#include "SVGNames.h"
+#include "SVGStopElement.h"
+#include "SVGTransform.h"
+#include "SVGTransformList.h"
+#include "SVGUnitTypes.h"
 
 namespace WebCore {
 
-SVGRadialGradientElement::SVGRadialGradientElement(const QualifiedName& tagName, Document *doc) : SVGGradientElement(tagName, doc)
+SVGRadialGradientElement::SVGRadialGradientElement(const QualifiedName& tagName, Document* doc)
+    : SVGGradientElement(tagName, doc)
+    , m_cx(this, LengthModeWidth)
+    , m_cy(this, LengthModeHeight)
+    , m_r(this, LengthModeOther)
+    , m_fx(this, LengthModeWidth)
+    , m_fy(this, LengthModeHeight)
 {
+    // Spec: If the attribute is not specified, the effect is as if a value of "50%" were specified.
+    setCxBaseValue(SVGLength(this, LengthModeWidth, "50%"));
+    setCyBaseValue(SVGLength(this, LengthModeHeight, "50%"));
+    setRBaseValue(SVGLength(this, LengthModeOther, "50%"));
 }
 
 SVGRadialGradientElement::~SVGRadialGradientElement()
 {
 }
 
-SVGAnimatedLength *SVGRadialGradientElement::cx() const
-{
-    // Spec: If the attribute is not specified, the effect is as if a value of "50%" were specified.
-    if (!m_cx) {
-        lazy_create<SVGAnimatedLength>(m_cx, this, LM_WIDTH, viewportElement());
-        m_cx->baseVal()->setValue(0.5);
-    }
+ANIMATED_PROPERTY_DEFINITIONS(SVGRadialGradientElement, SVGLength, Length, length, Cx, cx, SVGNames::cxAttr.localName(), m_cx)
+ANIMATED_PROPERTY_DEFINITIONS(SVGRadialGradientElement, SVGLength, Length, length, Cy, cy, SVGNames::cyAttr.localName(), m_cy)
+ANIMATED_PROPERTY_DEFINITIONS(SVGRadialGradientElement, SVGLength, Length, length, Fx, fx, SVGNames::fxAttr.localName(), m_fx)
+ANIMATED_PROPERTY_DEFINITIONS(SVGRadialGradientElement, SVGLength, Length, length, Fy, fy, SVGNames::fyAttr.localName(), m_fy)
+ANIMATED_PROPERTY_DEFINITIONS(SVGRadialGradientElement, SVGLength, Length, length, R, r, SVGNames::rAttr.localName(), m_r)
 
-    return m_cx.get();
-}
-
-SVGAnimatedLength *SVGRadialGradientElement::cy() const
-{
-    // Spec: If the attribute is not specified, the effect is as if a value of "50%" were specified.
-    if (!m_cy) {
-        lazy_create<SVGAnimatedLength>(m_cy, this, LM_HEIGHT, viewportElement());
-        m_cy->baseVal()->setValue(0.5);
-    }
-
-    return m_cy.get();
-}
-
-SVGAnimatedLength *SVGRadialGradientElement::fx() const
-{
-    return lazy_create<SVGAnimatedLength>(m_fx, this, LM_WIDTH, viewportElement());
-}
-
-SVGAnimatedLength *SVGRadialGradientElement::fy() const
-{
-    return lazy_create<SVGAnimatedLength>(m_fy, this, LM_HEIGHT, viewportElement());
-}
-
-SVGAnimatedLength *SVGRadialGradientElement::r() const
-{
-    // Spec: If the attribute is not specified, the effect is as if a value of "50%" were specified.
-    if (!m_r) {
-        lazy_create<SVGAnimatedLength>(m_r, this, LM_OTHER, viewportElement());
-        m_r->baseVal()->setValue(0.5);
-    }
-
-    return m_r.get();
-}
-
-void SVGRadialGradientElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGRadialGradientElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const AtomicString& value = attr->value();
     if (attr->name() == SVGNames::cxAttr)
-        cx()->baseVal()->setValueAsString(value.impl());
+        setCxBaseValue(SVGLength(this, LengthModeWidth, value));
     else if (attr->name() == SVGNames::cyAttr)
-        cy()->baseVal()->setValueAsString(value.impl());
-    else if (attr->name() == SVGNames::rAttr)
-        r()->baseVal()->setValueAsString(value.impl());
-    else if (attr->name() == SVGNames::fxAttr)
-        fx()->baseVal()->setValueAsString(value.impl());
+        setCyBaseValue(SVGLength(this, LengthModeHeight, value));
+    else if (attr->name() == SVGNames::rAttr) {
+        setRBaseValue(SVGLength(this, LengthModeOther, value));
+        if (r().value() < 0.0)
+            document()->accessSVGExtensions()->reportError("A negative value for radial gradient radius <r> is not allowed");
+    } else if (attr->name() == SVGNames::fxAttr)
+        setFxBaseValue(SVGLength(this, LengthModeWidth, value));
     else if (attr->name() == SVGNames::fyAttr)
-        fy()->baseVal()->setValueAsString(value.impl());
+        setFyBaseValue(SVGLength(this, LengthModeHeight, value));
     else
         SVGGradientElement::parseMappedAttribute(attr);
 }
 
-void SVGRadialGradientElement::buildGradient(KRenderingPaintServerGradient *_grad) const
+
+void SVGRadialGradientElement::buildGradient() const
 {
-    rebuildStops(); // rebuild stops before possibly importing them from any referenced gradient.
+    RadialGradientAttributes attributes = collectGradientProperties();
 
-    bool bbox = (gradientUnits()->baseVal() == SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
-    bool fxSet = hasAttribute(SVGNames::fxAttr);
-    bool fySet = hasAttribute(SVGNames::fyAttr);
-    cx()->baseVal()->setBboxRelative(bbox);
-    cy()->baseVal()->setBboxRelative(bbox);
-    r()->baseVal()->setBboxRelative(bbox);
-    fx()->baseVal()->setBboxRelative(bbox);
-    fy()->baseVal()->setBboxRelative(bbox);
-    float _cx = cx()->baseVal()->value(), _cy = cy()->baseVal()->value();
-    float _r = r()->baseVal()->value();
-    float _fx = fxSet ? fx()->baseVal()->value() : _cx;
-    float _fy = fySet ? fy()->baseVal()->value() : _cy;
+    // If we didn't find any gradient containing stop elements, ignore the request.
+    if (attributes.stops().isEmpty())
+        return;
 
-    KRenderingPaintServerRadialGradient *grad = static_cast<KRenderingPaintServerRadialGradient *>(_grad);
-    KCanvasMatrix mat;
-    if(gradientTransform()->baseVal()->numberOfItems() > 0)
-        mat = KCanvasMatrix(gradientTransform()->baseVal()->consolidate()->matrix()->matrix());
+    RefPtr<SVGPaintServerRadialGradient> radialGradient = WTF::static_pointer_cast<SVGPaintServerRadialGradient>(m_resource);
 
-    DeprecatedString ref = String(href()->baseVal()).deprecatedString();
-    KRenderingPaintServer *pserver = getPaintServerById(document(), ref.mid(1));
-
-    if(pserver && (pserver->type() == PS_RADIAL_GRADIENT || pserver->type() == PS_LINEAR_GRADIENT))
-    {
-        bool isRadial = pserver->type() == PS_RADIAL_GRADIENT;
-        KRenderingPaintServerGradient *gradient = static_cast<KRenderingPaintServerGradient *>(pserver);
-
-        if(!hasAttribute(SVGNames::gradientUnitsAttr))
-            bbox = gradient->boundingBoxMode();
-
-        if(isRadial)
-        {
-            KRenderingPaintServerRadialGradient *radial = static_cast<KRenderingPaintServerRadialGradient *>(pserver);
-            if(!hasAttribute(SVGNames::cxAttr))
-                _cx = radial->gradientCenter().x();
-            else if(bbox)
-                _cx *= 100.;
-            if(!hasAttribute(SVGNames::cyAttr))
-                _cy = radial->gradientCenter().y();
-            else if(bbox)
-                _cy *= 100.;
-
-            if(!fxSet)
-                _fx = radial->gradientFocal().x();
-            else if(bbox)
-                _fx *= 100.;
-            if(!fySet)
-                _fy = radial->gradientFocal().y();
-            else if(bbox)
-                _fy *= 100.;
-
-            if(!hasAttribute(SVGNames::rAttr))
-                _r = radial->gradientRadius();
-            else if(bbox)
-                _r *= 100.;
-        }
-        else if(bbox)
-        {
-            _cx *= 100.0;
-            _cy *= 100.0;
-            _fx *= 100.0;
-            _fy *= 100.0;
-            _r *= 100.0;
-        }
-
-        if (!hasAttribute(SVGNames::gradientTransformAttr))
-            mat = gradient->gradientTransform();
-
-        // Inherit color stops if empty
-        if (grad->gradientStops().isEmpty())
-            grad->setGradientStops(gradient);
-
-        if (!hasAttribute(SVGNames::spreadMethodAttr))
-            grad->setGradientSpreadMethod(gradient->spreadMethod());
-    }
-    else
-    {
-        if(spreadMethod()->baseVal() == SVG_SPREADMETHOD_REFLECT)
-            grad->setGradientSpreadMethod(SPREADMETHOD_REFLECT);
-        else if(spreadMethod()->baseVal() == SVG_SPREADMETHOD_REPEAT)
-            grad->setGradientSpreadMethod(SPREADMETHOD_REPEAT);
-        else
-            grad->setGradientSpreadMethod(SPREADMETHOD_PAD);
-
-        if(bbox)
-        {
-            _cx *= 100.0;
-            _cy *= 100.0;
-            _fx *= 100.0;
-            _fy *= 100.0;
-            _r *= 100.0;
-        }
-    }
-
-    grad->setGradientTransform(mat);
-    grad->setBoundingBoxMode(bbox);
-    grad->setGradientCenter(FloatPoint(_cx, _cy));
-    grad->setGradientFocal(FloatPoint(_fx, _fy));
-    grad->setGradientRadius(_r);
+    radialGradient->setGradientStops(attributes.stops());
+    radialGradient->setBoundingBoxMode(attributes.boundingBoxMode());
+    radialGradient->setGradientSpreadMethod(attributes.spreadMethod()); 
+    radialGradient->setGradientTransform(attributes.gradientTransform());
+    radialGradient->setGradientCenter(FloatPoint(attributes.cx(), attributes.cy()));
+    radialGradient->setGradientFocal(FloatPoint(attributes.fx(), attributes.fy()));
+    radialGradient->setGradientRadius(attributes.r());
 }
 
+RadialGradientAttributes SVGRadialGradientElement::collectGradientProperties() const
+{
+    RadialGradientAttributes attributes;
+    HashSet<const SVGGradientElement*> processedGradients;
+
+    bool isRadial = true;
+    const SVGGradientElement* current = this;
+
+    while (current) {
+        if (!attributes.hasSpreadMethod() && current->hasAttribute(SVGNames::spreadMethodAttr))
+            attributes.setSpreadMethod((SVGGradientSpreadMethod) current->spreadMethod());
+
+        if (!attributes.hasBoundingBoxMode() && current->hasAttribute(SVGNames::gradientUnitsAttr))
+            attributes.setBoundingBoxMode(current->getAttribute(SVGNames::gradientUnitsAttr) == "objectBoundingBox");
+
+        if (!attributes.hasGradientTransform() && current->hasAttribute(SVGNames::gradientTransformAttr))
+            attributes.setGradientTransform(current->gradientTransform()->consolidate()->matrix());
+
+        if (!attributes.hasStops()) {
+            const Vector<SVGGradientStop>& stops(current->buildStops());
+            if (!stops.isEmpty())
+                attributes.setStops(stops);
+        }
+
+        if (isRadial) {
+            const SVGRadialGradientElement* radial = static_cast<const SVGRadialGradientElement*>(current);
+
+            if (!attributes.hasCx() && current->hasAttribute(SVGNames::cxAttr))
+                attributes.setCx(radial->cx().valueAsPercentage());
+
+            if (!attributes.hasCy() && current->hasAttribute(SVGNames::cyAttr))
+                attributes.setCy(radial->cy().valueAsPercentage());
+
+            if (!attributes.hasR() && current->hasAttribute(SVGNames::rAttr))
+                attributes.setR(radial->r().valueAsPercentage());
+
+            if (!attributes.hasFx() && current->hasAttribute(SVGNames::fxAttr))
+                attributes.setFx(radial->fx().valueAsPercentage());
+
+            if (!attributes.hasFy() && current->hasAttribute(SVGNames::fyAttr))
+                attributes.setFy(radial->fy().valueAsPercentage());
+        }
+
+        processedGradients.add(current);
+
+        // Respect xlink:href, take attributes from referenced element
+        Node* refNode = ownerDocument()->getElementById(SVGURIReference::getTarget(current->href()));
+        if (refNode && (refNode->hasTagName(SVGNames::radialGradientTag) || refNode->hasTagName(SVGNames::linearGradientTag))) {
+            current = static_cast<const SVGGradientElement*>(const_cast<const Node*>(refNode));
+
+            // Cycle detection
+            if (processedGradients.contains(current))
+                return RadialGradientAttributes();
+
+            isRadial = current->gradientType() == RadialGradientPaintServer;
+        } else
+            current = 0;
+    }
+
+    // Handle default values for fx/fy
+    if (!attributes.hasFx())
+        attributes.setFx(attributes.cx());
+
+    if (!attributes.hasFy())
+        attributes.setFy(attributes.cy());
+
+    return attributes;
+}
 }
 
-// vim:ts=4:noet
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

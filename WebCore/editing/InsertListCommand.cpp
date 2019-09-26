@@ -45,9 +45,10 @@ Node* InsertListCommand::fixOrphanedListChild(Node* node)
     return listElement.get();
 }
 
-InsertListCommand::InsertListCommand(Document* document, EListType type, const String& id) 
+InsertListCommand::InsertListCommand(Document* document, Type type, const String& id) 
     : CompositeEditCommand(document), m_type(type), m_id(id), m_forceCreateList(false)
-{}
+{
+}
 
 bool InsertListCommand::modifyRange()
 {
@@ -86,15 +87,28 @@ void InsertListCommand::doApply()
 {
     if (endingSelection().isNone())
         return;
-
-    if (endingSelection().isRange() && modifyRange())
-        return;
     
     if (!endingSelection().rootEditableElement())
         return;
     
+    VisiblePosition visibleEnd = endingSelection().visibleEnd();
+    VisiblePosition visibleStart = endingSelection().visibleStart();
+    // When a selection ends at the start of a paragraph, we rarely paint 
+    // the selection gap before that paragraph, because there often is no gap.  
+    // In a case like this, it's not obvious to the user that the selection 
+    // ends "inside" that paragraph, so it would be confusing if InsertUn{Ordered}List 
+    // operated on that paragraph.
+    // FIXME: We paint the gap before some paragraphs that are indented with left 
+    // margin/padding, but not others.  We should make the gap painting more consistent and 
+    // then use a left margin/padding rule here.
+    if (visibleEnd != visibleStart && isStartOfParagraph(visibleEnd))
+        setEndingSelection(Selection(visibleStart, visibleEnd.previous(true)));
+
+    if (endingSelection().isRange() && modifyRange())
+        return;
+    
     Node* selectionNode = endingSelection().start().node();
-    const QualifiedName listTag = (m_type == OrderedListType) ? olTag : ulTag;
+    const QualifiedName listTag = (m_type == OrderedList) ? olTag : ulTag;
     Node* listChildNode = enclosingListChild(selectionNode);
     bool switchListType = false;
     if (listChildNode) {
@@ -130,13 +144,20 @@ void InsertListCommand::doApply()
         // When removing a list, we must always create a placeholder to act as a point of insertion
         // for the list content being removed.
         RefPtr<Element> placeholder = createBreakElement(document());
+        RefPtr<Node> nodeToInsert = placeholder;
+        // If the content of the list item will be moved into another list, put it in a list item
+        // so that we don't create an orphaned list child.
+        if (enclosingList(listNode)) {
+            nodeToInsert = createListItemElement(document());
+            appendNode(placeholder.get(), nodeToInsert.get());
+        }
         if (nextListChild && previousListChild) {
             splitElement(static_cast<Element *>(listNode), nextListChild);
-            insertNodeBefore(placeholder.get(), listNode);
+            insertNodeBefore(nodeToInsert.get(), listNode);
         } else if (nextListChild)
-            insertNodeBefore(placeholder.get(), listNode);
+            insertNodeBefore(nodeToInsert.get(), listNode);
         else
-            insertNodeAfter(placeholder.get(), listNode);
+            insertNodeAfter(nodeToInsert.get(), listNode);
         VisiblePosition insertionPoint = VisiblePosition(Position(placeholder.get(), 0));
         moveParagraphs(start, end, insertionPoint, true);
     }
@@ -162,7 +183,7 @@ void InsertListCommand::doApply()
             appendNode(listItemElement.get(), nextList);
         else {
             // Create the list.
-            RefPtr<Element> listElement = m_type == OrderedListType ? createOrderedListElement(document()) : createUnorderedListElement(document());
+            RefPtr<Element> listElement = m_type == OrderedList ? createOrderedListElement(document()) : createUnorderedListElement(document());
             static_cast<HTMLElement*>(listElement.get())->setId(m_id);
             appendNode(listItemElement.get(), listElement.get());
             insertNodeAt(listElement.get(), start.deepEquivalent().node(), start.deepEquivalent().offset());

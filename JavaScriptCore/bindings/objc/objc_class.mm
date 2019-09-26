@@ -32,6 +32,19 @@
 namespace KJS {
 namespace Bindings {
     
+static void deleteMethod(CFAllocatorRef, const void* value)
+{
+    delete static_cast<const Method*>(value);
+}
+    
+static void deleteField(CFAllocatorRef, const void* value)
+{
+    delete static_cast<const Field*>(value);
+}
+
+const CFDictionaryValueCallBacks MethodDictionaryValueCallBacks = { 0, 0, &deleteMethod, 0 , 0 };
+const CFDictionaryValueCallBacks FieldDictionaryValueCallBacks = { 0, 0, &deleteField, 0 , 0 };    
+    
 ObjcClass::ObjcClass(ClassStructPtr aClass)
 {
     _isa = aClass;
@@ -70,12 +83,12 @@ const char* ObjcClass::name() const
     return object_getClassName(_isa);
 }
 
-MethodList ObjcClass::methodsNamed(const char* JSName, Instance*) const
+MethodList ObjcClass::methodsNamed(const Identifier& identifier, Instance*) const
 {
     MethodList methodList;
     char fixedSizeBuffer[1024];
     char* buffer = fixedSizeBuffer;
-
+    const char* JSName = identifier.ascii();
     if (!convertJSMethodNameToObjc(JSName, buffer, sizeof(fixedSizeBuffer))) {
         int length = strlen(JSName) + 1;
         buffer = new char[length];
@@ -106,12 +119,11 @@ MethodList ObjcClass::methodsNamed(const char* JSName, Instance*) const
 #if defined(OBJC_API_VERSION) && OBJC_API_VERSION >= 2
                 MethodStructPtr objcMethod = objcMethodList[i];
                 SEL objcMethodSelector = method_getName(objcMethod);
-                const char* objcMethodSelectorName = sel_getName(objcMethodSelector);
 #else
                 struct objc_method* objcMethod = &objcMethodList->method_list[i];
                 SEL objcMethodSelector = objcMethod->method_name;
-                const char* objcMethodSelectorName = (const char*)objcMethodSelector;
 #endif
+                const char* objcMethodSelectorName = sel_getName(objcMethodSelector);
                 NSString* mappedName = nil;
 
                 // See if the class wants to exclude the selector from visibility in JavaScript.
@@ -148,10 +160,11 @@ MethodList ObjcClass::methodsNamed(const char* JSName, Instance*) const
     return methodList;
 }
 
-Field* ObjcClass::fieldNamed(const char* name, Instance* instance) const
+Field* ObjcClass::fieldNamed(const Identifier& identifier, Instance* instance) const
 {
     ClassStructPtr thisClass = _isa;
 
+    const char* name = identifier.ascii();
     CFStringRef fieldName = CFStringCreateWithCString(NULL, name, kCFStringEncodingASCII);
     Field* aField = (Field*)CFDictionaryGetValue(_fields, fieldName);
     if (aField) {

@@ -53,7 +53,7 @@
 
     NSEvent *mouseDownEvent; // Kept after handling the event.
     BOOL handlingMouseDownEvent;
-    NSEvent *keyDownEvent; // Kept only during handling of the event.
+    NSEvent *keyDownEvent; // Kept after handling the event.
 
     NSURL *draggingImageURL;
     unsigned dragSourceActionMask;
@@ -81,7 +81,6 @@
     BOOL descendantBecomingFirstResponder;
     BOOL resigningFirstResponder;
     BOOL ignoreMarkedTextSelectionChange;
-    BOOL startNewKillRingSequence;
     BOOL nextResponderDisabledOnce;
     BOOL willBecomeFirstResponderForNodeFocus;
     
@@ -93,6 +92,7 @@
     
     WebDataSource *dataSource;
 }
+- (void)clear;
 @end
 
 @interface WebHTMLView (WebInternal)
@@ -108,5 +108,20 @@
 - (void)_willMakeFirstResponderForNodeFocus;
 - (id<WebHTMLHighlighter>)_highlighterForType:(NSString*)type;
 - (WebFrame *)_frame;
+- (void)_setInitiatedDrag:(BOOL)flag;
+- (BOOL)_initiatedDrag;
+- (void)copy:(id)sender;
+- (void)cut:(id)sender;
+- (void)paste:(id)sender;
+- (void)pasteAsPlainText:(id)sender;
+- (void)closeIfNotCurrentView;
+- (void)_lookUpInDictionaryFromMenu:(id)sender;
+- (void)_hoverFeedbackSuspendedChanged;
+
+#if !BUILDING_ON_TIGER
+- (BOOL)isGrammarCheckingEnabled;
+- (void)setGrammarCheckingEnabled:(BOOL)flag;
+- (void)toggleGrammarChecking:(id)sender;
+#endif
 @end
 

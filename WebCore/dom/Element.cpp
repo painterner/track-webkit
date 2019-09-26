@@ -22,6 +22,7 @@
  * the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+
 #include "config.h"
 #include "Element.h"
 
@@ -29,10 +30,12 @@
 #include "Document.h"
 #include "ExceptionCode.h"
 #include "Frame.h"
+#include "FrameView.h"
 #include "HTMLNames.h"
 #include "NamedAttrMap.h"
 #include "RenderBlock.h"
 #include "SelectionController.h"
+#include "TextIterator.h"
 #include "TextStream.h"
 
 namespace WebCore {
@@ -223,6 +226,24 @@ Element* Element::offsetParent()
     return 0;
 }
 
+int Element::clientLeft()
+{
+    document()->updateLayoutIgnorePendingStylesheets();
+
+    if (RenderObject* rend = renderer())
+        return rend->clientLeft();
+    return 0;
+}
+
+int Element::clientTop()
+{
+    document()->updateLayoutIgnorePendingStylesheets();
+
+    if (RenderObject* rend = renderer())
+        return rend->clientTop();
+    return 0;
+}
+
 int Element::clientWidth()
 {
     document()->updateLayoutIgnorePendingStylesheets();
@@ -254,35 +275,31 @@ int Element::clientHeight()
 int Element::scrollLeft()
 {
     document()->updateLayoutIgnorePendingStylesheets();
-    RenderObject* rend = renderer();
-    if (rend && rend->layer())
-        return rend->layer()->scrollXOffset();
+    if (RenderObject* rend = renderer())
+        return rend->scrollLeft();
     return 0;
 }
 
 int Element::scrollTop()
 {
     document()->updateLayoutIgnorePendingStylesheets();
-    RenderObject* rend = renderer();
-    if (rend && rend->layer())
-        return rend->layer()->scrollYOffset();
+    if (RenderObject* rend = renderer())
+        return rend->scrollTop();
     return 0;
 }
 
 void Element::setScrollLeft(int newLeft)
 {
     document()->updateLayoutIgnorePendingStylesheets();
-    RenderObject *rend = renderer();
-    if (rend && rend->hasOverflowClip())
-        rend->layer()->scrollToXOffset(newLeft);
+    if (RenderObject *rend = renderer())
+        rend->setScrollLeft(newLeft);
 }
 
 void Element::setScrollTop(int newTop)
 {
     document()->updateLayoutIgnorePendingStylesheets();
-    RenderObject *rend = renderer();
-    if (rend && rend->hasOverflowClip())
-        rend->layer()->scrollToYOffset(newTop);
+    if (RenderObject *rend = renderer())
+        rend->setScrollTop(newTop);
 }
 
 int Element::scrollWidth()
@@ -321,7 +338,7 @@ const AtomicString& Element::getAttribute(const String& name) const
 
 const AtomicString& Element::getAttributeNS(const String& namespaceURI, const String& localName) const
 {
-    return getAttribute(QualifiedName(nullAtom, localName.impl(), namespaceURI.impl()));
+    return getAttribute(QualifiedName(nullAtom, localName, namespaceURI));
 }
 
 void Element::setAttribute(const String& name, const String& value, ExceptionCode& ec)
@@ -351,7 +368,7 @@ void Element::setAttribute(const String& name, const String& value, ExceptionCod
     if (old && value.isNull())
         namedAttrMap->removeAttribute(old->name());
     else if (!old && !value.isNull())
-        namedAttrMap->addAttribute(createAttribute(QualifiedName(nullAtom, localName.impl(), nullAtom), value.impl()));
+        namedAttrMap->addAttribute(createAttribute(QualifiedName(nullAtom, localName, nullAtom), value.impl()));
     else if (old && !value.isNull()) {
         old->setValue(value);
         attributeChanged(old);
@@ -474,11 +491,11 @@ Node* Element::insertAdjacentElement(const String& where, Node* newChild, int& e
     return 0;
 }
 
-bool Element::contains(const Element* element) const
+bool Element::contains(const Node* node) const
 {
-    if (!element)
+    if (!node)
         return false;
-    return this == element || element->isAncestor(this);
+    return this == node || node->isDescendantOf(this);
 }
 
 void Element::createAttributeMap() const
@@ -544,7 +561,7 @@ void Element::attach()
     createRendererIfNeeded();
 #endif
     ContainerNode::attach();
-    if (needsFocusAppearanceUpdate() && !m_updateFocusAppearanceTimer.isActive() && document()->focusNode() == this)
+    if (needsFocusAppearanceUpdate() && !m_updateFocusAppearanceTimer.isActive() && document()->focusedNode() == this)
         m_updateFocusAppearanceTimer.startOneShot(0);
 }
 
@@ -787,7 +804,7 @@ void Element::setAttributeNS(const String& namespaceURI, const String& qualified
         ec = INVALID_CHARACTER_ERR;
         return;
     }
-    setAttribute(QualifiedName(prefix.impl(), localName.impl(), namespaceURI.impl()), value.impl(), ec);
+    setAttribute(QualifiedName(prefix, localName, namespaceURI), value.impl(), ec);
 }
 
 void Element::removeAttribute(const String& name, ExceptionCode& ec)
@@ -803,12 +820,12 @@ void Element::removeAttribute(const String& name, ExceptionCode& ec)
 
 void Element::removeAttributeNS(const String& namespaceURI, const String& localName, ExceptionCode& ec)
 {
-    removeAttribute(QualifiedName(nullAtom, localName.impl(), namespaceURI.impl()), ec);
+    removeAttribute(QualifiedName(nullAtom, localName, namespaceURI), ec);
 }
 
 PassRefPtr<Attr> Element::getAttributeNode(const String& name)
 {
-    NamedAttrMap *attrs = attributes(true);
+    NamedAttrMap* attrs = attributes(true);
     if (!attrs)
         return 0;
     String localName = inHTMLDocument(this) ? name.lower() : name;
@@ -817,15 +834,15 @@ PassRefPtr<Attr> Element::getAttributeNode(const String& name)
 
 PassRefPtr<Attr> Element::getAttributeNodeNS(const String& namespaceURI, const String& localName)
 {
-    NamedAttrMap *attrs = attributes(true);
+    NamedAttrMap* attrs = attributes(true);
     if (!attrs)
         return 0;
-    return static_pointer_cast<Attr>(attrs->getNamedItem(QualifiedName(nullAtom, localName.impl(), namespaceURI.impl())));
+    return static_pointer_cast<Attr>(attrs->getNamedItem(QualifiedName(nullAtom, localName, namespaceURI)));
 }
 
 bool Element::hasAttribute(const String& name) const
 {
-    NamedAttrMap *attrs = attributes(true);
+    NamedAttrMap* attrs = attributes(true);
     if (!attrs)
         return false;
     String localName = inHTMLDocument(this) ? name.lower() : name;
@@ -834,10 +851,10 @@ bool Element::hasAttribute(const String& name) const
 
 bool Element::hasAttributeNS(const String& namespaceURI, const String& localName) const
 {
-    NamedAttrMap *attrs = attributes(true);
+    NamedAttrMap* attrs = attributes(true);
     if (!attrs)
         return false;
-    return attrs->getAttributeItem(QualifiedName(nullAtom, localName.impl(), namespaceURI.impl()));
+    return attrs->getAttributeItem(QualifiedName(nullAtom, localName, namespaceURI));
 }
 
 CSSStyleDeclaration *Element::style()
@@ -853,7 +870,7 @@ void Element::focus()
     if (!supportsFocus())
         return;                
         
-    doc->setFocusNode(this);
+    doc->setFocusedNode(this);
 
     if (!isFocusable()) {
         setNeedsFocusAppearanceUpdate(true);
@@ -871,11 +888,10 @@ void Element::updateFocusAppearance()
             return;
         
         // FIXME: We should restore the previous selection if there is one.
-        Selection s = hasTagName(htmlTag) || hasTagName(bodyTag) ? Selection(Position(this, 0), DOWNSTREAM) : Selection::selectionFromContentsOfNode(this);
-        SelectionController sc(s);
+        Selection newSelection = hasTagName(htmlTag) || hasTagName(bodyTag) ? Selection(Position(this, 0), DOWNSTREAM) : Selection::selectionFromContentsOfNode(this);
         
-        if (frame->shouldChangeSelection(sc)) {
-            frame->setSelection(sc);
+        if (frame->shouldChangeSelection(newSelection)) {
+            frame->selectionController()->setSelection(newSelection);
             frame->revealSelection();
         }
     } else if (renderer() && !renderer()->isWidget())
@@ -895,8 +911,8 @@ void Element::blur()
 {
     stopUpdateFocusAppearanceTimer();
     Document* doc = document();
-    if (doc->focusNode() == this)
-        doc->setFocusNode(0);
+    if (doc->focusedNode() == this)
+        doc->setFocusedNode(0);
 }
 
 void Element::stopUpdateFocusAppearanceTimer()
@@ -905,6 +921,31 @@ void Element::stopUpdateFocusAppearanceTimer()
         m_updateFocusAppearanceTimer.stop();
         setNeedsFocusAppearanceUpdate(false);
     }
+}
+
+String Element::innerText() const
+{
+    if (!renderer())
+        return textContent(true);
+
+    // We need to update layout, since plainText uses line boxes in the render tree.
+    document()->updateLayoutIgnorePendingStylesheets();
+    return plainText(rangeOfContents(const_cast<Element *>(this)).get());
+}
+
+String Element::outerText() const
+{
+    // Getting outerText is the same as getting innerText, only
+    // setting is different. You would think this should get the plain
+    // text for the outer range, but this is wrong, <br> for instance
+    // would return different values for inner and outer text by such
+    // a rule, but it doesn't in WinIE, and we want to match that.
+    return innerText();
+}
+
+String Element::title() const
+{
+    return getAttribute(titleAttr);
 }
 
 }

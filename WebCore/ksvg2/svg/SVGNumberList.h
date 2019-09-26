@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,22 +20,24 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGNumberListImpl_H
-#define KSVG_SVGNumberListImpl_H
+#ifndef SVGNumberList_H
+#define SVGNumberList_H
+
 #ifdef SVG_SUPPORT
 
 #include "SVGList.h"
-#include "SVGNumber.h"
 
 namespace WebCore
 {
-    class SVGNumberList : public SVGList<SVGNumber>
+    class String;
+
+    class SVGNumberList : public SVGList<double>
     {
     public:
-        SVGNumberList(const SVGStyledElement *context = 0);
+        SVGNumberList();
         virtual ~SVGNumberList();
 
-        void parse(const DeprecatedString &value, const SVGStyledElement *context = 0);
+        void parse(const String& value);
     };
 
 } // namespace WebCore

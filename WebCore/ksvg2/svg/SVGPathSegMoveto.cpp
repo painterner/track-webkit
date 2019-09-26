@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,16 +21,19 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGPathSegMoveto.h"
+
 #include "SVGStyledElement.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGPathSegMovetoAbs::SVGPathSegMovetoAbs(const SVGStyledElement *context)
-: SVGPathSeg(context)
+SVGPathSegMovetoAbs::SVGPathSegMovetoAbs(double x, double y)
+    : SVGPathSeg()
+    , m_x(x)
+    , m_y(y)
 {
-    m_x = m_y = 0.0;
 }
 
 SVGPathSegMovetoAbs::~SVGPathSegMovetoAbs()
@@ -40,9 +43,6 @@ SVGPathSegMovetoAbs::~SVGPathSegMovetoAbs()
 void SVGPathSegMovetoAbs::setX(double x)
 {
     m_x = x;
-
-    if(m_context)
-        m_context->notifyAttributeChange();
 }
 
 double SVGPathSegMovetoAbs::x() const
@@ -53,9 +53,6 @@ double SVGPathSegMovetoAbs::x() const
 void SVGPathSegMovetoAbs::setY(double y)
 {
     m_y = y;
-
-    if(m_context)
-        m_context->notifyAttributeChange();
 }
 
 double SVGPathSegMovetoAbs::y() const
@@ -66,10 +63,11 @@ double SVGPathSegMovetoAbs::y() const
 
 
 
-SVGPathSegMovetoRel::SVGPathSegMovetoRel(const SVGStyledElement *context)
-: SVGPathSeg(context)
+SVGPathSegMovetoRel::SVGPathSegMovetoRel(double x, double y)
+    : SVGPathSeg()
+    , m_x(x)
+    , m_y(y)
 {
-    m_x = m_y = 0.0;
 }
 
 SVGPathSegMovetoRel::~SVGPathSegMovetoRel()
@@ -79,9 +77,6 @@ SVGPathSegMovetoRel::~SVGPathSegMovetoRel()
 void SVGPathSegMovetoRel::setX(double x)
 {
     m_x = x;
-
-    if(m_context)
-        m_context->notifyAttributeChange();
 }
 
 double SVGPathSegMovetoRel::x() const
@@ -92,9 +87,6 @@ double SVGPathSegMovetoRel::x() const
 void SVGPathSegMovetoRel::setY(double y)
 {
     m_y = y;
-
-    if(m_context)
-        m_context->notifyAttributeChange();
 }
 
 double SVGPathSegMovetoRel::y() const
@@ -102,6 +94,8 @@ double SVGPathSegMovetoRel::y() const
     return m_y;
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

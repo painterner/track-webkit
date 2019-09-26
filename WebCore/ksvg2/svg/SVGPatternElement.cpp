@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006, 2007 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,116 +21,93 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGPatternElement.h"
 
-#include "Attr.h"
+#include "AffineTransform.h"
 #include "Document.h"
 #include "GraphicsContext.h"
+#include "ImageBuffer.h"
+#include "PatternAttributes.h"
 #include "RenderSVGContainer.h"
-#include "KCanvasCreator.h"
-#include "KCanvasImage.h"
-#include "KCanvasMatrix.h"
-#include "KCanvasRenderingStyle.h"
-#include "KRenderingDevice.h"
-#include "KRenderingPaintServerPattern.h"
-#include "SVGAnimatedEnumeration.h"
-#include "SVGAnimatedLength.h"
-#include "SVGAnimatedString.h"
-#include "SVGAnimatedTransformList.h"
-#include "SVGHelper.h"
-#include "SVGMatrix.h"
+#include "SVGLength.h"
 #include "SVGNames.h"
+#include "SVGPaintServerPattern.h"
 #include "SVGSVGElement.h"
 #include "SVGTransformList.h"
 #include "SVGTransformable.h"
-#include "ksvg.h"
+#include "SVGUnitTypes.h"
+
+#include <math.h>
 #include <wtf/OwnPtr.h>
+#include <wtf/MathExtras.h>
+
+using namespace std;
 
 namespace WebCore {
 
-SVGPatternElement::SVGPatternElement(const QualifiedName& tagName, Document *doc) : SVGStyledLocatableElement(tagName, doc), SVGURIReference(), SVGTests(), SVGLangSpace(), SVGExternalResourcesRequired(), SVGFitToViewBox(), KCanvasResourceListener()
+SVGPatternElement::SVGPatternElement(const QualifiedName& tagName, Document* doc)
+    : SVGStyledElement(tagName, doc)
+    , SVGURIReference()
+    , SVGTests()
+    , SVGLangSpace()
+    , SVGExternalResourcesRequired()
+    , SVGFitToViewBox()
+    , m_x(this, LengthModeWidth)
+    , m_y(this, LengthModeHeight)
+    , m_width(this, LengthModeWidth)
+    , m_height(this, LengthModeHeight)
+    , m_patternUnits(SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX)
+    , m_patternContentUnits(SVGUnitTypes::SVG_UNIT_TYPE_USERSPACEONUSE)
+    , m_patternTransform(new SVGTransformList)
 {
-    m_tile = 0;
-    m_paintServer = 0;
-    m_ignoreAttributeChanges = false;
 }
 
 SVGPatternElement::~SVGPatternElement()
 {
-    delete m_paintServer;
 }
 
-SVGAnimatedEnumeration *SVGPatternElement::patternUnits() const
+ANIMATED_PROPERTY_DEFINITIONS(SVGPatternElement, int, Enumeration, enumeration, PatternUnits, patternUnits, SVGNames::patternUnitsAttr.localName(), m_patternUnits)
+ANIMATED_PROPERTY_DEFINITIONS(SVGPatternElement, int, Enumeration, enumeration, PatternContentUnits, patternContentUnits, SVGNames::patternContentUnitsAttr.localName(), m_patternContentUnits)
+ANIMATED_PROPERTY_DEFINITIONS(SVGPatternElement, SVGLength, Length, length, X, x, SVGNames::xAttr.localName(), m_x)
+ANIMATED_PROPERTY_DEFINITIONS(SVGPatternElement, SVGLength, Length, length, Y, y, SVGNames::yAttr.localName(), m_y)
+ANIMATED_PROPERTY_DEFINITIONS(SVGPatternElement, SVGLength, Length, length, Width, width, SVGNames::widthAttr.localName(), m_width)
+ANIMATED_PROPERTY_DEFINITIONS(SVGPatternElement, SVGLength, Length, length, Height, height, SVGNames::heightAttr.localName(), m_height)
+ANIMATED_PROPERTY_DEFINITIONS(SVGPatternElement, SVGTransformList*, TransformList, transformList, PatternTransform, patternTransform, SVGNames::patternTransformAttr.localName(), m_patternTransform.get())
+
+void SVGPatternElement::parseMappedAttribute(MappedAttribute* attr)
 {
-    if (!m_patternUnits) {
-        lazy_create<SVGAnimatedEnumeration>(m_patternUnits, this);
-        m_patternUnits->setBaseVal(SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
-    }
-
-    return m_patternUnits.get();
-}
-
-SVGAnimatedEnumeration *SVGPatternElement::patternContentUnits() const
-{
-    if (!m_patternContentUnits) {
-        lazy_create<SVGAnimatedEnumeration>(m_patternContentUnits, this);
-        m_patternContentUnits->setBaseVal(SVG_UNIT_TYPE_USERSPACEONUSE);
-    }
-
-    return m_patternContentUnits.get();
-}
-
-SVGAnimatedLength* SVGPatternElement::x() const
-{
-    return lazy_create<SVGAnimatedLength>(m_x, this, LM_WIDTH, viewportElement());
-}
-
-SVGAnimatedLength* SVGPatternElement::y() const
-{
-    return lazy_create<SVGAnimatedLength>(m_y, this, LM_HEIGHT, viewportElement());
-}
-
-SVGAnimatedLength* SVGPatternElement::width() const
-{
-    return lazy_create<SVGAnimatedLength>(m_width, this, LM_WIDTH, viewportElement());
-}
-
-SVGAnimatedLength* SVGPatternElement::height() const
-{
-    return lazy_create<SVGAnimatedLength>(m_height, this, LM_HEIGHT, viewportElement());
-}
-
-SVGAnimatedTransformList *SVGPatternElement::patternTransform() const
-{
-    return lazy_create<SVGAnimatedTransformList>(m_patternTransform, this);
-}
-
-void SVGPatternElement::parseMappedAttribute(MappedAttribute *attr)
-{
-    const AtomicString &value = attr->value();
+    const AtomicString& value = attr->value();
     if (attr->name() == SVGNames::patternUnitsAttr) {
         if (value == "userSpaceOnUse")
-            patternUnits()->setBaseVal(SVG_UNIT_TYPE_USERSPACEONUSE);
+            setPatternUnitsBaseValue(SVGUnitTypes::SVG_UNIT_TYPE_USERSPACEONUSE);
         else if (value == "objectBoundingBox")
-            patternUnits()->setBaseVal(SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
+            setPatternUnitsBaseValue(SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
     } else if (attr->name() == SVGNames::patternContentUnitsAttr) {
         if (value == "userSpaceOnUse")
-            patternContentUnits()->setBaseVal(SVG_UNIT_TYPE_USERSPACEONUSE);
+            setPatternContentUnitsBaseValue(SVGUnitTypes::SVG_UNIT_TYPE_USERSPACEONUSE);
         else if (value == "objectBoundingBox")
-            patternContentUnits()->setBaseVal(SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
+            setPatternContentUnitsBaseValue(SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
     } else if (attr->name() == SVGNames::patternTransformAttr) {
-        SVGTransformList *patternTransforms = patternTransform()->baseVal();
-        SVGTransformable::parseTransformAttribute(patternTransforms, value);
+        SVGTransformList* patternTransforms = patternTransformBaseValue();
+        if (!SVGTransformable::parseTransformAttribute(patternTransforms, value)) {
+            ExceptionCode ec = 0;
+            patternTransforms->clear(ec);
+        }
     } else if (attr->name() == SVGNames::xAttr)
-        x()->baseVal()->setValueAsString(value.impl());
+        setXBaseValue(SVGLength(this, LengthModeWidth, value));
     else if (attr->name() == SVGNames::yAttr)
-        y()->baseVal()->setValueAsString(value.impl());
-    else if (attr->name() == SVGNames::widthAttr)
-        width()->baseVal()->setValueAsString(value.impl());
-    else if (attr->name() == SVGNames::heightAttr)
-        height()->baseVal()->setValueAsString(value.impl());
-    else {
+        setYBaseValue(SVGLength(this, LengthModeHeight, value));
+    else if (attr->name() == SVGNames::widthAttr) {
+        setWidthBaseValue(SVGLength(this, LengthModeWidth, value));
+        if (width().value() < 0.0)
+            document()->accessSVGExtensions()->reportError("A negative value for pattern attribute <width> is not allowed");
+    } else if (attr->name() == SVGNames::heightAttr) {
+        setHeightBaseValue(SVGLength(this, LengthModeHeight, value));
+        if (width().value() < 0.0)
+            document()->accessSVGExtensions()->reportError("A negative value for pattern attribute <height> is not allowed");
+    } else {
         if (SVGURIReference::parseMappedAttribute(attr))
             return;
         if (SVGTests::parseMappedAttribute(attr))
@@ -146,211 +123,75 @@ void SVGPatternElement::parseMappedAttribute(MappedAttribute *attr)
     }
 }
 
-const SVGStyledElement* SVGPatternElement::pushAttributeContext(const SVGStyledElement* context)
+void SVGPatternElement::buildPattern(const FloatRect& targetRect) const
 {
-    // All attribute's contexts are equal (so just take the one from 'x').
-    const SVGStyledElement* restore = x()->baseVal()->context();
+    PatternAttributes attributes = collectPatternProperties();
 
-    x()->baseVal()->setContext(context);
-    y()->baseVal()->setContext(context);
-    width()->baseVal()->setContext(context);
-    height()->baseVal()->setContext(context);
-
-    return restore;
-}
-
-void SVGPatternElement::resourceNotification() const
-{
-    // We're referenced by a "client", calculate the tile now...
-    notifyAttributeChange();
-}
-
-void SVGPatternElement::fillAttributesFromReferencePattern(const SVGPatternElement* target, KCanvasMatrix& patternTransformMatrix) const
-{
-    DeprecatedString ref = String(href()->baseVal()).deprecatedString();
-    KRenderingPaintServer *refServer = getPaintServerById(document(), ref.mid(1));
-
-    if (!refServer || refServer->type() != PS_PATTERN)
+    // If we didn't find any pattern content, ignore the request.
+    if (!attributes.patternContentElement())
         return;
-    
-    KRenderingPaintServerPattern *refPattern = static_cast<KRenderingPaintServerPattern *>(refServer);
-    
-    if (!hasAttribute(SVGNames::patternUnitsAttr)) {
-        const AtomicString& value = target->getAttribute(SVGNames::patternUnitsAttr);
-        if (value == "userSpaceOnUse")
-            patternUnits()->setBaseVal(SVG_UNIT_TYPE_USERSPACEONUSE);
-        else if (value == "objectBoundingBox")
-            patternUnits()->setBaseVal(SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
-    }
-    
-    if (!hasAttribute(SVGNames::patternContentUnitsAttr)) {
-        const AtomicString& value = target->getAttribute(SVGNames::patternContentUnitsAttr);
-        if (value == "userSpaceOnUse")
-            patternContentUnits()->setBaseVal(SVG_UNIT_TYPE_USERSPACEONUSE);
-        else if (value == "objectBoundingBox")
-            patternContentUnits()->setBaseVal(SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
+
+    // Determine specified pattern size
+    float xValue = attributes.x();
+    float yValue = attributes.y();
+    float widthValue = attributes.width();
+    float heightValue = attributes.height();
+
+    if (attributes.boundingBoxMode()) {
+        xValue *= targetRect.width();
+        yValue *= targetRect.height();
+        widthValue *= targetRect.width();
+        heightValue *= targetRect.height();
     }
 
-    if (!hasAttribute(SVGNames::patternTransformAttr))
-        patternTransformMatrix = refPattern->patternTransform();
-}
+    // As we're allocating buffers here, clip the buffer size to the target object size as upper boundary
+    if (widthValue > targetRect.width())
+        widthValue = targetRect.width();
 
-void SVGPatternElement::drawPatternContentIntoTile(const SVGPatternElement* target, const IntSize& newSize, KCanvasMatrix patternTransformMatrix) const
-{
-    KRenderingDevice* device = renderingDevice();
-    
-    SVGStyledElement* activeElement = static_cast<SVGStyledElement*>(m_paintServer->activeClient()->element());
+    if (heightValue > targetRect.height())
+        heightValue = targetRect.height();
 
-    bool bbox = (patternUnits()->baseVal() == SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
+    auto_ptr<ImageBuffer> patternImage = ImageBuffer::create(IntSize(lroundf(widthValue), lroundf(heightValue)), false);
+    if (!patternImage.get())
+        return;
 
-    const SVGStyledElement* savedContext = 0;
-    if (bbox) {
-        if (width()->baseVal()->unitType() != SVGLength::SVG_LENGTHTYPE_PERCENTAGE)
-            width()->baseVal()->newValueSpecifiedUnits(SVGLength::SVG_LENGTHTYPE_PERCENTAGE, width()->baseVal()->value() * 100.);
-        if (height()->baseVal()->unitType() != SVGLength::SVG_LENGTHTYPE_PERCENTAGE)
-            height()->baseVal()->newValueSpecifiedUnits(SVGLength::SVG_LENGTHTYPE_PERCENTAGE, height()->baseVal()->value() * 100.);
-        if (activeElement)
-            savedContext = const_cast<SVGPatternElement* >(this)->pushAttributeContext(activeElement);
+    GraphicsContext* context = patternImage->context();
+    ASSERT(context);
+ 
+    if (attributes.boundingBoxModeContent()) {
+        context->save();
+        context->scale(FloatSize(targetRect.width(), targetRect.height()));
     }
-    
-    delete m_tile;
-    m_tile = static_cast<KCanvasImage*>(device->createResource(RS_IMAGE));
-    m_tile->init(newSize);
 
-    KRenderingDeviceContext* patternContext = device->contextForImage(m_tile);
-    device->pushContext(patternContext);
-    FloatRect rect(x()->baseVal()->value(), y()->baseVal()->value(), width()->baseVal()->value(), height()->baseVal()->value());
-    m_paintServer->setBbox(rect);
-    m_paintServer->setPatternTransform(patternTransformMatrix);
-    m_paintServer->setTile(m_tile);
-
-    OwnPtr<GraphicsContext> context(patternContext->createGraphicsContext());
-
-    for(Node *n = target->firstChild(); n != 0; n = n->nextSibling())
-    {
+    // Render subtree into ImageBuffer
+    for (Node* n = attributes.patternContentElement()->firstChild(); n; n = n->nextSibling()) {
         SVGElement* elem = svg_dynamic_cast(n);
         if (!elem || !elem->isStyled())
             continue;
-        SVGStyledElement* e = static_cast<SVGStyledElement* >(elem);
-        RenderObject *item = e->renderer();
+
+        SVGStyledElement* e = static_cast<SVGStyledElement*>(elem);
+        RenderObject* item = e->renderer();
         if (!item)
             continue;
-#if 0
-        // FIXME: None of this code seems to be necessary
-        // to pass the w3c tests (and infact breaks them)
-        // However, I'm leaving it #if 0'd for now until
-        // I can quiz WildFox on the subject -- ecs 11/24/05
-        // It's possible that W3C-SVG-1.1/coords-units-01-b
-        // is failing due to lack of this code.
-        KCanvasMatrix savedMatrix = item->localTransform();
 
-        const SVGStyledElement* savedContext = 0;
-        if (patternContentUnits()->baseVal() == SVG_UNIT_TYPE_OBJECTBOUNDINGBOX)
-        {
-            if (activeElement)
-                savedContext = e->pushAttributeContext(activeElement);
-        }
-
-        // Take into account viewportElement's viewBox, if existant...
-        if (viewportElement() && viewportElement()->hasTagName(SVGNames::svgTag))
-        {
-            SVGSVGElement* svgElement = static_cast<SVGSVGElement* >(viewportElement());
-
-            RefPtr<SVGMatrix> svgCTM = svgElement->getCTM();
-            RefPtr<SVGMatrix> ctm = getCTM();
-
-            KCanvasMatrix newMatrix(svgCTM->matrix());
-            newMatrix.multiply(savedMatrix);
-            newMatrix.scale(1.0 / ctm->a(), 1.0 / ctm->d());
-
-            item->setLocalTransform(newMatrix.matrix());
-        }
-#endif
-
-        RenderObject::PaintInfo info(context.get(), IntRect(), PaintPhaseForeground, 0, 0, 0);
-        item->paint(info, 0, 0);
-
-#if 0
-        if (savedContext)
-            e->pushAttributeContext(savedContext);
-
-        item->setLocalTransform(savedMatrix.matrix());
-#endif
+        ImageBuffer::renderSubtreeToImage(patternImage.get(), item);
     }
 
-    if (savedContext)
-        const_cast<SVGPatternElement* >(this)->pushAttributeContext(savedContext);
+    if (attributes.boundingBoxModeContent())
+        context->restore();
 
-    device->popContext();
-    delete patternContext;
-}
-
-void SVGPatternElement::notifyClientsToRepaint() const
-{
-    const KCanvasItemList &clients = m_paintServer->clients();
-
-    KCanvasItemList::ConstIterator it = clients.begin();
-    KCanvasItemList::ConstIterator end = clients.end();
-
-    for(; it != end; ++it)
-    {
-        const RenderPath *current = (*it);
-
-        SVGStyledElement* styled = (current ? static_cast<SVGStyledElement* >(current->element()) : 0);
-        if (styled)
-        {
-            styled->setChanged(true);
-
-            if (styled->renderer())
-                styled->renderer()->repaint();
-        }
-    }
+    m_resource->setPatternTransform(attributes.patternTransform());
+    m_resource->setPatternBoundaries(FloatRect(xValue, yValue, widthValue, heightValue));
+    m_resource->setTile(patternImage);
 }
 
 void SVGPatternElement::notifyAttributeChange() const
 {
-    if (!m_paintServer || !m_paintServer->activeClient() || m_ignoreAttributeChanges)
+    if (!m_resource || !attached() || ownerDocument()->parsing())
         return;
 
-    IntSize newSize = IntSize(lroundf(width()->baseVal()->value()), lroundf(height()->baseVal()->value()));
-    if (m_tile && (m_tile->size() == newSize) || newSize.width() < 1 || newSize.height() < 1)
-        return;
-
-    m_ignoreAttributeChanges = true;
-
-    // FIXME: This whole "target" idea seems completely broken to me
-    // basically it seems we're effectively trying to change the "this" pointer
-    // for the rest of the method... why don't we just?  Or better yet, why don't
-    // we call some method on the "target" and each target in the chain?  -- ECS 11/21/05
-
-    // Find first pattern def that has children
-    const SVGPatternElement* target = this;
-    const Node *test = this;
-    while(test && !test->hasChildNodes())
-    {
-        DeprecatedString ref = String(target->href()->baseVal()).deprecatedString();
-        test = ownerDocument()->getElementById(String(ref.mid(1)).impl());
-        if (test && test->hasTagName(SVGNames::patternTag))
-            target = static_cast<const SVGPatternElement* >(test);
-    }
-
-    unsigned short savedPatternUnits = patternUnits()->baseVal();
-    unsigned short savedPatternContentUnits = patternContentUnits()->baseVal();
-
-    KCanvasMatrix patternTransformMatrix;
-    if (patternTransform()->baseVal()->numberOfItems() > 0)
-        patternTransformMatrix = KCanvasMatrix(patternTransform()->baseVal()->consolidate()->matrix()->matrix());
-
-    fillAttributesFromReferencePattern(target, patternTransformMatrix);
-    
-    drawPatternContentIntoTile(target, newSize, patternTransformMatrix);
-    
-    patternUnits()->setBaseVal(savedPatternUnits);
-    patternContentUnits()->setBaseVal(savedPatternContentUnits);
-
-    notifyClientsToRepaint();
-    
-    m_ignoreAttributeChanges = false;
+    m_resource->invalidate();
+    m_resource->repaintClients();
 }
 
 RenderObject* SVGPatternElement::createRenderer(RenderArena* arena, RenderStyle*)
@@ -360,31 +201,74 @@ RenderObject* SVGPatternElement::createRenderer(RenderArena* arena, RenderStyle*
     return patternContainer;
 }
 
-KRenderingPaintServerPattern *SVGPatternElement::canvasResource()
+SVGResource* SVGPatternElement::canvasResource()
 {
-    if (!m_paintServer) {
-        KRenderingPaintServer *pserver = renderingDevice()->createPaintServer(KCPaintServerType(PS_PATTERN));
-        m_paintServer = static_cast<KRenderingPaintServerPattern *>(pserver);
-        m_paintServer->setListener(const_cast<SVGPatternElement* >(this));
-    }
-    return m_paintServer;
+    if (!m_resource)
+        m_resource = new SVGPaintServerPattern(this);
+
+    return m_resource.get();
 }
 
-SVGMatrix *SVGPatternElement::getCTM() const
+void SVGPatternElement::insertedIntoDocument()
 {
-    SVGMatrix *mat = SVGSVGElement::createSVGMatrix();
-    if (mat)
-    {
-        RefPtr<SVGMatrix> viewBox = viewBoxToViewTransform(width()->baseVal()->value(),
-                                                        height()->baseVal()->value());
+    SVGElement::insertedIntoDocument();
+    SVGDocumentExtensions* extensions = document()->accessSVGExtensions();
 
-        mat->multiply(viewBox.get());
+    String resourceId = SVGURIReference::getTarget(id());
+    if (extensions->isPendingResource(resourceId))
+        SVGResource::repaintClients(extensions->removePendingResource(resourceId));
+}
+
+PatternAttributes SVGPatternElement::collectPatternProperties() const
+{
+    PatternAttributes attributes;
+    HashSet<const SVGPatternElement*> processedPatterns;
+
+    const SVGPatternElement* current = this;
+    while (current) {
+        if (!attributes.hasX() && current->hasAttribute(SVGNames::xAttr))
+            attributes.setX(current->x().valueAsPercentage());
+
+        if (!attributes.hasY() && current->hasAttribute(SVGNames::yAttr))
+            attributes.setY(current->y().valueAsPercentage());
+
+        if (!attributes.hasWidth() && current->hasAttribute(SVGNames::widthAttr))
+            attributes.setWidth(current->width().valueAsPercentage());
+
+        if (!attributes.hasHeight() && current->hasAttribute(SVGNames::heightAttr))
+            attributes.setHeight(current->height().valueAsPercentage());
+
+        if (!attributes.hasBoundingBoxMode() && current->hasAttribute(SVGNames::patternUnitsAttr))
+            attributes.setBoundingBoxMode(current->getAttribute(SVGNames::patternUnitsAttr) == "objectBoundingBox");
+
+        if (!attributes.hasBoundingBoxModeContent() && current->hasAttribute(SVGNames::patternContentUnitsAttr))
+            attributes.setBoundingBoxModeContent(current->getAttribute(SVGNames::patternContentUnitsAttr) == "objectBoundingBox");
+
+        if (!attributes.hasPatternTransform() && current->hasAttribute(SVGNames::patternTransformAttr))
+            attributes.setPatternTransform(current->patternTransform()->consolidate()->matrix());
+
+        if (!attributes.hasPatternContentElement() && current->hasChildNodes())
+            attributes.setPatternContentElement(current);
+
+        processedPatterns.add(current);
+
+        // Respect xlink:href, take attributes from referenced element
+        Node* refNode = ownerDocument()->getElementById(SVGURIReference::getTarget(current->href()));
+        if (refNode && refNode->hasTagName(SVGNames::patternTag)) {
+            current = static_cast<const SVGPatternElement*>(const_cast<const Node*>(refNode));
+
+            // Cycle detection
+            if (processedPatterns.contains(current))
+                return PatternAttributes();
+        } else
+            current = 0;
     }
 
-    return mat;
+    return attributes;
 }
 
 }
+
+#endif // SVG_SUPPORT
 
 // vim:ts=4:noet
-#endif // SVG_SUPPORT

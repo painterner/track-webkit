@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <wildfox@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,20 +21,25 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "Attr.h"
-
-#include "SVGNames.h"
-#include "SVGHelper.h"
 #include "SVGLineElement.h"
-#include "SVGAnimatedLength.h"
 
-#include <kcanvas/KCanvasCreator.h>
+#include "FloatPoint.h"
+#include "SVGLength.h"
+#include "SVGNames.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGLineElement::SVGLineElement(const QualifiedName& tagName, Document *doc)
-: SVGStyledTransformableElement(tagName, doc), SVGTests(), SVGLangSpace(), SVGExternalResourcesRequired()
+SVGLineElement::SVGLineElement(const QualifiedName& tagName, Document* doc)
+    : SVGStyledTransformableElement(tagName, doc)
+    , SVGTests()
+    , SVGLangSpace()
+    , SVGExternalResourcesRequired()
+    , m_x1(this, LengthModeWidth)
+    , m_y1(this, LengthModeHeight)
+    , m_x2(this, LengthModeWidth)
+    , m_y2(this, LengthModeHeight)
 {
 }
 
@@ -42,68 +47,54 @@ SVGLineElement::~SVGLineElement()
 {
 }
 
-SVGAnimatedLength *SVGLineElement::x1() const
-{
-    return lazy_create<SVGAnimatedLength>(m_x1, this, LM_WIDTH, viewportElement());
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGLineElement, SVGLength, Length, length, X1, x1, SVGNames::x1Attr.localName(), m_x1)
+ANIMATED_PROPERTY_DEFINITIONS(SVGLineElement, SVGLength, Length, length, Y1, y1, SVGNames::y1Attr.localName(), m_y1)
+ANIMATED_PROPERTY_DEFINITIONS(SVGLineElement, SVGLength, Length, length, X2, x2, SVGNames::x2Attr.localName(), m_x2)
+ANIMATED_PROPERTY_DEFINITIONS(SVGLineElement, SVGLength, Length, length, Y2, y2, SVGNames::y2Attr.localName(), m_y2)
 
-SVGAnimatedLength *SVGLineElement::y1() const
-{
-    return lazy_create<SVGAnimatedLength>(m_y1, this, LM_HEIGHT, viewportElement());
-}
-
-SVGAnimatedLength *SVGLineElement::x2() const
-{
-    return lazy_create<SVGAnimatedLength>(m_x2, this, LM_WIDTH, viewportElement());
-}
-
-SVGAnimatedLength *SVGLineElement::y2() const
-{
-    return lazy_create<SVGAnimatedLength>(m_y2, this, LM_HEIGHT, viewportElement());
-}
-
-void SVGLineElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGLineElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const AtomicString& value = attr->value();
     if (attr->name() == SVGNames::x1Attr)
-        x1()->baseVal()->setValueAsString(value.impl());
+        setX1BaseValue(SVGLength(this, LengthModeWidth, value));
     else if (attr->name() == SVGNames::y1Attr)
-        y1()->baseVal()->setValueAsString(value.impl());
+        setY1BaseValue(SVGLength(this, LengthModeHeight, value));
     else if (attr->name() == SVGNames::x2Attr)
-        x2()->baseVal()->setValueAsString(value.impl());
+        setX2BaseValue(SVGLength(this, LengthModeWidth, value));
     else if (attr->name() == SVGNames::y2Attr)
-        y2()->baseVal()->setValueAsString(value.impl());
+        setY2BaseValue(SVGLength(this, LengthModeHeight, value));
     else
     {
-        if(SVGTests::parseMappedAttribute(attr)) return;
-        if(SVGLangSpace::parseMappedAttribute(attr)) return;
-        if(SVGExternalResourcesRequired::parseMappedAttribute(attr)) return;
+        if (SVGTests::parseMappedAttribute(attr))
+            return;
+        if (SVGLangSpace::parseMappedAttribute(attr))
+            return;
+        if (SVGExternalResourcesRequired::parseMappedAttribute(attr))
+            return;
         SVGStyledTransformableElement::parseMappedAttribute(attr);
     }
 }
 
-KCanvasPath* SVGLineElement::toPathData() const
+void SVGLineElement::notifyAttributeChange() const
 {
-    float _x1 = x1()->baseVal()->value(), _y1 = y1()->baseVal()->value();
-    float _x2 = x2()->baseVal()->value(), _y2 = y2()->baseVal()->value();
-
-    return KCanvasCreator::self()->createLine(_x1, _y1, _x2, _y2);
+    if (!ownerDocument()->parsing())
+        rebuildRenderer();
 }
 
-const SVGStyledElement *SVGLineElement::pushAttributeContext(const SVGStyledElement *context)
+Path SVGLineElement::toPathData() const
 {
-    // All attribute's contexts are equal (so just take the one from 'x1').
-    const SVGStyledElement *restore = x1()->baseVal()->context();
-
-    x1()->baseVal()->setContext(context);
-    y1()->baseVal()->setContext(context);
-    x2()->baseVal()->setContext(context);
-    y2()->baseVal()->setContext(context);
-    
-    SVGStyledElement::pushAttributeContext(context);
-    return restore;
+    return Path::createLine(FloatPoint(x1().value(), y1().value()),
+                            FloatPoint(x2().value(), y2().value()));
 }
 
-// vim:ts=4:noet
+bool SVGLineElement::hasRelativeValues() const
+{
+    return (x1().isRelative() || y1().isRelative() ||
+            x2().isRelative() || y2().isRelative());
+}
+
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

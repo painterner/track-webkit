@@ -6,6 +6,7 @@
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
  * Copyright (C) 2004, 2005, 2006 Apple Computer, Inc.
  *           (C) 2006 Alexey Proskuryakov (ap@nypop.com)
+ * Copyright (C) 2007 Samuel Weinig (sam@webkit.org)
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -29,9 +30,9 @@
 
 #include "BeforeTextInsertedEvent.h"
 #include "CSSPropertyNames.h"
-#include "DeprecatedSlider.h"
 #include "Document.h"
 #include "Event.h"
+#include "EventHandler.h"
 #include "EventNames.h"
 #include "FormDataList.h"
 #include "Frame.h"
@@ -42,14 +43,14 @@
 #include "LocalizedStrings.h"
 #include "MouseEvent.h"
 #include "RenderButton.h"
-#include "RenderFileButton.h"
+#include "RenderFileUploadControl.h"
 #include "RenderImage.h"
-#include "RenderLineEdit.h"
 #include "RenderText.h"
 #include "RenderTextControl.h"
 #include "RenderTheme.h"
+#include "RenderSlider.h"
 #include "SelectionController.h"
-#include <unicode/ubrk.h>
+#include "TextBreakIterator.h"
 
 using namespace std;
 
@@ -60,24 +61,30 @@ using namespace HTMLNames;
 
 static int numGraphemeClusters(const StringImpl* s)
 {
-    UBreakIterator* it = characterBreakIterator(s);
+    if (!s)
+        return 0;
+
+    TextBreakIterator* it = characterBreakIterator(s->characters(), s->length());
     if (!it)
         return 0;
     int num = 0;
-    while (ubrk_next(it) != UBRK_DONE)
+    while (textBreakNext(it) != TextBreakDone)
         ++num;
     return num;
 }
 
 static int numCharactersInGraphemeClusters(const StringImpl* s, int numGraphemeClusters)
 {
-    UBreakIterator* it = characterBreakIterator(s);
+    if (!s)
+        return 0;
+
+    TextBreakIterator* it = characterBreakIterator(s->characters(), s->length());
     if (!it)
         return 0;
     for (int i = 0; i < numGraphemeClusters; ++i)
-        if (ubrk_next(it) == UBRK_DONE)
+        if (textBreakNext(it) == TextBreakDone)
             return s->length();
-    return ubrk_current(it);
+    return textBreakCurrent(it);
 }
 
 HTMLInputElement::HTMLInputElement(Document *doc, HTMLFormElement *f)
@@ -134,14 +141,14 @@ const AtomicString& HTMLInputElement::name() const
     return m_name.isNull() ? emptyAtom : m_name;
 }
 
-bool HTMLInputElement::isKeyboardFocusable() const
+bool HTMLInputElement::isKeyboardFocusable(KeyboardEvent* event) const
 {
     // If text fields can be focused, then they should always be keyboard focusable
-    if (isNonWidgetTextField())
+    if (isTextField())
         return HTMLGenericFormElement::isFocusable();
         
     // If the base class says we can't be focused, then we can stop now.
-    if (!HTMLGenericFormElement::isKeyboardFocusable())
+    if (!HTMLGenericFormElement::isKeyboardFocusable(event))
         return false;
 
     if (inputType() == RADIO) {
@@ -151,9 +158,9 @@ bool HTMLInputElement::isKeyboardFocusable() const
 
         // Never allow keyboard tabbing to leave you in the same radio group.  Always
         // skip any other elements in the group.
-        Node* currentFocusNode = document()->focusNode();
-        if (currentFocusNode && currentFocusNode->hasTagName(inputTag)) {
-            HTMLInputElement* focusedInput = static_cast<HTMLInputElement*>(currentFocusNode);
+        Node* currentFocusedNode = document()->focusedNode();
+        if (currentFocusedNode && currentFocusedNode->hasTagName(inputTag)) {
+            HTMLInputElement* focusedInput = static_cast<HTMLInputElement*>(currentFocusedNode);
             if (focusedInput->inputType() == RADIO && focusedInput->form() == form() &&
                 focusedInput->name() == name())
                 return false;
@@ -168,21 +175,21 @@ bool HTMLInputElement::isKeyboardFocusable() const
 
 bool HTMLInputElement::isMouseFocusable() const
 {
-    if (isNonWidgetTextField())
+    if (isTextField())
         return HTMLGenericFormElement::isFocusable();
     return HTMLGenericFormElement::isMouseFocusable();
 }
 
 void HTMLInputElement::focus()
 {
-    if (isNonWidgetTextField()) {
+    if (isTextField()) {
         Document* doc = document();
-        if (doc->focusNode() == this)
+        if (doc->focusedNode() == this)
             return;
         doc->updateLayout();
         if (!supportsFocus())
             return;
-        doc->setFocusNode(this);
+        doc->setFocusedNode(this);
         // FIXME: Should isFocusable do the updateLayout?
         if (!isFocusable()) {
             setNeedsFocusAppearanceUpdate(true);
@@ -196,7 +203,7 @@ void HTMLInputElement::focus()
 
 void HTMLInputElement::updateFocusAppearance()
 {
-    if (isNonWidgetTextField()) {
+    if (isTextField()) {
         select();
         if (document() && document()->frame())
             document()->frame()->revealSelection();
@@ -206,21 +213,27 @@ void HTMLInputElement::updateFocusAppearance()
 
 void HTMLInputElement::aboutToUnload()
 {
-    if (isNonWidgetTextField() && document()->frame())
+    if (isTextField() && document()->frame())
         document()->frame()->textFieldDidEndEditing(this);
 }
 
 void HTMLInputElement::dispatchFocusEvent()
 {
-    if (isNonWidgetTextField())
+    if (isTextField()) {
         setAutofilled(false);
+        if (inputType() == PASSWORD && document()->frame())
+            document()->frame()->setSecureKeyboardEntry(true);
+    }
     HTMLGenericFormElement::dispatchFocusEvent();
 }
 
 void HTMLInputElement::dispatchBlurEvent()
 {
-    if (isNonWidgetTextField() && document()->frame())
+    if (isTextField() && document()->frame()) {
+        if (inputType() == PASSWORD)
+            document()->frame()->setSecureKeyboardEntry(false);
         document()->frame()->textFieldDidEndEditing(static_cast<Element*>(this));
+    }
     HTMLGenericFormElement::dispatchBlurEvent();
 }
 
@@ -309,6 +322,8 @@ void HTMLInputElement::setInputType(const String& t)
                     attributeChanged(height, false);
                 if (MappedAttribute* width = map->getAttributeItem(widthAttr))
                     attributeChanged(width, false);
+                if (MappedAttribute* align = map->getAttributeItem(alignAttr))
+                    attributeChanged(align, false);
             }
 
             if (wasAttached)
@@ -443,7 +458,6 @@ bool HTMLInputElement::canHaveSelection() const
         case FILE:
         case HIDDEN:
         case IMAGE:
-        case ISINDEX:
         case RADIO:
         case RANGE:
         case RESET:
@@ -451,6 +465,7 @@ bool HTMLInputElement::canHaveSelection() const
             return false;
         case PASSWORD:
         case SEARCH:
+        case ISINDEX:
         case TEXT:
             return true;
     }
@@ -468,17 +483,16 @@ int HTMLInputElement::selectionStart() const
         case FILE:
         case HIDDEN:
         case IMAGE:
-        case ISINDEX:
         case RADIO:
         case RANGE:
         case RESET:
         case SUBMIT:
             break;
+        case ISINDEX:
         case PASSWORD:
         case SEARCH:
-            return static_cast<RenderLineEdit*>(renderer())->selectionStart();
         case TEXT:
-            if (document()->focusNode() != this && cachedSelStart >= 0)
+            if (document()->focusedNode() != this && cachedSelStart >= 0)
                 return cachedSelStart;
             return static_cast<RenderTextControl*>(renderer())->selectionStart();
     }
@@ -496,17 +510,16 @@ int HTMLInputElement::selectionEnd() const
         case FILE:
         case HIDDEN:
         case IMAGE:
-        case ISINDEX:
         case RADIO:
         case RANGE:
         case RESET:
         case SUBMIT:
             break;
+        case ISINDEX:
         case PASSWORD:
-        case SEARCH:
-            return static_cast<RenderLineEdit*>(renderer())->selectionEnd();
         case TEXT:
-            if (document()->focusNode() != this && cachedSelEnd >= 0)
+        case SEARCH:
+            if (document()->focusedNode() != this && cachedSelEnd >= 0)
                 return cachedSelEnd;
             return static_cast<RenderTextControl*>(renderer())->selectionEnd();
     }
@@ -524,17 +537,15 @@ void HTMLInputElement::setSelectionStart(int start)
         case FILE:
         case HIDDEN:
         case IMAGE:
-        case ISINDEX:
         case RADIO:
         case RANGE:
         case RESET:
         case SUBMIT:
             break;
+        case ISINDEX:
         case PASSWORD:
-        case SEARCH:
-            static_cast<RenderLineEdit*>(renderer())->setSelectionStart(start);
-            break;
         case TEXT:
+        case SEARCH:
             static_cast<RenderTextControl*>(renderer())->setSelectionStart(start);
             break;
     }
@@ -551,17 +562,15 @@ void HTMLInputElement::setSelectionEnd(int end)
         case FILE:
         case HIDDEN:
         case IMAGE:
-        case ISINDEX:
         case RADIO:
         case RANGE:
         case RESET:
         case SUBMIT:
             break;
+        case ISINDEX:
         case PASSWORD:
-        case SEARCH:
-            static_cast<RenderLineEdit*>(renderer())->setSelectionEnd(end);
-            break;
         case TEXT:
+        case SEARCH:
             static_cast<RenderTextControl*>(renderer())->setSelectionEnd(end);
             break;
     }
@@ -577,20 +586,16 @@ void HTMLInputElement::select()
         case CHECKBOX:
         case HIDDEN:
         case IMAGE:
-        case ISINDEX:
         case RADIO:
         case RANGE:
         case RESET:
         case SUBMIT:
-            break;
         case FILE:
-            static_cast<RenderFileButton*>(renderer())->select();
             break;
+        case ISINDEX:
         case PASSWORD:
-        case SEARCH:
-            static_cast<RenderLineEdit*>(renderer())->select();
-            break;
         case TEXT:
+        case SEARCH:
             static_cast<RenderTextControl*>(renderer())->select();
             break;
     }
@@ -607,48 +612,18 @@ void HTMLInputElement::setSelectionRange(int start, int end)
         case FILE:
         case HIDDEN:
         case IMAGE:
-        case ISINDEX:
         case RADIO:
         case RANGE:
         case RESET:
         case SUBMIT:
             break;
+        case ISINDEX:
         case PASSWORD:
-        case SEARCH:
-            static_cast<RenderLineEdit*>(renderer())->setSelectionRange(start, end);
-            break;
         case TEXT:
+        case SEARCH:
             static_cast<RenderTextControl*>(renderer())->setSelectionRange(start, end);
             break;
     }
-}
-
-void HTMLInputElement::click(bool sendMouseEvents, bool showPressedLook)
-{
-    switch (inputType()) {
-        case BUTTON:
-        case CHECKBOX:
-        case IMAGE:
-        case ISINDEX:
-        case PASSWORD:
-        case RADIO:
-        case RANGE:
-        case RESET:
-        case SEARCH:
-        case SUBMIT:
-        case TEXT:
-            break;
-        case FILE:
-            if (renderer()) {
-                static_cast<RenderFileButton *>(renderer())->click(sendMouseEvents);
-                return;
-            }
-            break;
-        case HIDDEN:
-            // a no-op for this type
-            return;
-    }
-    HTMLGenericFormElement::click(sendMouseEvents, showPressedLook);
 }
 
 void HTMLInputElement::accessKeyAction(bool sendToAnyElement)
@@ -665,7 +640,7 @@ void HTMLInputElement::accessKeyAction(bool sendToAnyElement)
             // focus
             focus();
             // send the mouse button events iff the caller specified sendToAnyElement
-            click(sendToAnyElement);
+            dispatchSimulatedClick(0, sendToAnyElement);
             break;
         case HIDDEN:
             // a no-op for this type
@@ -687,12 +662,15 @@ bool HTMLInputElement::mapToEntry(const QualifiedName& attrName, MappedAttribute
         result = eUniversal;
         return false;
     } 
-    
+
     if (attrName == alignAttr) {
-        result = eReplaced; // Share with <img> since the alignment behavior is the same.
-        return false;
+        if (inputType() == IMAGE) {
+            // Share with <img> since the alignment behavior is the same.
+            result = eReplaced;
+            return false;
+        }
     }
-    
+
     return HTMLElement::mapToEntry(attrName, result);
 }
 
@@ -760,7 +738,8 @@ void HTMLInputElement::parseMappedAttribute(MappedAttribute *attr)
         addCSSLength(attr, CSS_PROP_MARGIN_LEFT, attr->value());
         addCSSLength(attr, CSS_PROP_MARGIN_RIGHT, attr->value());
     } else if (attr->name() == alignAttr) {
-        addHTMLAlignment(attr);
+        if (inputType() == IMAGE)
+            addHTMLAlignment(attr);
     } else if (attr->name() == widthAttr) {
         if (respectHeightAndWidthAttrs())
             addCSSLength(attr, CSS_PROP_WIDTH, attr->value());
@@ -783,7 +762,14 @@ void HTMLInputElement::parseMappedAttribute(MappedAttribute *attr)
     else if (attr->name() == onsearchAttr) {
         setHTMLEventListener(searchEvent, attr);
     } else if (attr->name() == resultsAttr) {
+        int oldResults = m_maxResults;
         m_maxResults = !attr->isNull() ? attr->value().toInt() : -1;
+        // FIXME: Detaching just for maxResults change is not ideal.  We should figure out the right
+        // time to relayout for this change.
+        if (m_maxResults != oldResults && (m_maxResults <= 0 || oldResults <= 0) && attached()) {
+            detach();
+            attach();
+        }
         setChanged();
     } else if (attr->name() == autosaveAttr ||
                attr->name() == incrementalAttr ||
@@ -830,19 +816,18 @@ RenderObject *HTMLInputElement::createRenderer(RenderArena *arena, RenderStyle *
         case RADIO:
             return RenderObject::createObject(this, style);
         case FILE:
-            return new (arena) RenderFileButton(this);
+            return new (arena) RenderFileUploadControl(this);
         case HIDDEN:
             break;
         case IMAGE:
             return new (arena) RenderImage(this);
+        case RANGE:
+            return new (arena) RenderSlider(this);
         case ISINDEX:
         case PASSWORD:
-        case SEARCH:
-            return new (arena) RenderLineEdit(this);
-        case RANGE:
-            return new (arena) DeprecatedSlider(this);
         case TEXT:
-            return new (arena) RenderTextControl(this, false);
+        case SEARCH:
+            return new (arena) RenderTextControl(this, false);             
     }
     assert(false);
     return 0;
@@ -945,8 +930,8 @@ bool HTMLInputElement::appendFormData(FormDataList& encoding, bool multipart)
 
         case IMAGE:
             if (m_activeSubmit) {
-                encoding.appendData(name().isEmpty() ? "x" : (name() + ".x"), clickX());
-                encoding.appendData(name().isEmpty() ? "y" : (name() + ".y"), clickY());
+                encoding.appendData(name().isEmpty() ? "x" : (name() + ".x"), xPos);
+                encoding.appendData(name().isEmpty() ? "y" : (name() + ".y"), yPos);
                 if (!name().isEmpty() && !value().isEmpty())
                     encoding.appendData(name(), value());
                 return true;
@@ -972,7 +957,7 @@ bool HTMLInputElement::appendFormData(FormDataList& encoding, bool multipart)
             // If no filename at all is entered, return successful but empty.
             // Null would be more logical, but Netscape posts an empty file. Argh.
             if (value().isEmpty()) {
-                encoding.appendData(name(), DeprecatedString(""));
+                encoding.appendData(name(), String(""));
                 return true;
             }
 
@@ -1035,6 +1020,8 @@ void HTMLInputElement::copyNonAttributeProperties(const Element *source)
     m_value = sourceElem->m_value;
     m_checked = sourceElem->m_checked;
     m_indeterminate = sourceElem->m_indeterminate;
+    
+    HTMLGenericFormElement::copyNonAttributeProperties(source);
 }
 
 String HTMLInputElement::value() const
@@ -1092,13 +1079,15 @@ void HTMLInputElement::setValue(const String& value)
         m_value = constrainValue(value);
         if (renderer())
             renderer()->updateFromElement();
-        setChanged();
+        // Changes to hidden values don't require re-rendering.
+        if (m_type != HIDDEN)
+            setChanged();
     } else
         setAttribute(valueAttr, constrainValue(value));
     
     // Restore a caret at the starting point of the old selection.
     // This matches Safari 2.0 behavior.
-    if (isNonWidgetTextField() && document()->focusNode() == this && cachedSelStart >= 0) {
+    if (isTextField() && document()->focusedNode() == this && cachedSelStart >= 0) {
         ASSERT(cachedSelEnd >= 0);
         setSelectionRange(cachedSelStart, cachedSelStart);
     }
@@ -1111,7 +1100,7 @@ void HTMLInputElement::setValueFromRenderer(const String& value)
 
     // Workaround for bug where trailing \n is included in the result of textContent.
     // The assert macro above may also be simplified to:  value == constrainValue(value)
-    // http://bugzilla.opendarwin.org/show_bug.cgi?id=9661
+    // http://bugs.webkit.org/show_bug.cgi?id=9661
     if (value == "\n")
         m_value = "";
     else
@@ -1129,13 +1118,13 @@ bool HTMLInputElement::storesValueSeparateFromAttribute() const
         case BUTTON:
         case CHECKBOX:
         case FILE:
-        case HIDDEN:
         case IMAGE:
         case RADIO:
         case RANGE:
         case RESET:
         case SUBMIT:
             return false;
+        case HIDDEN:
         case ISINDEX:
         case PASSWORD:
         case SEARCH:
@@ -1214,11 +1203,11 @@ void HTMLInputElement::postDispatchEventHandler(Event *evt, void* data)
     }
 }
 
-void HTMLInputElement::defaultEventHandler(Event *evt)
+void HTMLInputElement::defaultEventHandler(Event* evt)
 {
     if (inputType() == IMAGE && evt->isMouseEvent() && evt->type() == clickEvent) {
         // record the mouse position for when we get the DOMActivate event
-        MouseEvent *me = static_cast<MouseEvent*>(evt);
+        MouseEvent* me = static_cast<MouseEvent*>(evt);
         // FIXME: We could just call offsetX() and offsetY() on the event,
         // but that's currently broken, so for now do the computation here.
         if (me->isSimulated() || !renderer()) {
@@ -1230,12 +1219,11 @@ void HTMLInputElement::defaultEventHandler(Event *evt)
             xPos = me->pageX() - offsetX;
             yPos = me->pageY() - offsetY;
         }
-        me->setDefaultHandled();
     }
 
     // DOMActivate events cause the input to be "activated" - in the case of image and submit inputs, this means
     // actually submitting the form. For reset inputs, the form is reset. These events are sent when the user clicks
-    // on the element, or presses enter while it is the active element. Javacsript code wishing to activate the element
+    // on the element, or presses enter while it is the active element. JavaScript code wishing to activate the element
     // must dispatch a DOMActivate event - a click event will not do the job.
     if (evt->type() == DOMActivateEvent && !disabled()) {
         if (inputType() == IMAGE || inputType() == SUBMIT || inputType() == RESET) {
@@ -1245,13 +1233,14 @@ void HTMLInputElement::defaultEventHandler(Event *evt)
                 form()->reset();
             else {
                 m_activeSubmit = true;
-                if (!form()->prepareSubmit()) {
+                if (!form()->prepareSubmit(evt)) {
                     xPos = 0;
                     yPos = 0;
                 }
                 m_activeSubmit = false;
             }
-        } 
+        } else if (inputType() == FILE && renderer())
+            static_cast<RenderFileUploadControl*>(renderer())->click();
     }
 
     // Use key press event here since sending simulated mouse events
@@ -1260,7 +1249,8 @@ void HTMLInputElement::defaultEventHandler(Event *evt)
         bool clickElement = false;
         bool clickDefaultFormButton = false;
     
-        if (isNonWidgetTextField() && document()->frame() && document()->frame()->doTextFieldCommandFromEvent(this, static_cast<KeyboardEvent*>(evt)->keyEvent())) {
+        if (isTextField() && document()->frame()
+                && document()->frame()->doTextFieldCommandFromEvent(this, static_cast<KeyboardEvent*>(evt))) {
             evt->setDefaultHandled();
             return;
         }
@@ -1307,7 +1297,7 @@ void HTMLInputElement::defaultEventHandler(Event *evt)
                 case PASSWORD:
                 case SEARCH:
                 case TEXT:
-                    if (!document()->frame()->inputManagerHasMarkedText())
+                    if (!document()->frame()->eventHandler()->inputManagerHasMarkedText())
                         // Simulate mouse click on the default form button for enter for these types of elements.
                         clickDefaultFormButton = true;
                     break;
@@ -1348,8 +1338,8 @@ void HTMLInputElement::defaultEventHandler(Event *evt)
                         if (inputElt->inputType() == RADIO && inputElt->name() == name() &&
                             inputElt->isFocusable()) {
                             inputElt->setChecked(true);
-                            document()->setFocusNode(inputElt);
-                            inputElt->click(false, false);
+                            document()->setFocusedNode(inputElt);
+                            inputElt->dispatchSimulatedClick(evt, false, false);
                             evt->setDefaultHandled();
                             break;
                         }
@@ -1359,15 +1349,17 @@ void HTMLInputElement::defaultEventHandler(Event *evt)
         }
 
         if (clickElement) {
-            click(false);
+            dispatchSimulatedClick(evt);
             evt->setDefaultHandled();
-        } else if (clickDefaultFormButton && (inputType() != SEARCH || form())) {
-            if (form()) {
-                blur();
-                // Make sure the form hasn't been destroyed during the blur.
-                if (form())
-                    form()->submitClick();
+        } else if (clickDefaultFormButton) {
+            if (isSearchField()) {
+                addSearchResult();
+                onSearch();
             }
+            blur();
+            // Form may never have been present, or may have been destroyed by the blur event.
+            if (form())
+                form()->submitClick(evt);
             evt->setDefaultHandled();
         }
     }
@@ -1376,7 +1368,7 @@ void HTMLInputElement::defaultEventHandler(Event *evt)
         // Make sure that the text to be inserted will not violate the maxLength.
         int oldLen = numGraphemeClusters(value().impl());
         ASSERT(oldLen <= maxLength());
-        int selectionLen = numGraphemeClusters(document()->frame()->selection().toString().impl());
+        int selectionLen = numGraphemeClusters(document()->frame()->selectionController()->toString().impl());
         ASSERT(oldLen >= selectionLen);
         int maxNewLen = maxLength() - (oldLen - selectionLen);
 
@@ -1384,11 +1376,24 @@ void HTMLInputElement::defaultEventHandler(Event *evt)
         BeforeTextInsertedEvent* textEvent = static_cast<BeforeTextInsertedEvent*>(evt);
         textEvent->setText(constrainValue(textEvent->text(), maxNewLen));
     }
-    
-    if (isNonWidgetTextField() && (evt->isMouseEvent() || evt->isDragEvent() || evt->isWheelEvent() || evt->type() == blurEvent) && renderer())
+
+    if (isTextField() && renderer() && (evt->isMouseEvent() || evt->isDragEvent() || evt->isWheelEvent() || evt->type() == blurEvent || evt->type() == focusEvent))
         static_cast<RenderTextControl*>(renderer())->forwardEvent(evt);
-    
-    HTMLGenericFormElement::defaultEventHandler(evt);
+
+    if (inputType() == RANGE && renderer()) {
+        RenderSlider* slider = static_cast<RenderSlider*>(renderer());
+        if (evt->isMouseEvent() && evt->type() == mousedownEvent) {
+            MouseEvent* mEvt = static_cast<MouseEvent*>(evt);
+            if (!slider->mouseEventIsInThumb(mEvt)) {
+                slider->setValueForPosition(slider->positionForOffset(IntPoint(mEvt->offsetX(), mEvt->offsetY())));
+            }
+        }
+        if (evt->isMouseEvent() || evt->isDragEvent() || evt->isWheelEvent())
+            slider->forwardEvent(evt);
+    }
+
+    if (!evt->defaultHandled())
+        HTMLGenericFormElement::defaultEventHandler(evt);
 }
 
 bool HTMLInputElement::isURLAttribute(Attribute *attr) const
@@ -1513,6 +1518,19 @@ String HTMLInputElement::constrainValue(const String& proposedValue, int maxLen)
             return proposedValue.substring(0, newLen);
     }
     return proposedValue;
+}
+
+void HTMLInputElement::addSearchResult()
+{
+    ASSERT(isSearchField());
+    if (renderer())
+        static_cast<RenderTextControl*>(renderer())->addSearchResult();
+}
+
+void HTMLInputElement::onSearch()
+{
+    ASSERT(isSearchField());
+    dispatchHTMLEvent(searchEvent, true, false);
 }
     
 } // namespace

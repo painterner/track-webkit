@@ -4,6 +4,7 @@
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
+ *           (C) 2006 Alexey Proskuryakov (ap@webkit.org)
  * Copyright (C) 2004, 2005, 2006 Apple Computer, Inc.
  *
  * This library is free software; you can redistribute it and/or
@@ -29,18 +30,12 @@
 #include "Attr.h"
 #include "Color.h"
 #include "DeprecatedPtrList.h"
-#include "DeprecatedStringList.h"
+#include "DeprecatedValueList.h"
 #include "DocumentMarker.h"
 #include "HTMLCollection.h"
 #include "StringHash.h"
 #include "Timer.h"
 #include <wtf/HashCountedSet.h>
-
-#ifndef KHTML_NO_XBL
-namespace XBL {
-    class XBLBindingManager;
-}
-#endif
 
 namespace WebCore {
 
@@ -54,7 +49,7 @@ namespace WebCore {
     class Comment;
     class DOMImplementation;
     class DOMWindow;
-    class Decoder;
+    class TextResourceDecoder;
     class DocLoader;
     class DocumentFragment;
     class DocumentType;
@@ -79,6 +74,7 @@ namespace WebCore {
     class NodeFilter;
     class NodeIterator;
     class NodeList;
+    class Page;
     class PlatformMouseEvent;
     class ProcessingInstruction;
     class Range;
@@ -89,6 +85,9 @@ namespace WebCore {
     class Text;
     class Tokenizer;
     class TreeWalker;
+#ifdef XBL_SUPPORT
+    class XBLBindingManager;
+#endif
 #ifdef XPATH_SUPPORT
     class XPathEvaluator;
     class XPathExpression;
@@ -96,9 +95,8 @@ namespace WebCore {
     class XPathResult;
 #endif
     
-#if __APPLE__
     struct DashboardRegionValue;
-#endif
+    struct HitTestRequest;
 
 #ifdef SVG_SUPPORT
     class SVGDocumentExtensions;
@@ -183,6 +181,14 @@ public:
     String characterSet() const { return inputEncoding(); }
 
     void setCharset(const String&);
+
+    String xmlEncoding() const { return m_xmlEncoding; }
+    String xmlVersion() const { return m_xmlVersion; }
+    bool xmlStandalone() const { return m_xmlStandalone; }
+
+    void setXMLEncoding(const String& encoding) { m_xmlEncoding = encoding; } // read-only property, only to be set from XMLTokenizer
+    void setXMLVersion(const String&, ExceptionCode&);
+    void setXMLStandalone(bool, ExceptionCode&);
 
     PassRefPtr<Node> adoptNode(PassRefPtr<Node> source, ExceptionCode&);
     
@@ -274,8 +280,9 @@ public:
     bool hasStateForNewFormElements() const;
     bool takeStateForFormElement(AtomicStringImpl* name, AtomicStringImpl* type, String& state);
 
-    FrameView* view() const { return m_view; }
-    Frame* frame() const;
+    FrameView* view() const; // can be NULL
+    Frame* frame() const; // can be NULL
+    Page* page() const; // can be NULL
 
     PassRefPtr<Range> createRange();
 
@@ -321,6 +328,8 @@ public:
     void finishParsing();
     void clear();
 
+    bool wellFormed() const { return m_wellFormed; }
+
     DeprecatedString URL() const { return m_url.isEmpty() ? "about:blank" : m_url; }
     void setURL(const DeprecatedString& url);
 
@@ -334,7 +343,7 @@ public:
     String completeURL(const String&);
 
     // from cachedObjectClient
-    virtual void setStyleSheet(const String& url, const String& sheetStr);
+    virtual void setCSSStyleSheet(const String& url, const String& charset, const String& sheetStr);
     void setUserStyleSheet(const String& sheet);
     const String& userStyleSheet() const { return m_usersheet; }
     void setPrintStyleSheet(const String& sheet) { m_printSheet = sheet; }
@@ -349,7 +358,7 @@ public:
 
     enum ParseMode { Compat, AlmostStrict, Strict };
     
-    virtual void determineParseMode( const DeprecatedString &str );
+    virtual void determineParseMode(const String&);
     void setParseMode(ParseMode m) { pMode = m; }
     ParseMode parseMode() const { return pMode; }
 
@@ -381,7 +390,7 @@ public:
     void resetVisitedLinkColor();
     void resetActiveLinkColor();
     
-    MouseEventWithHitTestResults prepareMouseEvent(bool readonly, bool active, bool mouseMove, const IntPoint& point, const PlatformMouseEvent&);
+    MouseEventWithHitTestResults prepareMouseEvent(const HitTestRequest&, const IntPoint&, const PlatformMouseEvent&);
 
     virtual bool childTypeAllowed(NodeType);
     virtual PassRefPtr<Node> cloneNode(bool deep);
@@ -396,19 +405,18 @@ public:
     String selectedStylesheetSet() const;
     void setSelectedStylesheetSet(const String&);
 
-    DeprecatedStringList availableStyleSheets() const;
+    bool setFocusedNode(PassRefPtr<Node>);
+    Node* focusedNode() const { return m_focusedNode.get(); }
 
-    Node* focusNode() const { return m_focusNode.get(); }
-    bool setFocusNode(PassRefPtr<Node>);
-    void clearSelectionIfNeeded(Node*);
-
-    Node* hoverNode() const { return m_hoverNode.get(); }
     void setHoverNode(PassRefPtr<Node>);
+    Node* hoverNode() const { return m_hoverNode.get(); }
+
+    void setActiveNode(PassRefPtr<Node>);
+    Node* activeNode() const { return m_activeNode.get(); }
+
+    void focusedNodeDetached(Node*);
     void hoveredNodeDetached(Node*);
     void activeChainNodeDetached(Node*);
-    
-    Node* activeNode() const { return m_activeNode.get(); }
-    void setActiveNode(PassRefPtr<Node>);
 
     // Updates for :target (CSS3 selector).
     void setCSSTarget(Node*);
@@ -465,7 +473,7 @@ public:
      *
      * See http://www.w3.org/TR/html4/interact/forms.html#h-17.11.1
      */
-    Node* nextFocusNode(Node* fromNode);
+    Node* nextFocusableNode(Node* start, KeyboardEvent*);
 
     /**
      * Searches through the document, starting from fromNode, for the previous selectable element (that comes _before_)
@@ -478,7 +486,7 @@ public:
      *
      * See http://www.w3.org/TR/html4/interact/forms.html#h-17.11.1
      */
-    Node* previousFocusNode(Node* fromNode);
+    Node* previousFocusableNode(Node* start, KeyboardEvent*);
 
     int nodeAbsIndex(Node*);
     Node* nodeWithAbsIndex(int absIndex);
@@ -537,7 +545,7 @@ public:
     bool queryCommandSupported(const String& command);
     String queryCommandValue(const String& command);
     
-    void addMarker(Range*, DocumentMarker::MarkerType);
+    void addMarker(Range*, DocumentMarker::MarkerType, String description = String());
     void addMarker(Node*, DocumentMarker);
     void copyMarkers(Node *srcNode, unsigned startOffset, int length, Node *dstNode, int delta, DocumentMarker::MarkerType = DocumentMarker::AllMarkers);
     void removeMarkers(Range*, DocumentMarker::MarkerType = DocumentMarker::AllMarkers);
@@ -549,6 +557,7 @@ public:
     void invalidateRenderedRectsForMarkersInRect(const IntRect&);
     void shiftMarkers(Node*, unsigned startOffset, int delta, DocumentMarker::MarkerType = DocumentMarker::AllMarkers);
 
+    DocumentMarker* markerContainingPoint(const IntPoint&, DocumentMarker::MarkerType = DocumentMarker::AllMarkers);
     Vector<DocumentMarker> markersForNode(Node*);
     Vector<IntRect> renderedRectsForMarkers(DocumentMarker::MarkerType = DocumentMarker::AllMarkers);
     
@@ -563,7 +572,7 @@ public:
 
     int docID() const { return m_docID; }
 
-#if KHTML_XSLT
+#if XSLT_SUPPORT
     void applyXSLTransform(ProcessingInstruction* pi);
     void setTransformSource(void* doc) { m_transformSource = doc; }
     const void* transformSource() { return m_transformSource; }
@@ -571,9 +580,9 @@ public:
     void setTransformSourceDocument(Document *doc) { m_transformSourceDocument = doc; }
 #endif
 
-#ifndef KHTML_NO_XBL
+#ifdef XBL_SUPPORT
     // XBL methods
-    XBL::XBLBindingManager* bindingManager() const { return m_bindingManager; }
+    XBLBindingManager* bindingManager() const { return m_bindingManager; }
 #endif
 
     void incDOMTreeVersion() { ++m_domtree_version; }
@@ -597,23 +606,29 @@ public:
                                      ExceptionCode& ec);
 #endif // XPATH_SUPPORT
     
+    enum PendingSheetLayout { NoLayoutWithPendingSheets, DidLayoutWithPendingSheets, IgnoreLayoutWithPendingSheets };
+
+    bool didLayoutWithPendingStylesheets() const { return m_pendingSheetLayout == DidLayoutWithPendingSheets; }
+
+    String iconURL();
+    void setIconURL(const String& iconURL, const String& type);
 protected:
     CSSStyleSelector* m_styleSelector;
     FrameView* m_view;
 
     DocLoader* m_docLoader;
     Tokenizer* m_tokenizer;
+    bool m_wellFormed;
     DeprecatedString m_url;
     DeprecatedString m_baseURL;
     String m_baseTarget;
-
+    
     RefPtr<DocumentType> m_docType;
     RefPtr<DOMImplementation> m_implementation;
 
     RefPtr<StyleSheet> m_sheet;
     String m_usersheet;
     String m_printSheet;
-    DeprecatedStringList m_availableSheets;
 
     // Track the number of currently loading top-level stylesheets.  Sheets
     // loaded using the @import directive are not included in this count.
@@ -625,6 +640,11 @@ protected:
     // force an immediate layout when requested by JS.
     bool m_ignorePendingStylesheets;
 
+    // If we do ignore the pending stylesheet count, then we need to add a boolean
+    // to track that this happened so that we can do a full repaint when the stylesheets
+    // do eventually load.
+    PendingSheetLayout m_pendingSheetLayout;
+
     RefPtr<CSSStyleSheet> m_elemSheet;
 
     bool m_printing;
@@ -634,14 +654,14 @@ protected:
 
     Color m_textColor;
 
-    RefPtr<Node> m_focusNode;
+    RefPtr<Node> m_focusedNode;
     RefPtr<Node> m_hoverNode;
     RefPtr<Node> m_activeNode;
     mutable RefPtr<Element> m_documentElement;
 
     unsigned m_domtree_version;
     
-    DeprecatedPtrList<NodeIterator> m_nodeIterators;
+    HashSet<NodeIterator*> m_nodeIterators;
 
     unsigned short m_listenerTypes;
     RefPtr<StyleSheetList> m_styleSheets;
@@ -663,9 +683,7 @@ protected:
     bool m_loadingSheet;
     bool visuallyOrdered;
     bool m_bParsing;
-    bool m_bAllDataReceived;
     bool m_docChanged;
-    bool m_styleSelectorDirty;
     bool m_inStyleRecalc;
     bool m_closeAfterStyleRecalc;
     bool m_usesDescendantRules;
@@ -693,13 +711,13 @@ protected:
     double m_startTime;
     bool m_overMinimumLayoutThreshold;
     
-#if KHTML_XSLT
+#if XSLT_SUPPORT
     void* m_transformSource;
     RefPtr<Document> m_transformSourceDocument;
 #endif
 
-#ifndef KHTML_NO_XBL
-    XBL::XBLBindingManager* m_bindingManager; // The access point through which documents and elements communicate with XBL.
+#ifdef XBL_SUPPORT
+    XBLBindingManager* m_bindingManager; // The access point through which documents and elements communicate with XBL.
 #endif
     
     typedef HashMap<AtomicStringImpl*, HTMLMapElement*> ImageMapsByName;
@@ -710,6 +728,10 @@ protected:
     HashSet<Node*> m_disconnectedNodesWithEventListeners;
 
     int m_docID; // A unique document identifier used for things like document-specific mapped attributes.
+
+    String m_xmlEncoding;
+    String m_xmlVersion;
+    bool m_xmlStandalone;
 
 public:
     bool inPageCache();
@@ -726,18 +748,18 @@ public:
     void setShouldCreateRenderers(bool);
     bool shouldCreateRenderers();
     
-    void setDecoder(Decoder*);
-    Decoder* decoder() const { return m_decoder.get(); }
+    void setDecoder(TextResourceDecoder*);
+    TextResourceDecoder* decoder() const { return m_decoder.get(); }
 
     UChar backslashAsCurrencySymbol() const;
 
-#if __APPLE__
+#if PLATFORM(MAC)
     void setDashboardRegionsDirty(bool f) { m_dashboardRegionsDirty = f; }
     bool dashboardRegionsDirty() const { return m_dashboardRegionsDirty; }
     bool hasDashboardRegions () const { return m_hasDashboardRegions; }
     void setHasDashboardRegions (bool f) { m_hasDashboardRegions = f; }
-    const DeprecatedValueList<DashboardRegionValue> & dashboardRegions() const;
-    void setDashboardRegions (const DeprecatedValueList<DashboardRegionValue>& regions);
+    const Vector<DashboardRegionValue>& dashboardRegions() const;
+    void setDashboardRegions(const Vector<DashboardRegionValue>&);
 #endif
 
     void removeAllEventListenersFromAllNodes();
@@ -760,24 +782,19 @@ private:
     void imageLoadEventTimerFired(Timer<Document>*);
 
     JSEditor* jsEditor();
-
     JSEditor* m_jsEditor;
-    bool relinquishesEditingFocus(Node*);
-    bool acceptsEditingFocus(Node*);
-    void didBeginEditing();
-    void didEndEditing();
 
     mutable String m_domain;
     RenderObject* m_savedRenderer;
     int m_passwordFields;
     int m_secureForms;
     
-    RefPtr<Decoder> m_decoder;
+    RefPtr<TextResourceDecoder> m_decoder;
 
     mutable HashMap<AtomicStringImpl*, Element*> m_elementsById;
     mutable HashCountedSet<AtomicStringImpl*> m_duplicateIds;
     
-    mutable HashMap<StringImpl*, Element*, CaseInsensitiveHash> m_elementsByAccessKey;
+    mutable HashMap<StringImpl*, Element*, CaseInsensitiveHash<StringImpl*> > m_elementsByAccessKey;
     
     InheritedBool m_designMode;
     
@@ -797,8 +814,8 @@ private:
     SVGDocumentExtensions* m_svgExtensions;
 #endif
     
-#if __APPLE__
-    DeprecatedValueList<DashboardRegionValue> m_dashboardRegions;
+#if PLATFORM(MAC)
+    Vector<DashboardRegionValue> m_dashboardRegions;
     bool m_hasDashboardRegions;
     bool m_dashboardRegionsDirty;
 #endif
@@ -806,6 +823,7 @@ private:
     mutable bool m_accessKeyMapValid;
     bool m_createRenderers;
     bool m_inPageCache;
+    String m_iconURL;
 };
 
 } //namespace

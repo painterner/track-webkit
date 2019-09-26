@@ -25,7 +25,6 @@
 #include "Event.h"
 
 #include "AtomicString.h"
-#include "Node.h"
 #include "SystemTime.h"
 
 namespace WebCore {
@@ -116,6 +115,14 @@ bool Event::isOverflowEvent() const
     return false;
 }
 
+#ifdef SVG_SUPPORT
+bool Event::isSVGZoomEvent() const
+{
+    return false;
+}
+#endif
+
+
 bool Event::storesResultAsString() const
 {
     return false;
@@ -125,15 +132,24 @@ void Event::storeResult(const String&)
 {
 }
 
-void Event::setTarget(Node* target)
+void Event::setTarget(PassRefPtr<EventTarget> target)
 {
     m_target = target;
-    if (target)
+    if (m_target)
         receivedTarget();
 }
 
 void Event::receivedTarget()
 {
+}
+
+void Event::setUnderlyingEvent(PassRefPtr<Event> ue)
+{
+    // Prohibit creation of a cycle -- just do nothing in that case.
+    for (Event* e = ue.get(); e; e = e->underlyingEvent())
+        if (e == this)
+            return;
+    m_underlyingEvent = ue;
 }
 
 } // namespace WebCore

@@ -1,5 +1,5 @@
 /**
-* This file is part of the html renderer for KDE.
+ * This file is part of the html renderer for KDE.
  *
  * Copyright (C) 2003, 2006 Apple Computer, Inc.
  *
@@ -18,13 +18,16 @@
  * the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+
 #include "config.h"
 #include "RootInlineBox.h"
 
-#include "EllipsisBox.h"
-#include "RenderBlock.h"
-#include "GraphicsContext.h"
 #include "Document.h"
+#include "EllipsisBox.h"
+#include "GraphicsContext.h"
+#include "HitTestResult.h"
+#include "RenderBlock.h"
+
 #if PLATFORM(MAC)
 #include "FrameMac.h"
 #endif
@@ -71,7 +74,7 @@ void RootInlineBox::placeEllipsis(const AtomicString& ellipsisStr,  bool ltr, in
                                   InlineBox* markupBox)
 {
     // Create an ellipsis box.
-    m_ellipsisBox = new (m_object->renderArena()) EllipsisBox(m_object, ellipsisStr, this, 
+    m_ellipsisBox = new (m_object->renderArena()) EllipsisBox(m_object, ellipsisStr, this,
                                                               ellipsisWidth - (markupBox ? markupBox->width() : 0),
                                                               yPos(), height(), baseline(), !prevRootBox(),
                                                               markupBox);
@@ -96,11 +99,11 @@ int RootInlineBox::placeEllipsisBox(bool ltr, int blockEdge, int ellipsisWidth, 
     return result;
 }
 
-void RootInlineBox::paintEllipsisBox(RenderObject::PaintInfo& i, int _tx, int _ty) const
+void RootInlineBox::paintEllipsisBox(RenderObject::PaintInfo& paintInfo, int tx, int ty) const
 {
-    if (m_ellipsisBox && object()->shouldPaintWithinRoot(i) && object()->style()->visibility() == VISIBLE &&
-        i.phase == PaintPhaseForeground)
-        m_ellipsisBox->paint(i, _tx, _ty);
+    if (m_ellipsisBox && object()->shouldPaintWithinRoot(paintInfo) && object()->style()->visibility() == VISIBLE &&
+            paintInfo.phase == PaintPhaseForeground)
+        m_ellipsisBox->paint(paintInfo, tx, ty);
 }
 
 #if PLATFORM(MAC)
@@ -115,39 +118,39 @@ void RootInlineBox::addHighlightOverflow()
     m_bottomOverflow = max(m_bottomOverflow, inflatedRect.bottom());
 }
 
-void RootInlineBox::paintCustomHighlight(RenderObject::PaintInfo& i, int tx, int ty, const AtomicString& highlightType)
+void RootInlineBox::paintCustomHighlight(RenderObject::PaintInfo& paintInfo, int tx, int ty, const AtomicString& highlightType)
 {
-    if (!object()->shouldPaintWithinRoot(i) || object()->style()->visibility() != VISIBLE || i.phase != PaintPhaseForeground)
+    if (!object()->shouldPaintWithinRoot(paintInfo) || object()->style()->visibility() != VISIBLE || paintInfo.phase != PaintPhaseForeground)
         return;
 
     // Get the inflated rect so that we can properly hit test.
     FloatRect rootRect(tx + xPos(), ty + selectionTop(), width(), selectionHeight());
     FloatRect inflatedRect = Mac(object()->document()->frame())->customHighlightLineRect(highlightType, rootRect);
-    if (inflatedRect.intersects(i.r))
+    if (inflatedRect.intersects(paintInfo.rect))
         Mac(object()->document()->frame())->paintCustomHighlight(highlightType, rootRect, rootRect, false, true);
 }
 #endif
 
-void RootInlineBox::paint(RenderObject::PaintInfo& i, int tx, int ty)
+void RootInlineBox::paint(RenderObject::PaintInfo& paintInfo, int tx, int ty)
 {
-    InlineFlowBox::paint(i, tx, ty);
-    paintEllipsisBox(i, tx, ty);
+    InlineFlowBox::paint(paintInfo, tx, ty);
+    paintEllipsisBox(paintInfo, tx, ty);
 #if PLATFORM(MAC)
     RenderStyle* styleToUse = object()->style(m_firstLine);
-    if (styleToUse->highlight() != nullAtom && !i.p->paintingDisabled())
-        paintCustomHighlight(i, tx, ty, styleToUse->highlight());
+    if (styleToUse->highlight() != nullAtom && !paintInfo.context->paintingDisabled())
+        paintCustomHighlight(paintInfo, tx, ty, styleToUse->highlight());
 #endif
 }
 
-bool RootInlineBox::nodeAtPoint(RenderObject::NodeInfo& i, int x, int y, int tx, int ty)
+bool RootInlineBox::nodeAtPoint(const HitTestRequest& request, HitTestResult& result, int x, int y, int tx, int ty)
 {
     if (m_ellipsisBox && object()->style()->visibility() == VISIBLE) {
-        if (m_ellipsisBox->nodeAtPoint(i, x, y, tx, ty)) {
-            object()->setInnerNode(i);
+        if (m_ellipsisBox->nodeAtPoint(request, result, x, y, tx, ty)) {
+            object()->setInnerNode(result);
             return true;
         }
     }
-    return InlineFlowBox::nodeAtPoint(i, x, y, tx, ty);
+    return InlineFlowBox::nodeAtPoint(request, result, x, y, tx, ty);
 }
 
 void RootInlineBox::adjustPosition(int dx, int dy)
@@ -165,32 +168,32 @@ void RootInlineBox::childRemoved(InlineBox* box)
     if (box->object() == m_lineBreakObj)
         setLineBreakInfo(0, 0, 0, 0);
 
-    RootInlineBox* prev = prevRootBox();
-    if (prev && prev->lineBreakObj() == box->object()) {
+    for (RootInlineBox* prev = prevRootBox(); prev && prev->lineBreakObj() == box->object(); prev = prev->prevRootBox()) {
         prev->setLineBreakInfo(0, 0, 0, 0);
         prev->markDirty();
     }
 }
 
-GapRects RootInlineBox::fillLineSelectionGap(int selTop, int selHeight, RenderBlock* rootBlock, int blockX, int blockY, int tx, int ty, 
-                                             const RenderObject::PaintInfo* i)
+GapRects RootInlineBox::fillLineSelectionGap(int selTop, int selHeight, RenderBlock* rootBlock, int blockX, int blockY, int tx, int ty,
+                                             const RenderObject::PaintInfo* paintInfo)
 {
-    GapRects result;
     RenderObject::SelectionState lineState = selectionState();
 
     bool leftGap, rightGap;
     block()->getHorizontalSelectionGapInfo(lineState, leftGap, rightGap);
 
+    GapRects result;
+
     InlineBox* firstBox = firstSelectedBox();
     InlineBox* lastBox = lastSelectedBox();
     if (leftGap)
-        result.uniteLeft(block()->fillLeftSelectionGap(firstBox->parent()->object(), 
-                                                       firstBox->xPos(), selTop, selHeight, 
-                                                       rootBlock, blockX, blockY, tx, ty, i));
+        result.uniteLeft(block()->fillLeftSelectionGap(firstBox->parent()->object(),
+                                                       firstBox->xPos(), selTop, selHeight,
+                                                       rootBlock, blockX, blockY, tx, ty, paintInfo));
     if (rightGap)
-        result.uniteRight(block()->fillRightSelectionGap(lastBox->parent()->object(), 
-                                                         lastBox->xPos() + lastBox->width(), selTop, selHeight, 
-                                                         rootBlock, blockX, blockY, tx, ty, i));
+        result.uniteRight(block()->fillRightSelectionGap(lastBox->parent()->object(),
+                                                         lastBox->xPos() + lastBox->width(), selTop, selHeight,
+                                                         rootBlock, blockX, blockY, tx, ty, paintInfo));
 
     if (firstBox && firstBox != lastBox) {
         // Now fill in any gaps on the line that occurred between two selected elements.
@@ -199,14 +202,14 @@ GapRects RootInlineBox::fillLineSelectionGap(int selTop, int selHeight, RenderBl
             if (box->selectionState() != RenderObject::SelectionNone) {
                 result.uniteCenter(block()->fillHorizontalSelectionGap(box->parent()->object(),
                                                                        lastX + tx, selTop + ty,
-                                                                       box->xPos() - lastX, selHeight, i));
+                                                                       box->xPos() - lastX, selHeight, paintInfo));
                 lastX = box->xPos() + box->width();
             }
             if (box == lastBox)
                 break;
         }
     }
-      
+
     return result;
 }
 
@@ -233,23 +236,27 @@ RenderObject::SelectionState RootInlineBox::selectionState()
         if (state == RenderObject::SelectionBoth)
             break;
     }
-    
+
     return state;
 }
 
 InlineBox* RootInlineBox::firstSelectedBox()
 {
-    for (InlineBox* box = firstLeafChild(); box; box = box->nextLeafChild())
+    for (InlineBox* box = firstLeafChild(); box; box = box->nextLeafChild()) {
         if (box->selectionState() != RenderObject::SelectionNone)
             return box;
+    }
+
     return 0;
 }
 
 InlineBox* RootInlineBox::lastSelectedBox()
 {
-    for (InlineBox* box = lastLeafChild(); box; box = box->prevLeafChild())
+    for (InlineBox* box = lastLeafChild(); box; box = box->prevLeafChild()) {
         if (box->selectionState() != RenderObject::SelectionNone)
             return box;
+    }
+
     return 0;
 }
 
@@ -257,7 +264,7 @@ int RootInlineBox::selectionTop()
 {
     if (!prevRootBox())
         return m_selectionTop;
-    
+
     int prevBottom = prevRootBox()->selectionBottom();
     if (prevBottom < m_selectionTop && block()->containsFloats()) {
         // This line has actually been moved further down, probably from a large line-height, but possibly because the
@@ -270,7 +277,7 @@ int RootInlineBox::selectionTop()
         if (prevLeft > newLeft || prevRight < newRight)
             return m_selectionTop;
     }
-    
+
     return prevBottom;
 }
 
@@ -279,28 +286,28 @@ RenderBlock* RootInlineBox::block() const
     return static_cast<RenderBlock*>(m_object);
 }
 
-InlineBox* RootInlineBox::closestLeafChildForXPos(int _x, int _tx)
+InlineBox* RootInlineBox::closestLeafChildForXPos(int x, int tx)
 {
-    InlineBox *firstLeaf = firstLeafChildAfterBox();
-    InlineBox *lastLeaf = lastLeafChildBeforeBox();
+    InlineBox* firstLeaf = firstLeafChildAfterBox();
+    InlineBox* lastLeaf = lastLeafChildBeforeBox();
     if (firstLeaf == lastLeaf)
         return firstLeaf;
-    
+
     // Avoid returning a list marker when possible.
-    if (_x <= _tx + firstLeaf->m_x && !firstLeaf->object()->isListMarker())
+    if (x <= tx + firstLeaf->m_x && !firstLeaf->object()->isListMarker())
         // The x coordinate is less or equal to left edge of the firstLeaf.
         // Return it.
         return firstLeaf;
-    
-    if (_x >= _tx + lastLeaf->m_x + lastLeaf->m_width && !lastLeaf->object()->isListMarker())
+
+    if (x >= tx + lastLeaf->m_x + lastLeaf->m_width && !lastLeaf->object()->isListMarker())
         // The x coordinate is greater or equal to right edge of the lastLeaf.
         // Return it.
         return lastLeaf;
 
-    for (InlineBox *leaf = firstLeaf; leaf && leaf != lastLeaf; leaf = leaf->nextLeafChild()) {
+    for (InlineBox* leaf = firstLeaf; leaf && leaf != lastLeaf; leaf = leaf->nextLeafChild()) {
         if (!leaf->object()->isListMarker()) {
-            int leafX = _tx + leaf->m_x;
-            if (_x < leafX + leaf->m_width)
+            int leafX = tx + leaf->m_x;
+            if (x < leafX + leaf->m_width)
                 // The x coordinate is less than the right edge of the box.
                 // Return it.
                 return leaf;
@@ -319,4 +326,4 @@ void RootInlineBox::setLineBreakInfo(RenderObject* obj, unsigned breakPos, BidiS
         m_lineBreakBidiStatus = *status;
 }
 
-}
+} // namespace WebCore

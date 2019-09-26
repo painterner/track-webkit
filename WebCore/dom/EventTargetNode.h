@@ -26,21 +26,24 @@
 #ifndef DOM_EventTargetNodeImpl_h
 #define DOM_EventTargetNodeImpl_h
 
+#include "EventTarget.h"
 #include "Node.h"
 
 namespace WebCore {
 
 template <typename T> class DeprecatedValueList;
 
-class EventTargetNode : public Node {
+class EventTargetNode : public Node, public EventTarget {
 public:
     EventTargetNode(Document*);
     virtual ~EventTargetNode();
 
     virtual bool isEventTargetNode() const { return true; }
+    virtual Node* toNode() { return this; }
 
-    void addEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture);
-    void removeEventListener(const AtomicString& eventType, EventListener*, bool useCapture);
+    virtual void addEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture);
+    virtual void removeEventListener(const AtomicString& eventType, EventListener*, bool useCapture);
+    virtual bool dispatchEvent(PassRefPtr<Event>, ExceptionCode&, bool tempEvent = false);
     void removeAllEventListeners();
 
     void setHTMLEventListener(const AtomicString& eventType, PassRefPtr<EventListener>);
@@ -49,10 +52,9 @@ public:
     EventListener *getHTMLEventListener(const AtomicString& eventType);
 
     bool dispatchGenericEvent(PassRefPtr<Event>, ExceptionCode&, bool tempEvent = false);
-    bool dispatchEvent(PassRefPtr<Event>, ExceptionCode&, bool tempEvent = false);
     bool dispatchSubtreeModifiedEvent(bool childrenChanged = true);
     void dispatchWindowEvent(const AtomicString& eventType, bool canBubble, bool cancelable);
-    bool dispatchUIEvent(const AtomicString& eventType, int detail = 0);
+    bool dispatchUIEvent(const AtomicString& eventType, int detail = 0, PassRefPtr<Event> underlyingEvent = 0);
     bool dispatchKeyEvent(const PlatformKeyboardEvent&);
     void dispatchWheelEvent(PlatformWheelEvent&);
     bool dispatchMouseEvent(const PlatformMouseEvent&, const AtomicString& eventType,
@@ -60,8 +62,9 @@ public:
     bool dispatchMouseEvent(const AtomicString& eventType, int button, int clickCount,
         int pageX, int pageY, int screenX, int screenY,
         bool ctrlKey, bool altKey, bool shiftKey, bool metaKey,
-        bool isSimulated = false, Node* relatedTarget = 0);
-    bool dispatchSimulatedMouseEvent(const AtomicString& eventType);
+        bool isSimulated = false, Node* relatedTarget = 0, PassRefPtr<Event> underlyingEvent = 0);
+    void dispatchSimulatedMouseEvent(const AtomicString& eventType, PassRefPtr<Event> underlyingEvent = 0);
+    void dispatchSimulatedClick(PassRefPtr<Event> underlyingEvent, bool sendMouseEvents = false, bool showPressedLook = true);
 
     void handleLocalEvents(Event*, bool useCapture);
 
@@ -91,9 +94,16 @@ public:
     virtual void dump(TextStream*, DeprecatedString indent = "") const;
 #endif
 
+    using Node::ref;
+    using Node::deref;
+
 protected:
     typedef DeprecatedValueList<RefPtr<RegisteredEventListener> > RegisteredEventListenerList;
     RegisteredEventListenerList* m_regdListeners;
+
+private:
+    virtual void refEventTarget() { ref(); }
+    virtual void derefEventTarget() { deref(); }
 };
 
 inline EventTargetNode* EventTargetNodeCast(Node* n) 

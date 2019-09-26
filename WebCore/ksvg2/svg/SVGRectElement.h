@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <wildfox@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,22 +20,22 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGRectElementImpl_H
-#define KSVG_SVGRectElementImpl_H
+#ifndef SVGRectElement_H
+#define SVGRectElement_H
+
 #ifdef SVG_SUPPORT
 
-#include "SVGTests.h"
+#include "SVGExternalResourcesRequired.h"
 #include "SVGLangSpace.h"
 #include "SVGStyledTransformableElement.h"
-#include "SVGExternalResourcesRequired.h"
+#include "SVGTests.h"
 
 namespace WebCore
 {
-    class SVGAnimatedLength;
     class SVGRectElement : public SVGStyledTransformableElement,
-                               public SVGTests,
-                               public SVGLangSpace,
-                               public SVGExternalResourcesRequired
+                           public SVGTests,
+                           public SVGLangSpace,
+                           public SVGExternalResourcesRequired
     {
     public:
         SVGRectElement(const QualifiedName&, Document*);
@@ -44,29 +44,25 @@ namespace WebCore
         virtual bool isValid() const { return SVGTests::isValid(); }
 
         // 'SVGRectElement' functions
-        SVGAnimatedLength *x() const;
-        SVGAnimatedLength *y() const;
+        virtual void parseMappedAttribute(MappedAttribute* attr);
+        virtual void notifyAttributeChange() const;
 
-        SVGAnimatedLength *width() const;
-        SVGAnimatedLength *height() const;
+        virtual bool rendererIsNeeded(RenderStyle* style) { return StyledElement::rendererIsNeeded(style); }
+        virtual Path toPathData() const;
 
-        SVGAnimatedLength *rx() const;
-        SVGAnimatedLength *ry() const;    
-
-        virtual void parseMappedAttribute(MappedAttribute *attr);
-
-        virtual bool rendererIsNeeded(RenderStyle *style) { return StyledElement::rendererIsNeeded(style); }
-        virtual KCanvasPath* toPathData() const;
-
-        virtual const SVGStyledElement *pushAttributeContext(const SVGStyledElement *context);
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
+        virtual bool hasRelativeValues() const;
 
     private:
-        mutable RefPtr<SVGAnimatedLength> m_x;
-        mutable RefPtr<SVGAnimatedLength> m_y;
-        mutable RefPtr<SVGAnimatedLength> m_width;
-        mutable RefPtr<SVGAnimatedLength> m_height;
-        mutable RefPtr<SVGAnimatedLength> m_rx;
-        mutable RefPtr<SVGAnimatedLength> m_ry;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired)
+
+        ANIMATED_PROPERTY_DECLARATIONS(SVGRectElement, SVGLength, SVGLength, X, x)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGRectElement, SVGLength, SVGLength, Y, y)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGRectElement, SVGLength, SVGLength, Width, width)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGRectElement, SVGLength, SVGLength, Height, height)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGRectElement, SVGLength, SVGLength, Rx, rx)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGRectElement, SVGLength, SVGLength, Ry, ry)
     };
 
 } // namespace WebCore

@@ -40,17 +40,17 @@ class ScrollView::ScrollViewPrivate {
 public:
     ScrollViewPrivate()
         : hasStaticBackground(false)
-        , suppressScrollBars(false)
-        , vScrollBarMode(ScrollBarAuto)
-        , hScrollBarMode(ScrollBarAuto)
+        , suppressScrollbars(false)
+        , vScrollbarMode(ScrollbarAuto)
+        , hScrollbarMode(ScrollbarAuto)
     {
     }
     IntSize scrollOffset;
     IntSize contentsSize;
     bool hasStaticBackground;
-    bool suppressScrollBars;
-    ScrollBarMode vScrollBarMode;
-    ScrollBarMode hScrollBarMode;
+    bool suppressScrollbars;
+    ScrollbarMode vScrollbarMode;
+    ScrollbarMode hScrollbarMode;
 };
 
 ScrollView::ScrollView()
@@ -70,34 +70,34 @@ void ScrollView::updateContents(const IntRect& updateRect, bool now)
 
     RECT dirtyRect = RECT(adjustedDirtyRect);
 #if PAINT_FLASHING_DEBUG
-    HDC dc = GetDC(windowHandle());
+    HDC dc = GetDC(containingWindow());
     FillRect(dc, &dirtyRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
-    ReleaseDC(windowHandle(), dc);
+    ReleaseDC(containingWindow(), dc);
 #endif
 
-    InvalidateRect(windowHandle(), &dirtyRect, true);
+    InvalidateRect(containingWindow(), &dirtyRect, true);
     if (now)
-        UpdateWindow(windowHandle());
+        UpdateWindow(containingWindow());
 }
 
 int ScrollView::visibleWidth() const
 {
     RECT bounds;
-    GetClientRect(windowHandle(), &bounds);
+    GetClientRect(containingWindow(), &bounds);
     return (bounds.right - bounds.left);
 }
 
 int ScrollView::visibleHeight() const
 {
     RECT bounds;
-    GetClientRect(windowHandle(), &bounds);
+    GetClientRect(containingWindow(), &bounds);
     return (bounds.bottom - bounds.top);
 }
 
 FloatRect ScrollView::visibleContentRect() const
 {
     RECT bounds;
-    GetClientRect(windowHandle(), &bounds);
+    GetClientRect(containingWindow(), &bounds);
     FloatRect contentRect = bounds;
     contentRect.move(m_data->scrollOffset);
     return contentRect;
@@ -115,7 +115,7 @@ void ScrollView::resizeContents(int w,int h)
     IntSize newSize(w,h);
     if (m_data->contentsSize != newSize) {
         m_data->contentsSize = newSize;
-        updateScrollBars();
+        updateScrollbars(m_data->scrollOffset);
     }    
 }
 
@@ -139,18 +139,14 @@ int ScrollView::contentsHeight() const
     return m_data->contentsSize.height();
 }
 
-IntPoint ScrollView::viewportToContents(const IntPoint& contentsPoint)
+IntPoint ScrollView::contentsToWindow(const IntPoint& point) const
 {
-    POINT point = contentsPoint;
-    MapWindowPoints(GetAncestor(windowHandle(), GA_ROOT), windowHandle(), &point, 1);
-    return IntPoint(point) + scrollOffset();
+    return point - scrollOffset();
 }
 
-IntPoint ScrollView::contentsToViewport(const IntPoint& viewportPoint)
+IntPoint ScrollView::windowToContents(const IntPoint& point) const
 {
-    POINT point = viewportPoint - scrollOffset();
-    MapWindowPoints(windowHandle(), GetAncestor(windowHandle(), GA_ROOT), &point, 1);
-    return point;
+    return point + scrollOffset();
 }
 
 IntSize ScrollView::scrollOffset() const
@@ -174,56 +170,56 @@ void ScrollView::scrollBy(int dx, int dy)
 
     if (newScrollOffset != scrollOffset) {
         m_data->scrollOffset = newScrollOffset;
-        updateScrollBars();
-        // ScrollBar updates can fail, so we check the final delta before scrolling
+        updateScrollbars(m_data->scrollOffset);
+        // Scrollbar updates can fail, so we check the final delta before scrolling
         IntSize scrollDelta = m_data->scrollOffset - scrollOffset;
         if (scrollDelta == IntSize())
             return;
         if (!m_data->hasStaticBackground)
             // FIXME: This could be made more efficient by passing a valid clip rect for only the document content.
-            ScrollWindowEx(windowHandle(), -scrollDelta.width(), -scrollDelta.height(), 0, 0, 0, 0, SW_INVALIDATE);
+            ScrollWindowEx(containingWindow(), -scrollDelta.width(), -scrollDelta.height(), 0, 0, 0, 0, SW_INVALIDATE);
         else
-            InvalidateRect(windowHandle(), 0, true);
+            InvalidateRect(containingWindow(), 0, true);
     }
 }
 
-WebCore::ScrollBarMode ScrollView::hScrollBarMode() const
+WebCore::ScrollbarMode ScrollView::hScrollbarMode() const
 {
-    return m_data->hScrollBarMode;
+    return m_data->hScrollbarMode;
 }
 
-WebCore::ScrollBarMode ScrollView::vScrollBarMode() const
+WebCore::ScrollbarMode ScrollView::vScrollbarMode() const
 {
-    return m_data->vScrollBarMode;
+    return m_data->vScrollbarMode;
 }
 
-void ScrollView::suppressScrollBars(bool suppressed, bool repaintOnSuppress)
+void ScrollView::suppressScrollbars(bool suppressed, bool repaintOnSuppress)
 {
-    m_data->suppressScrollBars = suppressed;
+    m_data->suppressScrollbars = suppressed;
     if (repaintOnSuppress)
-        updateScrollBars();
+        updateScrollbars(m_data->scrollOffset);
 }
 
-void ScrollView::setHScrollBarMode(ScrollBarMode newMode)
+void ScrollView::setHScrollbarMode(ScrollbarMode newMode)
 {
-    if (m_data->hScrollBarMode != newMode) {
-        m_data->hScrollBarMode = newMode;
-        updateScrollBars();
+    if (m_data->hScrollbarMode != newMode) {
+        m_data->hScrollbarMode = newMode;
+        updateScrollbars(m_data->scrollOffset);
     }
 }
 
-void ScrollView::setVScrollBarMode(ScrollBarMode newMode)
+void ScrollView::setVScrollbarMode(ScrollbarMode newMode)
 {
-    if (m_data->vScrollBarMode != newMode) {
-        m_data->vScrollBarMode = newMode;
-        updateScrollBars();
+    if (m_data->vScrollbarMode != newMode) {
+        m_data->vScrollbarMode = newMode;
+        updateScrollbars(m_data->scrollOffset);
     }
 }
 
-void ScrollView::setScrollBarsMode(ScrollBarMode newMode)
+void ScrollView::setScrollbarsMode(ScrollbarMode newMode)
 {
-    m_data->hScrollBarMode = m_data->vScrollBarMode = newMode;
-    updateScrollBars();
+    m_data->hScrollbarMode = m_data->vScrollbarMode = newMode;
+    updateScrollbars(m_data->scrollOffset);
 }
 
 void ScrollView::setStaticBackground(bool flag)
@@ -231,7 +227,7 @@ void ScrollView::setStaticBackground(bool flag)
     m_data->hasStaticBackground = flag;
 }
 
-int ScrollView::updateScrollInfo(short type, int current, int max, int pageSize)
+static int updateScrollInfo(ScrollView* view, short type, int current, int max, int pageSize)
 {
     SCROLLINFO si;
     si.cbSize = sizeof(si);
@@ -240,25 +236,25 @@ int ScrollView::updateScrollInfo(short type, int current, int max, int pageSize)
     si.nMax   = max;
     si.nPage  = pageSize;
     si.nPos   = current;
-    SetScrollInfo(windowHandle(), type, &si, TRUE);
-    GetScrollInfo(windowHandle(), type, &si);
+    SetScrollInfo(view->containingWindow(), type, &si, TRUE);
+    GetScrollInfo(view->containingWindow(), type, &si);
     return si.nPos;
 }
 
-void ScrollView::updateScrollBars()
+void ScrollView::updateScrollbars(const IntSize&)
 { 
     IntSize maxScrollPosition(contentsWidth(), contentsHeight());
     IntSize scroll = scrollOffset().shrunkTo(maxScrollPosition);
     scroll.clampNegativeToZero();
 
     m_data->scrollOffset = 
-        IntSize(updateScrollInfo(SB_HORZ, scroll.width(), contentsWidth() - 1, width()),
-                updateScrollInfo(SB_VERT, scroll.height(), contentsHeight() - 1, height()));
+        IntSize(updateScrollInfo(this, SB_HORZ, scroll.width(), contentsWidth() - 1, width()),
+                updateScrollInfo(this, SB_VERT, scroll.height(), contentsHeight() - 1, height()));
 
-    if (m_data->hScrollBarMode != ScrollBarAuto || m_data->suppressScrollBars)
-        ShowScrollBar(windowHandle(), SB_HORZ, (m_data->hScrollBarMode != ScrollBarAlwaysOff) && !m_data->suppressScrollBars);
-    if (m_data->vScrollBarMode != ScrollBarAuto || m_data->suppressScrollBars)
-        ShowScrollBar(windowHandle(), SB_VERT, (m_data->vScrollBarMode != ScrollBarAlwaysOff) && !m_data->suppressScrollBars);
+    if (m_data->hScrollbarMode != ScrollbarAuto || m_data->suppressScrollbars)
+        ShowScrollBar(containingWindow(), SB_HORZ, (m_data->hScrollbarMode != ScrollbarAlwaysOff) && !m_data->suppressScrollbars);
+    if (m_data->vScrollbarMode != ScrollbarAuto || m_data->suppressScrollbars)
+        ShowScrollBar(containingWindow(), SB_VERT, (m_data->vScrollbarMode != ScrollbarAlwaysOff) && !m_data->suppressScrollbars);
 }
 
 }

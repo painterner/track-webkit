@@ -35,12 +35,11 @@ namespace WebCore {
     class CachedResource;
     class Request;
     class DocLoader;
-    class Decoder;
+    class TextResourceDecoder;
     class CachedResourceClient;
     
-#ifndef KHTML_NO_XBL
-    class CachedXBLDocument : public CachedResource
-    {
+#ifdef XBL_SUPPORT
+    class CachedXBLDocument : public CachedResource {
     public:
         CachedXBLDocument(DocLoader*, const String& url, CachePolicy, time_t expireDate);
         virtual ~CachedXBLDocument();
@@ -48,9 +47,8 @@ namespace WebCore {
         XBL::XBLDocument* document() const { return m_document; }
         
         virtual void ref(CachedResourceClient*);
-        virtual void deref(CachedResourceClient*);
         
-        virtual void setCharset(const DeprecatedString&);
+        virtual void setEncoding(const String&);
         virtual void data(Vector<char>&, bool allDataReceived);
         virtual void error();
         
@@ -60,7 +58,7 @@ namespace WebCore {
         
     protected:
         XBL::XBLDocument* m_document;
-        RefPtr<Decoder> m_decoder;
+        RefPtr<TextResourceDecoder> m_decoder;
     };
 
 #endif

@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006, 2007 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,61 +21,79 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGPolyElement.h"
 
-#include "Attr.h"
 #include "Document.h"
-#include "SVGHelper.h"
 #include "SVGNames.h"
 #include "SVGPointList.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGPolyElement::SVGPolyElement(const QualifiedName& tagName, Document *doc)
-: SVGStyledTransformableElement(tagName, doc), SVGTests(), SVGLangSpace(), SVGExternalResourcesRequired(), SVGAnimatedPoints(), SVGPolyParser()
+SVGPolyElement::SVGPolyElement(const QualifiedName& tagName, Document* doc)
+    : SVGStyledTransformableElement(tagName, doc)
+    , SVGTests()
+    , SVGLangSpace()
+    , SVGExternalResourcesRequired()
+    , SVGAnimatedPoints()
+    , SVGPolyParser()
 {
+    m_ignoreAttributeChanges = false;
 }
 
 SVGPolyElement::~SVGPolyElement()
 {
 }
 
-SVGPointList *SVGPolyElement::points() const
+SVGPointList* SVGPolyElement::points() const
 {
-    return lazy_create<SVGPointList>(m_points, this);
+    if (!m_points)
+        m_points = new SVGPointList(this);
+
+    return m_points.get();
 }
 
-SVGPointList *SVGPolyElement::animatedPoints() const
+SVGPointList* SVGPolyElement::animatedPoints() const
 {
+    // FIXME!
     return 0;
 }
 
-void SVGPolyElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGPolyElement::parseMappedAttribute(MappedAttribute* attr)
 {
+    const AtomicString& value = attr->value();
     if (attr->name() == SVGNames::pointsAttr) {
-        points()->clear();
-        parsePoints(attr->value().deprecatedString());
+        ExceptionCode ec = 0;
+        points()->clear(ec);
+        if (!parsePoints(value) && !m_ignoreAttributeChanges)
+            document()->accessSVGExtensions()->reportError("Problem parsing points=\"" + value + "\"");
     } else {
-        if(SVGTests::parseMappedAttribute(attr)) return;
-        if(SVGLangSpace::parseMappedAttribute(attr)) return;
-        if(SVGExternalResourcesRequired::parseMappedAttribute(attr)) return;
+        if (SVGTests::parseMappedAttribute(attr))
+            return;
+        if (SVGLangSpace::parseMappedAttribute(attr))
+            return;
+        if (SVGExternalResourcesRequired::parseMappedAttribute(attr))
+            return;
         SVGStyledTransformableElement::parseMappedAttribute(attr);
     }
 }
 
 void SVGPolyElement::svgPolyTo(double x1, double y1, int) const
 {
-    points()->appendItem(new SVGPoint(x1, y1, this));
+    ExceptionCode ec = 0;
+    points()->appendItem(FloatPoint(x1, y1), ec);
 }
 
 void SVGPolyElement::notifyAttributeChange() const
 {
-    static bool ignoreNotifications = false;
-    if (ignoreNotifications || ownerDocument()->parsing())
+    if (m_ignoreAttributeChanges || ownerDocument()->parsing())
         return;
 
-    SVGStyledElement::notifyAttributeChange();
+    m_ignoreAttributeChanges = true;
+    rebuildRenderer();
+
+    ExceptionCode ec = 0;
 
     // Spec: Additionally, the 'points' attribute on the original element
     // accessed via the XML DOM (e.g., using the getAttribute() method call)
@@ -83,20 +101,21 @@ void SVGPolyElement::notifyAttributeChange() const
     String _points;
     int len = points()->numberOfItems();
     for (int i = 0; i < len; ++i) {
-        SVGPoint *p = points()->getItem(i);
-        _points += String::sprintf("%.6lg %.6lg ", p->x(), p->y());
+        FloatPoint p = points()->getItem(i, ec);
+        _points += String::format("%.6lg %.6lg ", p.x(), p.y());
+    }
+    
+    RefPtr<Attr> attr = const_cast<SVGPolyElement*>(this)->getAttributeNode(SVGNames::pointsAttr.localName());
+    if (attr) {
+        ExceptionCode ec = 0;
+        attr->setValue(_points, ec);
     }
 
-    String p("points");
-    RefPtr<Attr> attr = const_cast<SVGPolyElement *>(this)->getAttributeNode(p.impl());
-    if (attr) {
-        ExceptionCode ec;
-        ignoreNotifications = true; // prevent recursion.
-        attr->setValue(_points, ec);
-        ignoreNotifications = false;
-    }
+    m_ignoreAttributeChanges = false;
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

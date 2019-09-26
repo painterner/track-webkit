@@ -24,21 +24,22 @@
 #ifndef RENDER_POPUPMENU_GDK_H
 #define RENDER_POPUPMENU_GDK_H
 
-#include "RenderPopupMenu.h"
+#include "PopupMenu.h"
 
 namespace WebCore {
 
 class HTMLOptionElement;
 class HTMLOptGroupElement;
 
-class RenderPopupMenuGdk : public RenderPopupMenu {
+class PopupMenuGdk : public PopupMenu {
 public:
-    RenderPopupMenuGdk(Node*);
-    ~RenderPopupMenuGdk();
+    PopupMenuGdk(Node*,  RenderMenuList*);
+    ~PopupMenuGdk();
 
     virtual void clear();
     virtual void populate();
     virtual void showPopup(const IntRect&, FrameView*, int index);
+    virtual void hidePopup();
     
 protected:
     virtual void addSeparator();

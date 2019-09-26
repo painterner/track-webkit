@@ -21,12 +21,15 @@
  * the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+
 #include "config.h"
 #include "HTMLBaseElement.h"
 
 #include "Document.h"
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "HTMLNames.h"
+#include "KURL.h"
 #include "csshelper.h"
 
 namespace WebCore {
@@ -76,10 +79,10 @@ void HTMLBaseElement::process()
         return;
 
     if (!m_href.isEmpty() && document()->frame())
-        document()->setBaseURL(KURL(document()->frame()->url(), m_href.deprecatedString()).url());
+        document()->setBaseURL(KURL(document()->frame()->loader()->url(), m_href.deprecatedString()).url());
 
     if (!m_target.isEmpty())
-        document()->setBaseTarget(m_target.deprecatedString());
+        document()->setBaseTarget(m_target);
 
     // ### should changing a document's base URL dynamically automatically update all images, stylesheets etc?
 }

@@ -32,23 +32,21 @@
 #include "TextEncoding.h"
 #include <wtf/Vector.h>
 
-namespace WebCore
-{
-    class DocLoader;
+namespace WebCore {
 
-    class CachedCSSStyleSheet : public CachedResource
-    {
+    class DocLoader;
+    class TextResourceDecoder;
+
+    class CachedCSSStyleSheet : public CachedResource {
     public:
-        CachedCSSStyleSheet(DocLoader*, const String& URL, CachePolicy, time_t expireDate, const DeprecatedString& charset);
-        CachedCSSStyleSheet(const String& URL, const DeprecatedString& stylesheetData);
+        CachedCSSStyleSheet(DocLoader*, const String& URL, CachePolicy, time_t expireDate, const String& charset);
         virtual ~CachedCSSStyleSheet();
 
         const String& sheet() const { return m_sheet; }
 
         virtual void ref(CachedResourceClient*);
-        virtual void deref(CachedResourceClient*);
-
-        virtual void setCharset(const DeprecatedString&);
+ 
+        virtual void setEncoding(const String&);
         virtual void data(Vector<char>&, bool allDataReceived);
         virtual void error();
 
@@ -58,7 +56,7 @@ namespace WebCore
 
     protected:
         String m_sheet;
-        TextEncoding m_encoding;
+        RefPtr<TextResourceDecoder> m_decoder;
     };
 
 }

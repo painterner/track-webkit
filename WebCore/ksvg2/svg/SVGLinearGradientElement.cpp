@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,175 +21,134 @@
 */
 
 #include "config.h"
-#ifdef SVG_SUPPORT
-#include "Attr.h"
 
-#include "ksvg.h"
+#ifdef SVG_SUPPORT
+#include "SVGLinearGradientElement.h"
+
+#include "LinearGradientAttributes.h"
+#include "SVGPaintServerLinearGradient.h"
+#include "SVGLength.h"
 #include "SVGNames.h"
-#include "SVGHelper.h"
-#include "SVGMatrix.h"
 #include "SVGTransform.h"
 #include "SVGTransformList.h"
-#include "SVGAnimatedString.h"
-#include "SVGAnimatedLength.h"
-#include "SVGAnimatedEnumeration.h"
-#include "SVGLinearGradientElement.h"
-#include "SVGAnimatedTransformList.h"
+#include "SVGUnitTypes.h"
 
-#include <kcanvas/KCanvasMatrix.h>
-#include <kcanvas/KCanvasResources.h>
-#include <kcanvas/device/KRenderingDevice.h>
-#include <kcanvas/device/KRenderingPaintServerGradient.h>
+namespace WebCore {
 
-using namespace WebCore;
-
-SVGLinearGradientElement::SVGLinearGradientElement(const QualifiedName& tagName, Document *doc) : SVGGradientElement(tagName, doc)
+SVGLinearGradientElement::SVGLinearGradientElement(const QualifiedName& tagName, Document* doc)
+    : SVGGradientElement(tagName, doc)
+    , m_x1(this, LengthModeWidth)
+    , m_y1(this, LengthModeHeight)
+    , m_x2(this, LengthModeWidth)
+    , m_y2(this, LengthModeHeight)
 {
+    // Spec: If the attribute is not specified, the effect is as if a value of "100%" were specified.
+    setX2BaseValue(SVGLength(this, LengthModeWidth, "100%"));
 }
 
 SVGLinearGradientElement::~SVGLinearGradientElement()
 {
 }
 
-SVGAnimatedLength *SVGLinearGradientElement::x1() const
-{
-    // Spec : If the attribute is not specified, the effect is as if a value of "0%" were specified.
-    return lazy_create<SVGAnimatedLength>(m_x1, this, LM_WIDTH, viewportElement());
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGLinearGradientElement, SVGLength, Length, length, X1, x1, SVGNames::x1Attr.localName(), m_x1)
+ANIMATED_PROPERTY_DEFINITIONS(SVGLinearGradientElement, SVGLength, Length, length, Y1, y1, SVGNames::y1Attr.localName(), m_y1)
+ANIMATED_PROPERTY_DEFINITIONS(SVGLinearGradientElement, SVGLength, Length, length, X2, x2, SVGNames::x2Attr.localName(), m_x2)
+ANIMATED_PROPERTY_DEFINITIONS(SVGLinearGradientElement, SVGLength, Length, length, Y2, y2, SVGNames::y2Attr.localName(), m_y2)
 
-SVGAnimatedLength *SVGLinearGradientElement::y1() const
-{
-    // Spec : If the attribute is not specified, the effect is as if a value of "0%" were specified.
-    return lazy_create<SVGAnimatedLength>(m_y1, this, LM_HEIGHT, viewportElement());
-}
-
-SVGAnimatedLength *SVGLinearGradientElement::x2() const
-{
-    // Spec : If the attribute is not specified, the effect is as if a value of "100%" were specified.
-    if (!m_x2) {
-        lazy_create<SVGAnimatedLength>(m_x2, this, LM_WIDTH, viewportElement());
-        m_x2->baseVal()->setValue(1.0);
-    }
-
-    return m_x2.get();
-}
-
-SVGAnimatedLength *SVGLinearGradientElement::y2() const
-{
-    // Spec : If the attribute is not specified, the effect is as if a value of "0%" were specified.
-    return lazy_create<SVGAnimatedLength>(m_y2, this, LM_HEIGHT, viewportElement());
-}
-
-void SVGLinearGradientElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGLinearGradientElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const AtomicString& value = attr->value();
     if (attr->name() == SVGNames::x1Attr)
-        x1()->baseVal()->setValueAsString(value.impl());
+        setX1BaseValue(SVGLength(this, LengthModeWidth, value));
     else if (attr->name() == SVGNames::y1Attr)
-        y1()->baseVal()->setValueAsString(value.impl());
+        setY1BaseValue(SVGLength(this, LengthModeHeight, value));
     else if (attr->name() == SVGNames::x2Attr)
-        x2()->baseVal()->setValueAsString(value.impl());
+        setX2BaseValue(SVGLength(this, LengthModeWidth, value));
     else if (attr->name() == SVGNames::y2Attr)
-        y2()->baseVal()->setValueAsString(value.impl());
+        setY2BaseValue(SVGLength(this, LengthModeHeight, value));
     else
         SVGGradientElement::parseMappedAttribute(attr);
 }
 
-void SVGLinearGradientElement::buildGradient(KRenderingPaintServerGradient *_grad) const
+void SVGLinearGradientElement::buildGradient() const
 {
-    rebuildStops(); // rebuild stops before possibly importing them from any referenced gradient.
+    LinearGradientAttributes attributes = collectGradientProperties();
 
-    bool bbox = (gradientUnits()->baseVal() == SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
-    
-    x1()->baseVal()->setBboxRelative(bbox);
-    y1()->baseVal()->setBboxRelative(bbox);
-    x2()->baseVal()->setBboxRelative(bbox);
-    y2()->baseVal()->setBboxRelative(bbox);
-    
-    float _x1 = x1()->baseVal()->value(), _y1 = y1()->baseVal()->value();
-    float _x2 = x2()->baseVal()->value(), _y2 = y2()->baseVal()->value();
+    // If we didn't find any gradient containing stop elements, ignore the request.
+    if (attributes.stops().isEmpty())
+        return;
 
-    KRenderingPaintServerLinearGradient *grad = static_cast<KRenderingPaintServerLinearGradient *>(_grad);
-    KCanvasMatrix mat;
-    if(gradientTransform()->baseVal()->numberOfItems() > 0)
-        mat = KCanvasMatrix(gradientTransform()->baseVal()->consolidate()->matrix()->matrix());
+    RefPtr<SVGPaintServerLinearGradient> linearGradient = WTF::static_pointer_cast<SVGPaintServerLinearGradient>(m_resource);
 
-    DeprecatedString ref = String(href()->baseVal()).deprecatedString();
-    KRenderingPaintServer *pserver = getPaintServerById(document(), ref.mid(1));
-    
-    if(pserver && (pserver->type() == PS_RADIAL_GRADIENT || pserver->type() == PS_LINEAR_GRADIENT))
-    {
-        bool isLinear = pserver->type() == PS_LINEAR_GRADIENT;
-        KRenderingPaintServerGradient *gradient = static_cast<KRenderingPaintServerGradient *>(pserver);
-
-        if(!hasAttribute(SVGNames::gradientUnitsAttr))
-            bbox = gradient->boundingBoxMode();
-            
-        if(isLinear)
-        {
-            KRenderingPaintServerLinearGradient *linear = static_cast<KRenderingPaintServerLinearGradient *>(pserver);
-            if(!hasAttribute(SVGNames::x1Attr))
-                _x1 = linear->gradientStart().x();
-            else if(bbox)
-                _x1 *= 100.;
-
-            if(!hasAttribute(SVGNames::y1Attr))
-                _y1 = linear->gradientStart().y();
-            else if(bbox)
-                _y1 *= 100.;
-
-            if(!hasAttribute(SVGNames::x2Attr))
-                _x2 = linear->gradientEnd().x();
-            else if(bbox)
-                _x2 *= 100.;
-
-            if(!hasAttribute(SVGNames::y2Attr))
-                _y2 = linear->gradientEnd().y();
-            else if(bbox)
-                _y2 *= 100.;
-        }
-        else if(bbox)
-        {
-            _x1 *= 100.0;
-            _y1 *= 100.0;
-            _x2 *= 100.0;
-            _y2 *= 100.0;
-        }
-
-        if(!hasAttribute(SVGNames::gradientTransformAttr))
-            mat = gradient->gradientTransform();
-
-        // Inherit color stops if empty
-        if (grad->gradientStops().isEmpty())
-            grad->setGradientStops(gradient);
-
-        if(!hasAttribute(SVGNames::spreadMethodAttr))
-            grad->setGradientSpreadMethod(gradient->spreadMethod());
-    }
-    else
-    {
-        if(spreadMethod()->baseVal() == SVG_SPREADMETHOD_REFLECT)
-            grad->setGradientSpreadMethod(SPREADMETHOD_REFLECT);
-        else if(spreadMethod()->baseVal() == SVG_SPREADMETHOD_REPEAT)
-            grad->setGradientSpreadMethod(SPREADMETHOD_REPEAT);
-        else
-            grad->setGradientSpreadMethod(SPREADMETHOD_PAD);
-
-        if(bbox)
-        {
-            _x1 *= 100.0;
-            _y1 *= 100.0;
-            _x2 *= 100.0;
-            _y2 *= 100.0;
-        }
-    }
-
-    grad->setGradientTransform(mat);
-    grad->setBoundingBoxMode(bbox);
-    grad->setGradientStart(FloatPoint(_x1, _y1));
-    grad->setGradientEnd(FloatPoint(_x2, _y2));
+    linearGradient->setGradientStops(attributes.stops());
+    linearGradient->setBoundingBoxMode(attributes.boundingBoxMode());
+    linearGradient->setGradientSpreadMethod(attributes.spreadMethod());
+    linearGradient->setGradientTransform(attributes.gradientTransform());
+    linearGradient->setGradientStart(FloatPoint(attributes.x1(), attributes.y1()));
+    linearGradient->setGradientEnd(FloatPoint(attributes.x2(), attributes.y2()));
 }
 
-// vim:ts=4:noet
+LinearGradientAttributes SVGLinearGradientElement::collectGradientProperties() const
+{
+    LinearGradientAttributes attributes;
+    HashSet<const SVGGradientElement*> processedGradients;
+
+    bool isLinear = true;
+    const SVGGradientElement* current = this;
+
+    while (current) {
+        if (!attributes.hasSpreadMethod() && current->hasAttribute(SVGNames::spreadMethodAttr))
+            attributes.setSpreadMethod((SVGGradientSpreadMethod) current->spreadMethod());
+
+        if (!attributes.hasBoundingBoxMode() && current->hasAttribute(SVGNames::gradientUnitsAttr))
+            attributes.setBoundingBoxMode(current->getAttribute(SVGNames::gradientUnitsAttr) == "objectBoundingBox");
+
+        if (!attributes.hasGradientTransform() && current->hasAttribute(SVGNames::gradientTransformAttr))
+            attributes.setGradientTransform(current->gradientTransform()->consolidate()->matrix());
+
+        if (!attributes.hasStops()) {
+            const Vector<SVGGradientStop>& stops(current->buildStops());
+            if (!stops.isEmpty())
+                attributes.setStops(stops);
+        }
+
+        if (isLinear) {
+            const SVGLinearGradientElement* linear = static_cast<const SVGLinearGradientElement*>(current);
+
+            if (!attributes.hasX1() && current->hasAttribute(SVGNames::x1Attr))
+                attributes.setX1(linear->x1().valueAsPercentage());
+
+            if (!attributes.hasY1() && current->hasAttribute(SVGNames::y1Attr))
+                attributes.setY1(linear->y1().valueAsPercentage());
+
+            if (!attributes.hasX2() && current->hasAttribute(SVGNames::x2Attr))
+                attributes.setX2(linear->x2().valueAsPercentage());
+
+            if (!attributes.hasY2() && current->hasAttribute(SVGNames::y2Attr))
+                attributes.setY2(linear->y2().valueAsPercentage());
+        }
+
+        processedGradients.add(current);
+
+        // Respect xlink:href, take attributes from referenced element
+        Node* refNode = ownerDocument()->getElementById(SVGURIReference::getTarget(current->href()));
+        if (refNode && (refNode->hasTagName(SVGNames::linearGradientTag) || refNode->hasTagName(SVGNames::radialGradientTag))) {
+            current = static_cast<const SVGGradientElement*>(const_cast<const Node*>(refNode));
+
+            // Cycle detection
+            if (processedGradients.contains(current))
+                return LinearGradientAttributes();
+
+            isLinear = current->gradientType() == LinearGradientPaintServer;
+        } else
+            current = 0;
+    }
+
+    return attributes;
+}
+
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

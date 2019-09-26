@@ -30,6 +30,7 @@
 #include "Shared.h"
 #include <wtf/Forward.h>
 #include <wtf/RefPtr.h>
+#include <wtf/Vector.h>
 
 namespace WebCore {
 
@@ -37,13 +38,10 @@ typedef int ExceptionCode;
 
 class DocumentFragment;
 class Document;
+class IntRect;
 class Node;
 class Position;
 class String;
-
-const int RangeExceptionOffset = 200;
-const int RangeExceptionMax = 299;
-enum RangeExceptionCode { BAD_BOUNDARYPOINTS_ERR = RangeExceptionOffset + 1, INVALID_NODE_TYPE_ERR };
 
 class Range : public Shared<Range>
 {
@@ -66,11 +64,14 @@ public:
     void collapse(bool toStart, ExceptionCode&);
     bool isPointInRange(Node* refNode, int offset, ExceptionCode& ec);
     short comparePoint(Node* refNode, int offset, ExceptionCode& ec);
+    enum CompareResults { NODE_BEFORE, NODE_AFTER, NODE_BEFORE_AND_AFTER, NODE_INSIDE };
+    CompareResults compareNode(Node* refNode, ExceptionCode&);
     enum CompareHow { START_TO_START, START_TO_END, END_TO_END, END_TO_START };
     short compareBoundaryPoints(CompareHow, const Range* sourceRange, ExceptionCode&) const;
     static short compareBoundaryPoints(Node* containerA, int offsetA, Node* containerB, int offsetB);
     static short compareBoundaryPoints(const Position&, const Position&);
     bool boundaryPointsValid() const;
+    bool intersectsNode(Node* refNode, ExceptionCode&);
     void deleteContents(ExceptionCode&);
     PassRefPtr<DocumentFragment> extractContents(ExceptionCode&);
     PassRefPtr<DocumentFragment> cloneContents(ExceptionCode&);
@@ -109,6 +110,9 @@ public:
     Node* pastEndNode() const;
 
     Position editingStartPosition() const;
+
+    IntRect boundingBox();
+    void addLineBoxRects(Vector<IntRect>&);
 
 #ifndef NDEBUG
     void formatForDebugger(char* buffer, unsigned length) const;

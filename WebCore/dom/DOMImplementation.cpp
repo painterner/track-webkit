@@ -5,6 +5,7 @@
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
  * Copyright (C) 2004, 2005, 2006 Apple Computer, Inc.
+ * Copyright (C) 2006 Samuel Weinig (sam@webkit.org)
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -30,7 +31,12 @@
 #include "Element.h"
 #include "ExceptionCode.h"
 #include "HTMLDocument.h"
+#include "HTMLViewSourceDocument.h"
+#include "Image.h"
+#include "ImageDocument.h"
 #include "MediaList.h"
+#include "PluginDocument.h"
+#include "PlugInInfoStore.h"
 #include "RegularExpression.h"
 #include "TextDocument.h"
 
@@ -53,7 +59,7 @@ static bool qualifiedNameIsMalformed(const String&)
 
 #ifdef SVG_SUPPORT
 
-static void addString(HashSet<StringImpl*, CaseInsensitiveHash>& set, const
+static void addString(HashSet<StringImpl*, CaseInsensitiveHash<StringImpl*> >& set, const
 char* string)
 {
     StringImpl* s = new StringImpl(string);
@@ -64,7 +70,7 @@ char* string)
 static bool isSVG10Feature(const String &feature)
 {
     static bool initialized = false;
-    static HashSet<StringImpl*, CaseInsensitiveHash> svgFeatures;
+    static HashSet<StringImpl*, CaseInsensitiveHash<StringImpl*> > svgFeatures;
     if (!initialized) {
         // TODO: features need to be uncommented when we implement them
         // 1.0 features
@@ -87,7 +93,7 @@ static bool isSVG10Feature(const String &feature)
 static bool isSVG11Feature(const String &feature)
 {
     static bool initialized = false;
-    static HashSet<StringImpl*, CaseInsensitiveHash> svgFeatures;
+    static HashSet<StringImpl*, CaseInsensitiveHash<StringImpl*> > svgFeatures;
     if (!initialized) {
         // TODO: features need to be uncommented when we implement them
         // 1.1 features
@@ -267,8 +273,10 @@ PassRefPtr<Document> DOMImplementation::createDocument(const String& namespaceUR
         doc = new Document(this, 0);
 
     // now get the interesting parts of the doctype
-    if (doctype)
-        doc->setDocType(new DocumentType(doc.get(), *doctype));
+    if (doctype) {
+        doc->setDocType(doctype);
+        doctype->setDocument(doc.get());
+    }
 
     if (!qualifiedName.isEmpty())
         doc->addChild(doc->createElementNS(namespaceURI, qualifiedName, ec));
@@ -287,14 +295,14 @@ PassRefPtr<CSSStyleSheet> DOMImplementation::createCSSStyleSheet(const String&, 
     return sheet.release();
 }
 
-PassRefPtr<Document> DOMImplementation::createDocument(FrameView* v)
+PassRefPtr<Document> DOMImplementation::createDocument(FrameView* view)
 {
-    return new Document(this, v);
+    return new Document(this, view);
 }
 
-PassRefPtr<HTMLDocument> DOMImplementation::createHTMLDocument(FrameView* v)
+PassRefPtr<HTMLDocument> DOMImplementation::createHTMLDocument(FrameView* view)
 {
-    return new HTMLDocument(this, v);
+    return new HTMLDocument(this, view);
 }
 
 DOMImplementation* DOMImplementation::instance()
@@ -326,17 +334,31 @@ bool DOMImplementation::isTextMIMEType(const String& mimeType)
 
 PassRefPtr<HTMLDocument> DOMImplementation::createHTMLDocument(const String& title)
 {
-    RefPtr<HTMLDocument> d = createHTMLDocument();
+    RefPtr<HTMLDocument> d = new HTMLDocument(this, 0);
     d->open();
     d->write("<html><head><title>" + title + "</title></head><body></body></html>");
     return d.release();
 }
 
-#ifdef SVG_SUPPORT
-PassRefPtr<SVGDocument> DOMImplementation::createSVGDocument(FrameView* v)
+PassRefPtr<Document> DOMImplementation::createDocument(const String& type, FrameView* view, bool inViewSourceMode)
 {
-    return new SVGDocument(this, v);
-}
+#ifdef SVG_SUPPORT
+    if (type == "image/svg+xml")
+        return new SVGDocument(this, view);
 #endif
+    if (isXMLMIMEType(type))
+        return new Document(this, view);
+    if (isTextMIMEType(type))
+        return new TextDocument(this, view);
+    if ((type == "application/pdf" || type == "text/pdf") && PlugInInfoStore::supportsMIMEType(type))
+        return new PluginDocument(this, view);
+    if (Image::supportsType(type))
+        return new ImageDocument(this, view);
+    if (PlugInInfoStore::supportsMIMEType(type))
+        return new PluginDocument(this, view);
+    if (inViewSourceMode)
+        return new HTMLViewSourceDocument(this, view);
+    return new HTMLDocument(this, view);
+}
 
 }

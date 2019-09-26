@@ -25,7 +25,9 @@
 #include "cssparser.h"
 
 #include "CSSBorderImageValue.h"
+#include "CSSCursorImageValue.h"
 #include "CSSImageValue.h"
+#include "CSSCharsetRule.h"
 #include "CSSImportRule.h"
 #include "CSSInheritedValue.h"
 #include "CSSInitialValue.h"
@@ -41,6 +43,7 @@
 #include "CSSQuirkPrimitiveValue.h"
 #include "CSSValueKeywords.h"
 #include "CSSValueList.h"
+#include "Counter.h"
 #include "DashboardRegion.h"
 #include "Document.h"
 #include "FontFamilyValue.h"
@@ -61,6 +64,7 @@ extern int cssyydebug;
 extern int cssyyparse(void* parser);
 
 using namespace std;
+using namespace WTF;
 
 namespace WebCore {
 
@@ -152,7 +156,7 @@ void ParseString::lower()
         ored |= characters[i];
     if (ored & ~0x7F)
         for (int i = 0; i < length; i++)
-            characters[i] = u_tolower(characters[i]);
+            characters[i] = Unicode::toLower(characters[i]);
     else
         for (int i = 0; i < length; i++)
             characters[i] = tolower(characters[i]);
@@ -240,7 +244,7 @@ bool CSSParser::parseValue(CSSMutableStyleDeclaration *declaration, int _id, con
     return ok;
 }
 
-RGBA32 CSSParser::parseColor(const String &string)
+RGBA32 CSSParser::parseColor(const String &string, bool strict)
 {
     RGBA32 color = 0;
     RefPtr<CSSMutableStyleDeclaration>dummyStyleDeclaration = new CSSMutableStyleDeclaration;
@@ -248,7 +252,7 @@ RGBA32 CSSParser::parseColor(const String &string)
     CSSParser parser(true);
 
     // First try creating a color specified by name or the "#" syntax.
-    if (!parser.parseColor(string.deprecatedString(), color)) {
+    if (!parser.parseColor(string, color, strict)) {
     
         // Now try to create a color from the rgb() or rgba() syntax.
         if (parser.parseColor(dummyStyleDeclaration.get(), string)) {
@@ -333,7 +337,7 @@ bool CSSParser::parseMediaQuery(MediaList* queries, const String& string)
 }
 
 
-void CSSParser::addProperty(int propId, CSSValue *value, bool important)
+void CSSParser::addProperty(int propId, PassRefPtr<CSSValue> value, bool important)
 {
     CSSProperty *prop = new CSSProperty(propId, value, important, m_currentShorthand, m_implicitShorthand);
     if (numParsedProperties >= maxParsedProperties) {
@@ -480,7 +484,9 @@ bool CSSParser::parseValue(int propId, bool important)
         break;
 
     case CSS_PROP_PAGE_BREAK_AFTER:     // auto | always | avoid | left | right | inherit
-    case CSS_PROP_PAGE_BREAK_BEFORE:    // auto | always | avoid | left | right | inherit
+    case CSS_PROP_PAGE_BREAK_BEFORE:
+    case CSS_PROP__WEBKIT_COLUMN_BREAK_AFTER:
+    case CSS_PROP__WEBKIT_COLUMN_BREAK_BEFORE:
         if (id == CSS_VAL_AUTO ||
              id == CSS_VAL_ALWAYS ||
              id == CSS_VAL_AVOID ||
@@ -490,8 +496,8 @@ bool CSSParser::parseValue(int propId, bool important)
         break;
 
     case CSS_PROP_PAGE_BREAK_INSIDE:    // avoid | auto | inherit
-        if (id == CSS_VAL_AUTO ||
-             id == CSS_VAL_AVOID)
+    case CSS_PROP__WEBKIT_COLUMN_BREAK_INSIDE:
+        if (id == CSS_VAL_AUTO || id == CSS_VAL_AVOID)
             valid_primitive = true;
         break;
 
@@ -608,7 +614,8 @@ bool CSSParser::parseValue(int propId, bool important)
     case CSS_PROP_BORDER_TOP_STYLE:     //// <border-style> | inherit
     case CSS_PROP_BORDER_RIGHT_STYLE:   //   Defined as:    none | hidden | dotted | dashed |
     case CSS_PROP_BORDER_BOTTOM_STYLE:  //   solid | double | groove | ridge | inset | outset
-    case CSS_PROP_BORDER_LEFT_STYLE:    ////
+    case CSS_PROP_BORDER_LEFT_STYLE:
+    case CSS_PROP__WEBKIT_COLUMN_RULE_STYLE:
         if (id >= CSS_VAL_NONE && id <= CSS_VAL_DOUBLE)
             valid_primitive = true;
         break;
@@ -680,6 +687,9 @@ bool CSSParser::parseValue(int propId, bool important)
     case CSS_PROP_TEXT_LINE_THROUGH_COLOR: // CSS3 text decoration colors
     case CSS_PROP_TEXT_UNDERLINE_COLOR:
     case CSS_PROP_TEXT_OVERLINE_COLOR:
+    case CSS_PROP__WEBKIT_COLUMN_RULE_COLOR:
+    case CSS_PROP__WEBKIT_TEXT_FILL_COLOR:
+    case CSS_PROP__WEBKIT_TEXT_STROKE_COLOR:
         if (id == CSS_VAL__WEBKIT_TEXT)
             valid_primitive = true; // Always allow this, even when strict parsing is on,
                                     // since we use this in our UA sheets.
@@ -693,26 +703,70 @@ bool CSSParser::parseValue(int propId, bool important)
         }
         break;
 
-    case CSS_PROP_CURSOR:
+    case CSS_PROP_CURSOR: {
         // [<uri>,]*  [ auto | crosshair | default | pointer | progress | move | e-resize | ne-resize |
         // nw-resize | n-resize | se-resize | sw-resize | s-resize | w-resize | ew-resize | 
         // ns-resize | nesw-resize | nwse-resize | col-resize | row-resize | text | wait | help ] ] | inherit
-        if (!strict && id == CSS_VAL_HAND) { // MSIE 5 compatibility :/
+        CSSValueList* list = 0;
+        while (value && value->unit == CSSPrimitiveValue::CSS_URI) {
+            if (!list)
+                list = new CSSValueList; 
+            String uri = parseURL(domString(value->string));
+            Vector<int> coords;
+            value = valueList->next();
+            while (value && value->unit == CSSPrimitiveValue::CSS_NUMBER) {
+                coords.append(int(value->fValue));
+                value = valueList->next();
+            }
+            IntPoint hotspot;
+            int nrcoords = coords.size();
+            if (nrcoords > 0 && nrcoords != 2) {
+                if (strict) { // only support hotspot pairs in strict mode
+                    delete list;
+                    return false;
+                }
+            } else if(strict && nrcoords == 2)
+                hotspot = IntPoint(coords[0], coords[1]);
+            if (strict || coords.size() == 0) {
+#ifdef SVG_SUPPORT
+                if (uri.startsWith("#"))
+                    list->append(new CSSPrimitiveValue(uri, CSSPrimitiveValue::CSS_URI));
+                else
+#endif
+                if (!uri.isEmpty()) {
+                    list->append(new CSSCursorImageValue(
+                                 String(KURL(styleElement->baseURL().deprecatedString(), uri.deprecatedString()).url()),
+                                 hotspot, styleElement));
+                }
+            }
+            if ((strict && !value) || (value && !(value->unit == Value::Operator && value->iValue == ','))) {
+                delete list;
+                return false;
+            }
+            value = valueList->next(); // comma
+        }
+        if (list) {
+            if (!value) { // no value after url list (MSIE 5 compatibility)
+                if (list->length() != 1) {
+                    delete list;
+                    return false;
+                }
+            } else if (!strict && value->id == CSS_VAL_HAND) // MSIE 5 compatibility :/
+                list->append(new CSSPrimitiveValue(CSS_VAL_POINTER));
+            else if (value && ((value->id >= CSS_VAL_AUTO && value->id <= CSS_VAL_ALL_SCROLL) || value->id == CSS_VAL_COPY || value->id == CSS_VAL_NONE))
+                list->append(new CSSPrimitiveValue(value->id));
+            valueList->next();
+            parsedValue = list;
+            break;
+        }
+        id = value->id;
+        if (!strict && value->id == CSS_VAL_HAND) { // MSIE 5 compatibility :/
             id = CSS_VAL_POINTER;
             valid_primitive = true;
-        } else if (id >= CSS_VAL_AUTO && id <= CSS_VAL_HELP)
+        } else if ((value->id >= CSS_VAL_AUTO && value->id <= CSS_VAL_ALL_SCROLL) || value->id == CSS_VAL_COPY || value->id == CSS_VAL_NONE)
             valid_primitive = true;
-        else if (value->unit == CSSPrimitiveValue::CSS_URI) {
-            String uri = parseURL(domString(value->string));
-            if (!uri.isEmpty()) {
-                parsedValue = new CSSImageValue(String(KURL(styleElement->baseURL().deprecatedString(), uri.deprecatedString()).url()), styleElement);
-                // FIXME: we don't support fallback cursors yet, but ignoring the remaining values
-                // will at least let compliant declarations parse.
-                addProperty(propId, parsedValue, important);
-                return true;
-            }
-        }
         break;
+    }
 
     case CSS_PROP_BACKGROUND_ATTACHMENT:
     case CSS_PROP__WEBKIT_BACKGROUND_CLIP:
@@ -751,11 +805,13 @@ bool CSSParser::parseValue(int propId, bool important)
         }
         break;
 
+    case CSS_PROP__WEBKIT_TEXT_STROKE_WIDTH:
     case CSS_PROP_OUTLINE_WIDTH:        // <border-width> | inherit
     case CSS_PROP_BORDER_TOP_WIDTH:     //// <border-width> | inherit
     case CSS_PROP_BORDER_RIGHT_WIDTH:   //   Which is defined as
     case CSS_PROP_BORDER_BOTTOM_WIDTH:  //   thin | medium | thick | <length>
-    case CSS_PROP_BORDER_LEFT_WIDTH:    ////
+    case CSS_PROP_BORDER_LEFT_WIDTH:
+    case CSS_PROP__WEBKIT_COLUMN_RULE_WIDTH:
         if (id == CSS_VAL_THIN || id == CSS_VAL_MEDIUM || id == CSS_VAL_THICK)
             valid_primitive = true;
         else
@@ -869,6 +925,16 @@ bool CSSParser::parseValue(int propId, bool important)
         else
             valid_primitive = (!id && validUnit(value, FNumber|FLength|FPercent, strict));
         break;
+    case CSS_PROP_COUNTER_INCREMENT:    // [ <identifier> <integer>? ]+ | none | inherit
+        if (id != CSS_VAL_NONE)
+            return parseCounter(propId, 1, important);
+        valid_primitive = true;
+        break;
+     case CSS_PROP_COUNTER_RESET:        // [ <identifier> <integer>? ]+ | none | inherit
+        if (id != CSS_VAL_NONE)
+            return parseCounter(propId, 0, important);
+        valid_primitive = true;
+        break;
     case CSS_PROP_FONT_FAMILY:
         // [[ <family-name> | <generic-family> ],]* [<family-name> | <generic-family>] | inherit
     {
@@ -918,7 +984,7 @@ bool CSSParser::parseValue(int propId, bool important)
         break;
 
     case CSS_PROP__WEBKIT_BINDING:
-#ifndef KHTML_NO_XBL
+#ifdef XBL_SUPPORT
         if (id == CSS_VAL_NONE)
             valid_primitive = true;
         else {
@@ -987,6 +1053,7 @@ bool CSSParser::parseValue(int propId, bool important)
         valid_primitive = validUnit(value, FLength, strict);
         break;
     case CSS_PROP_TEXT_SHADOW: // CSS2 property, dropped in CSS2.1, back in CSS3, so treat as CSS3
+    case CSS_PROP__WEBKIT_BOX_SHADOW:
         if (id == CSS_VAL_NONE)
             valid_primitive = true;
         else
@@ -1135,6 +1202,24 @@ bool CSSParser::parseValue(int propId, bool important)
         if (id == CSS_VAL_NONE || id == CSS_VAL_BOTH || id == CSS_VAL_HORIZONTAL || id == CSS_VAL_VERTICAL || id == CSS_VAL_AUTO)
             valid_primitive = true;
         break;
+    case CSS_PROP__WEBKIT_COLUMN_COUNT:
+        if (id == CSS_VAL_AUTO)
+            valid_primitive = true;
+        else
+            valid_primitive = !id && validUnit(value, FInteger | FNonNeg, false);
+        break;
+    case CSS_PROP__WEBKIT_COLUMN_GAP:         // normal | <length>
+        if (id == CSS_VAL_NORMAL)
+            valid_primitive = true;
+        else
+            valid_primitive = validUnit(value, FLength, strict);
+        break;
+    case CSS_PROP__WEBKIT_COLUMN_WIDTH:         // auto | <length>
+        if (id == CSS_VAL_AUTO)
+            valid_primitive = true;
+        else
+            valid_primitive = validUnit(value, FLength, strict);
+        break;
     // End of CSS3 properties
 
     // Apple specific properties.  These will never be standardized and are purely to
@@ -1175,7 +1260,13 @@ bool CSSParser::parseValue(int propId, bool important)
             valid_primitive = true;
         break;
 
-#if __APPLE__
+    case CSS_PROP__WEBKIT_TEXT_SECURITY:
+        // disc | circle | square | none | inherit
+        if (id == CSS_VAL_DISC || id == CSS_VAL_CIRCLE || id == CSS_VAL_SQUARE|| id == CSS_VAL_NONE)
+            valid_primitive = true;
+        break;
+
+#if PLATFORM(MAC)
     case CSS_PROP__WEBKIT_DASHBOARD_REGION:                 // <dashboard-region> | <dashboard-region> 
         if (value->unit == Value::Function || id == CSS_VAL_NONE)
             return parseDashboardRegions(propId, important);
@@ -1279,6 +1370,19 @@ bool CSSParser::parseValue(int propId, bool important)
                                     CSS_PROP_LIST_STYLE_IMAGE };
         return parseShorthand(propId, properties, 3, important);
     }
+    case CSS_PROP__WEBKIT_COLUMNS: {
+        const int properties[2] = { CSS_PROP__WEBKIT_COLUMN_WIDTH, CSS_PROP__WEBKIT_COLUMN_COUNT };
+        return parseShorthand(propId, properties, 2, important);
+    }
+    case CSS_PROP__WEBKIT_COLUMN_RULE: {
+        const int properties[3] = { CSS_PROP__WEBKIT_COLUMN_RULE_WIDTH, CSS_PROP__WEBKIT_COLUMN_RULE_STYLE,
+                                    CSS_PROP__WEBKIT_COLUMN_RULE_COLOR };
+        return parseShorthand(propId, properties, 3, important);
+    }
+    case CSS_PROP__WEBKIT_TEXT_STROKE: {
+        const int properties[2] = { CSS_PROP__WEBKIT_TEXT_STROKE_WIDTH, CSS_PROP__WEBKIT_TEXT_STROKE_COLOR };
+        return parseShorthand(propId, properties, 2, important);
+    }
     default:
 #ifdef SVG_SUPPORT
         if (parseSVGValue(propId, important))
@@ -1288,8 +1392,8 @@ bool CSSParser::parseValue(int propId, bool important)
     }
 
     if (valid_primitive) {
-        if (id != 0)
-            parsedValue = new CSSPrimitiveValue(id);
+        if (id != 0) {
+            parsedValue = new CSSPrimitiveValue(id); }
         else if (value->unit == CSSPrimitiveValue::CSS_STRING)
             parsedValue = new CSSPrimitiveValue(domString(value->string), (CSSPrimitiveValue::UnitTypes) value->unit);
         else if (value->unit >= CSSPrimitiveValue::CSS_NUMBER && value->unit <= CSSPrimitiveValue::CSS_KHZ)
@@ -1516,50 +1620,59 @@ bool CSSParser::parse4Values(int propId, const int *properties,  bool important)
 // [ <string> | attr(X) | open-quote | close-quote | no-open-quote | no-close-quote ]+ | inherit
 bool CSSParser::parseContent(int propId, bool important)
 {
-    CSSValueList* values = new CSSValueList;
+    RefPtr<CSSValueList> values = new CSSValueList;
 
     while (Value* val = valueList->current()) {
-        CSSValue* parsedValue = 0;
+        RefPtr<CSSValue> parsedValue;
         if (val->unit == CSSPrimitiveValue::CSS_URI) {
             // url
             String value = parseURL(domString(val->string));
             parsedValue = new CSSImageValue(
                 String(KURL(styleElement->baseURL().deprecatedString(), value.deprecatedString()).url()), styleElement);
         } else if (val->unit == Value::Function) {
-            // attr(X)
+            // attr(X) | counter(X [,Y]) | counters(X, Y, [,Z])
             ValueList *args = val->function->args;
             String fname = domString(val->function->name).lower();
-            if (fname != "attr(" || !args)
+            if (!args)
                 return false;
-            if (args->size() != 1)
+            if (fname == "attr(") {
+                if (args->size() != 1)
+                    return false;
+                Value* a = args->current();
+                String attrName = domString(a->string);
+                if (document()->isHTMLDocument())
+                    attrName = attrName.lower();
+                parsedValue = new CSSPrimitiveValue(attrName, CSSPrimitiveValue::CSS_ATTR);
+            } else if (fname == "counter(") {
+                parsedValue = parseCounterContent(args, false);
+                if (!parsedValue) return false;
+            } else if (fname == "counters(") {
+                parsedValue = parseCounterContent(args, true);
+                if (!parsedValue)
+                    return false;
+            } else
                 return false;
-            Value *a = args->current();
-            String attrName = domString(a->string);
-            if (document()->isHTMLDocument())
-                attrName = attrName.lower();
-            parsedValue = new CSSPrimitiveValue(attrName, CSSPrimitiveValue::CSS_ATTR);
         } else if (val->unit == CSSPrimitiveValue::CSS_IDENT) {
             // open-quote
             // close-quote
             // no-open-quote
             // no-close-quote
-            // FIXME: These are not yet implemented (http://bugzilla.opendarwin.org/show_bug.cgi?id=6503).
+            // FIXME: These are not yet implemented (http://bugs.webkit.org/show_bug.cgi?id=6503).
         } else if (val->unit == CSSPrimitiveValue::CSS_STRING) {
             parsedValue = new CSSPrimitiveValue(domString(val->string), CSSPrimitiveValue::CSS_STRING);
         }
         if (!parsedValue)
             break;
-        values->append(parsedValue);
+        values->append(parsedValue.release());
         valueList->next();
     }
 
     if (values->length()) {
-        addProperty(propId, values, important);
+        addProperty(propId, values.release(), important);
         valueList->next();
         return true;
     }
 
-    delete values;
     return false;
 }
 
@@ -1833,7 +1946,8 @@ failed:
     return false;
 }
 
-#if __APPLE__
+#if PLATFORM(MAC)
+
 #define DASHBOARD_REGION_NUM_PARAMETERS  6
 #define DASHBOARD_REGION_SHORT_NUM_PARAMETERS  2
 
@@ -1970,6 +2084,59 @@ bool CSSParser::parseDashboardRegions(int propId, bool important)
     return valid;
 }
 #endif
+
+PassRefPtr<CSSValue> CSSParser::parseCounterContent(ValueList* args, bool counters)
+{
+    unsigned numArgs = args->size();
+    if (counters && numArgs != 3 && numArgs != 5)
+        return 0;
+    if (!counters && numArgs != 1 && numArgs != 3)
+        return 0;
+    
+    Value* i = args->current();
+    RefPtr<CSSPrimitiveValue> identifier = new CSSPrimitiveValue(domString(i->string),
+        CSSPrimitiveValue::CSS_STRING);
+
+    RefPtr<CSSPrimitiveValue> separator;
+    if (!counters)
+        separator = new CSSPrimitiveValue(String(), CSSPrimitiveValue::CSS_STRING);
+    else {
+        i = args->next();
+        if (i->unit != Value::Operator || i->iValue != ',')
+            return 0;
+        
+        i = args->next();
+        if (i->unit != CSSPrimitiveValue::CSS_STRING)
+            return 0;
+        
+        separator = new CSSPrimitiveValue(domString(i->string), (CSSPrimitiveValue::UnitTypes) i->unit);
+    }
+
+    RefPtr<CSSPrimitiveValue> listStyle;
+    i = args->next();
+    if (!i) // Make the list style default decimal
+        listStyle = new CSSPrimitiveValue(CSS_VAL_DECIMAL - CSS_VAL_DISC, CSSPrimitiveValue::CSS_NUMBER);
+    else {
+        if (i->unit != Value::Operator || i->iValue != ',')
+            return 0;
+        
+        i = args->next();
+        if (i->unit != CSSPrimitiveValue::CSS_IDENT)
+            return 0;
+        
+        short ls = 0;
+        if (i->id == CSS_VAL_NONE)
+            ls = CSS_VAL_KATAKANA_IROHA - CSS_VAL_DISC + 1;
+        else if (i->id >= CSS_VAL_DISC && i->id <= CSS_VAL_KATAKANA_IROHA)
+            ls = i->id - CSS_VAL_DISC;
+        else
+            return 0;
+
+        listStyle = new CSSPrimitiveValue(ls, (CSSPrimitiveValue::UnitTypes) i->unit);
+    }
+
+    return new CSSPrimitiveValue(new Counter(identifier.release(), listStyle.release(), separator.release()));
+}
 
 bool CSSParser::parseShape(int propId, bool important)
 {
@@ -2196,36 +2363,10 @@ CSSValueList* CSSParser::parseFontFamily()
     return list;
 }
 
-
-bool CSSParser::parseColor(const DeprecatedString &name, RGBA32& rgb)
+bool CSSParser::parseColor(const String &name, RGBA32& rgb, bool strict)
 {
-    // FIXME: Should we move this stuff about hex digits without a "#" prefix
-    // into the Color class along with the "#"-prefix version?
-
-    int len = name.length();
-
-    if (!len)
-        return false;
-
-    bool ok;
-
-    if ( len == 3 || len == 6 ) {
-        int val = name.toInt(&ok, 16);
-        if ( ok ) {
-            if (len == 6) {
-                rgb =  (0xff << 24) | val;
-                return true;
-            }
-            else if ( len == 3 ) {
-                // #abc converts to #aabbcc according to the specs
-                rgb = (0xff << 24) |
-                    (val&0xf00)<<12 | (val&0xf00)<<8 |
-                    (val&0xf0)<<8 | (val&0xf0)<<4 |
-                    (val&0xf)<<4 | (val&0xf);
-                return true;
-            }
-        }
-    }
+    if (!strict && Color::parseHexColor(name, rgb))
+        return true;
 
     // try a little harder
     Color tc;
@@ -2302,61 +2443,65 @@ bool CSSParser::parseHSLParameters(Value* value, double* colorArray, bool parseA
     return true;
 }
 
-CSSPrimitiveValue *CSSParser::parseColor()
-{
-    return parseColorFromValue(valueList->current());
-}
-
-CSSPrimitiveValue *CSSParser::parseColorFromValue(Value* value)
+CSSPrimitiveValue *CSSParser::parseColor(Value* value)
 {
     RGBA32 c = Color::transparent;
+    if (!parseColorFromValue(value ? value : valueList->current(), c))
+        return 0;
+    return new CSSPrimitiveValue(c);
+}
+
+bool CSSParser::parseColorFromValue(Value* value, RGBA32& c, bool svg)
+{
     if (!strict && value->unit == CSSPrimitiveValue::CSS_NUMBER &&
         value->fValue >= 0. && value->fValue < 1000000.) {
-        DeprecatedString str;
-        str.sprintf("%06d", (int)(value->fValue+.5));
-        if (!CSSParser::parseColor(str, c))
-            return 0;
+        String str = String::format("%06d", (int)(value->fValue+.5));
+        if (!CSSParser::parseColor(str, c, strict))
+            return false;
     } else if (value->unit == CSSPrimitiveValue::CSS_RGBCOLOR ||
                 value->unit == CSSPrimitiveValue::CSS_IDENT ||
                 (!strict && value->unit == CSSPrimitiveValue::CSS_DIMENSION)) {
-        if (!CSSParser::parseColor(deprecatedString(value->string), c))
-            return 0;
+        if (!CSSParser::parseColor(domString(value->string), c, strict && value->unit == CSSPrimitiveValue::CSS_IDENT))
+            return false;
     } else if (value->unit == Value::Function &&
                 value->function->args != 0 &&
                 value->function->args->size() == 5 /* rgb + two commas */ &&
                 domString(value->function->name).lower() == "rgb(") {
         int colorValues[3];
         if (!parseColorParameters(value, colorValues, false))
-            return 0;
+            return false;
         c = makeRGB(colorValues[0], colorValues[1], colorValues[2]);
-    } else if (value->unit == Value::Function &&
+    } else if (!svg) {
+        if (value->unit == Value::Function &&
                 value->function->args != 0 &&
                 value->function->args->size() == 7 /* rgba + three commas */ &&
                 domString(value->function->name).lower() == "rgba(") {
-        int colorValues[4];
-        if (!parseColorParameters(value, colorValues, true))
-            return 0;
-        c = makeRGBA(colorValues[0], colorValues[1], colorValues[2], colorValues[3]);
-    } else if (value->unit == Value::Function &&
-                value->function->args != 0 &&
-                value->function->args->size() == 5 /* hsl + two commas */ &&
-                domString(value->function->name).lower() == "hsl(") {
-        double colorValues[3];
-        if (!parseHSLParameters(value, colorValues, false))
-            return 0;
-        c = makeRGBAFromHSLA(colorValues[0], colorValues[1], colorValues[2], 1.0);
-    } else if (value->unit == Value::Function &&
-                value->function->args != 0 &&
-                value->function->args->size() == 7 /* hsla + three commas */ &&
-                domString(value->function->name).lower() == "hsla(") {
-        double colorValues[4];
-        if (!parseHSLParameters(value, colorValues, true))
-            return 0;
-        c = makeRGBAFromHSLA(colorValues[0], colorValues[1], colorValues[2], colorValues[3]);
+            int colorValues[4];
+            if (!parseColorParameters(value, colorValues, true))
+                return false;
+            c = makeRGBA(colorValues[0], colorValues[1], colorValues[2], colorValues[3]);
+        } else if (value->unit == Value::Function &&
+                    value->function->args != 0 &&
+                    value->function->args->size() == 5 /* hsl + two commas */ &&
+                    domString(value->function->name).lower() == "hsl(") {
+            double colorValues[3];
+            if (!parseHSLParameters(value, colorValues, false))
+                return false;
+            c = makeRGBAFromHSLA(colorValues[0], colorValues[1], colorValues[2], 1.0);
+        } else if (value->unit == Value::Function &&
+                    value->function->args != 0 &&
+                    value->function->args->size() == 7 /* hsla + three commas */ &&
+                    domString(value->function->name).lower() == "hsla(") {
+            double colorValues[4];
+            if (!parseHSLParameters(value, colorValues, true))
+                return false;
+            c = makeRGBAFromHSLA(colorValues[0], colorValues[1], colorValues[2], colorValues[3]);
+        } else
+            return false;
     } else
-        return 0;
+        return false;
 
-    return new CSSPrimitiveValue(c);
+    return true;
 }
 
 // This class tracks parsing state for shadow values.  If it goes out of scope (e.g., due to an early return)
@@ -2474,7 +2619,7 @@ bool CSSParser::parseShadow(int propId, bool important)
 
             if (!parsedColor)
                 // It's not built-in. Try to parse it as a color.
-                parsedColor = parseColorFromValue(val);
+                parsedColor = parseColor(val);
 
             if (!parsedColor || !context.allowColor)
                 return context.failed(); // This value is not a color or length and is invalid or
@@ -2669,6 +2814,48 @@ bool CSSParser::parseBorderImage(int propId, bool important)
     return context.failed();
 }
 
+bool CSSParser::parseCounter(int propId, int defaultValue, bool important)
+{
+    enum { ID, VAL } state = ID;
+
+    RefPtr<CSSValueList> list = new CSSValueList;
+    RefPtr<CSSPrimitiveValue> counterName;
+    
+    while (true) {
+        Value* val = valueList->current();
+        switch (state) {
+            case ID:
+                if (val && val->unit == CSSPrimitiveValue::CSS_IDENT) {
+                    counterName = new CSSPrimitiveValue(domString(val->string), CSSPrimitiveValue::CSS_STRING);
+                    state = VAL;
+                    valueList->next();
+                    continue;
+                }
+                break;
+            case VAL: {
+                int i = defaultValue;
+                if (val && val->unit == CSSPrimitiveValue::CSS_NUMBER) {
+                    i = (int)val->fValue;
+                    valueList->next();
+                }
+
+                list->append(new CSSPrimitiveValue(new Pair(counterName.release(),
+                    new CSSPrimitiveValue(i, CSSPrimitiveValue::CSS_NUMBER))));
+                state = ID;
+                continue;
+            }
+        }
+        break;
+    }
+    
+    if (list->length() > 0) {
+        addProperty(propId, list.release(), important);
+        return true;
+    }
+
+    return false;
+}
+
 #ifdef CSS_DEBUG
 
 static inline int yyerror(const char *str)
@@ -2694,9 +2881,6 @@ int CSSParser::lex(void* yylvalWithoutType)
     int length;
     UChar* t = text(&length);
 
-#ifdef TOKEN_DEBUG
-    qDebug("CSSTokenizer: got token %d: '%s'", token, token == END_TOKEN ? "" : DeprecatedString((DeprecatedChar *)t, length).latin1());
-#endif
     switch(token) {
     case WHITESPACE:
     case SGML_CD:
@@ -2998,6 +3182,17 @@ MediaList* CSSParser::createMediaList()
     MediaList* list = new MediaList;
     m_parsedStyleObjects.append(list);
     return list;
+}
+
+CSSRule* CSSParser::createCharsetRule(const ParseString& charset)
+{
+    if (!styleElement)
+        return 0;
+    if (!styleElement->isCSSStyleSheet())
+        return 0;
+    CSSCharsetRule* rule = new CSSCharsetRule(styleElement, domString(charset));
+    m_parsedStyleObjects.append(rule);
+    return rule;
 }
 
 CSSRule* CSSParser::createImportRule(const ParseString& URL, MediaList* media)

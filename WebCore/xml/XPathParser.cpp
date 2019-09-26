@@ -37,6 +37,9 @@
 
 int xpathyyparse(void*);
 
+using namespace WTF;
+using namespace Unicode;
+
 namespace WebCore {
 namespace XPath {
 
@@ -57,22 +60,12 @@ static XMLCat charCat(UChar aChar)
 
     if (aChar == '.' || aChar == '-')
         return NameCont;
-    switch (u_charType(aChar)) {
-        case U_LOWERCASE_LETTER: //Ll
-        case U_UPPERCASE_LETTER: //Lu
-        case U_OTHER_LETTER:     //Lo
-        case U_TITLECASE_LETTER: //Lt
-        case U_LETTER_NUMBER:    //Nl
-            return NameStart;
-        case U_COMBINING_SPACING_MARK: //Mc
-        case U_ENCLOSING_MARK:         //Me
-        case U_NON_SPACING_MARK:       //Mn
-        case U_MODIFIER_LETTER:        //Lm
-        case U_DECIMAL_DIGIT_NUMBER:   //Nd
-            return NameCont;
-        default:
-            return NotPartOfName;
-    }
+    CharCategory category = Unicode::category(aChar);
+    if (category & (Letter_Uppercase | Letter_Lowercase | Letter_Other | Letter_Titlecase | Number_Letter))
+        return NameStart;
+    if (category & (Mark_NonSpacing | Mark_SpacingCombining | Mark_Enclosing | Letter_Modifier | Number_DecimalDigit))
+        return NameCont;
+    return NotPartOfName;
 }
 
 static void setUpAxisNamesMap(HashMap<String, Step::Axis>& axisNames)

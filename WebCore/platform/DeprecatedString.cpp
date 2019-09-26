@@ -26,7 +26,9 @@
 #include "config.h"
 #include "DeprecatedString.h"
 
+#include "CString.h"
 #include "Logging.h"
+#include "PlatformString.h"
 #include "RegularExpression.h"
 #include "TextEncoding.h"
 #include <kjs/dtoa.h>
@@ -34,9 +36,14 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <wtf/Platform.h>
+#include <wtf/StringExtras.h>
 
 #if PLATFORM(WIN_OS)
 #include <windows.h>
+#endif
+
+#if PLATFORM(QT)
+#include <QString>
 #endif
 
 using namespace std;
@@ -45,6 +52,12 @@ using namespace KJS;
 namespace WebCore {
 
 #define CHECK_FOR_HANDLE_LEAKS 0
+
+#if PLATFORM(SYMBIAN)
+#undef CHECK_FOR_HANDLE_LEAKS
+// symbian:fixme need page aligned allocations as Symbian platform does not have support for valloc
+#define CHECK_FOR_HANDLE_LEAKS 1
+#endif
 
 #define ALLOC_QCHAR_GOOD_SIZE(X) (X)
 #define ALLOC_CHAR_GOOD_SIZE(X) (X)
@@ -815,13 +828,6 @@ bool DeprecatedString::startsWith(const char *prefix) const
         return true;
     }
 }
-
-#if PLATFORM(WIN_OS)
-inline int strncasecmp(const char *first, const char *second, size_t maxLength)
-{
-    return _strnicmp(first, second, maxLength);
-}
-#endif
 
 bool DeprecatedString::startsWith(const char *prefix, bool caseSensitive) const
 {
@@ -1730,47 +1736,53 @@ DeprecatedString &DeprecatedString::setLatin1(const char *str, int len)
 
 DeprecatedString &DeprecatedString::setNum(short n)
 {
-    return sprintf("%d", n);
+    return format("%d", n);
 }
 
 DeprecatedString &DeprecatedString::setNum(unsigned short n)
 {
-    return sprintf("%u", n);
+    return format("%u", n);
 }
 
 DeprecatedString &DeprecatedString::setNum(int n)
 {
-    return sprintf("%d", n);
+    return format("%d", n);
 }
 
 DeprecatedString &DeprecatedString::setNum(unsigned n)
 {
-    return sprintf("%u", n);
+    return format("%u", n);
 }
 
 DeprecatedString &DeprecatedString::setNum(long n)
 {
-    return sprintf("%ld", n);
+    return format("%ld", n);
 }
 
 DeprecatedString &DeprecatedString::setNum(unsigned long n)
 {
-    return sprintf("%lu", n);
+    return format("%lu", n);
 }
 
 DeprecatedString &DeprecatedString::setNum(double n)
 {
-    return sprintf("%.6lg", n);
+    return format("%.6lg", n);
 }
 
-DeprecatedString &DeprecatedString::sprintf(const char *format, ...)
+DeprecatedString &DeprecatedString::format(const char *format, ...)
 {
+    // FIXME: this needs the same windows compat fixes as String::format
+
     va_list args;
     va_start(args, format);
     
     // Do the format once to get the length.
+#if PLATFORM(WIN_OS) 
+    int result = _vscprintf(format, args);
+#else
     char ch;
     int result = vsnprintf(&ch, 1, format, args);
+#endif
     
     // Handle the empty string case to simplify the code below.
     if (result <= 0) { // POSIX returns 0 in error; Windows returns a negative number.
@@ -1798,6 +1810,7 @@ DeprecatedString &DeprecatedString::sprintf(const char *format, ...)
     // Now do the formatting again, guaranteed to fit.
     vsprintf(const_cast<char*>(ascii()), format, args);
 
+    va_end(args);
     return *this;
 }
 
@@ -2441,6 +2454,9 @@ static HandleNode *initializeHandleNodeBlock(HandlePageNode *pageNode)
 
 #if PLATFORM(WIN_OS)
     block = (HandleNode*)VirtualAlloc(0, pageSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+#elif PLATFORM(SYMBIAN)
+    // symbian::fixme needs to do page aligned allocation as valloc is not supported.
+    block = NULL;
 #else
     block = (HandleNode*)valloc(pageSize);
 #endif
@@ -2548,17 +2564,17 @@ void freeHandle(DeprecatedStringData **_free)
 
 DeprecatedString DeprecatedString::fromUtf8(const char *chs)
 {
-    return TextEncoding(UTF8Encoding).toUnicode(chs, strlen(chs));
+    return UTF8Encoding().decode(chs, strlen(chs)).deprecatedString();
 }
 
 DeprecatedString DeprecatedString::fromUtf8(const char *chs, int len)
 {
-    return TextEncoding(UTF8Encoding).toUnicode(chs, len);
+    return UTF8Encoding().decode(chs, len).deprecatedString();
 }
 
 DeprecatedCString DeprecatedString::utf8(int& length) const
 {
-    DeprecatedCString result = TextEncoding(UTF8Encoding).fromUnicode(*this);
+    DeprecatedCString result = UTF8Encoding().encode((::UChar*)unicode(), this->length()).deprecatedCString();
     length = result.length();
     return result;
 }
@@ -2588,6 +2604,21 @@ DeprecatedString::DeprecatedString(const UString& str)
         internalData.initialize(reinterpret_cast<const DeprecatedChar*>(str.data()), str.size());
     }
 }
+
+#if PLATFORM(QT)
+DeprecatedString::DeprecatedString(const QString& str)
+{
+    if (str.isNull()) {
+        internalData.deref();
+        dataHandle = makeSharedNullHandle();
+        dataHandle[0]->ref();
+    } else {
+        dataHandle = allocateHandle();
+        *dataHandle = &internalData;
+        internalData.initialize(reinterpret_cast<const DeprecatedChar*>(str.data()), str.length());
+    }
+}
+#endif
 
 DeprecatedString::operator Identifier() const
 {

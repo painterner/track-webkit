@@ -18,12 +18,14 @@
  * the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+
 #include "config.h"
 #include "InlineBox.h"
 
 #include "InlineFlowBox.h"
-#include "RootInlineBox.h"
+#include "HitTestResult.h"
 #include "RenderArena.h"
+#include "RootInlineBox.h"
 
 using namespace std;
 
@@ -123,17 +125,17 @@ void InlineBox::adjustPosition(int dx, int dy)
         m_object->setPos(m_object->xPos() + dx, m_object->yPos() + dy);
 }
 
-void InlineBox::paint(RenderObject::PaintInfo& i, int tx, int ty)
+void InlineBox::paint(RenderObject::PaintInfo& paintInfo, int tx, int ty)
 {
-    if (!object()->shouldPaintWithinRoot(i) || (i.phase != PaintPhaseForeground && i.phase != PaintPhaseSelection))
+    if (!object()->shouldPaintWithinRoot(paintInfo) || (paintInfo.phase != PaintPhaseForeground && paintInfo.phase != PaintPhaseSelection))
         return;
 
     // Paint all phases of replaced elements atomically, as though the replaced element established its
     // own stacking context.  (See Appendix E.2, section 6.4 on inline block/table elements in the CSS2.1
     // specification.)
-    bool paintSelectionOnly = i.phase == PaintPhaseSelection;
-    RenderObject::PaintInfo info(i);
-    info.phase = paintSelectionOnly ? i.phase : PaintPhaseBlockBackground;
+    bool paintSelectionOnly = paintInfo.phase == PaintPhaseSelection;
+    RenderObject::PaintInfo info(paintInfo);
+    info.phase = paintSelectionOnly ? paintInfo.phase : PaintPhaseBlockBackground;
     object()->paint(info, tx, ty);
     if (!paintSelectionOnly) {
         info.phase = PaintPhaseChildBlockBackgrounds;
@@ -147,12 +149,12 @@ void InlineBox::paint(RenderObject::PaintInfo& i, int tx, int ty)
     }
 }
 
-bool InlineBox::nodeAtPoint(RenderObject::NodeInfo& i, int x, int y, int tx, int ty)
+bool InlineBox::nodeAtPoint(const HitTestRequest& request, HitTestResult& result, int x, int y, int tx, int ty)
 {
     // Hit test all phases of replaced elements atomically, as though the replaced element established its
     // own stacking context.  (See Appendix E.2, section 6.4 on inline block/table elements in the CSS2.1
     // specification.)
-    return object()->hitTest(i, x, y, tx, ty);
+    return object()->hitTest(request, result, x, y, tx, ty);
 }
 
 bool InlineBox::isChildOfParent()
@@ -238,7 +240,7 @@ int InlineBox::placeEllipsisBox(bool ltr, int blockEdge, int ellipsisWidth, bool
     return -1;
 }
 
-}
+} // namespace WebCore
 
 #ifndef NDEBUG
 

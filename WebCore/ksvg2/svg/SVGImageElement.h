@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <wildfox@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,28 +20,29 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGImageElementImpl_H
-#define KSVG_SVGImageElementImpl_H
+#ifndef SVGImageElement_H
+#define SVGImageElement_H
+
 #ifdef SVG_SUPPORT
 
-#include "SVGTests.h"
-#include "SVGImageLoader.h"
-#include "SVGLangSpace.h"
-#include "SVGURIReference.h"
-#include "SVGStyledTransformableElement.h"
 #include "SVGExternalResourcesRequired.h"
+#include "SVGLangSpace.h"
+#include "SVGImageLoader.h"
+#include "SVGStyledTransformableElement.h"
+#include "SVGTests.h"
+#include "SVGURIReference.h"
 
 namespace WebCore
 {
-    class SVGAnimatedPreserveAspectRatio;
-    class SVGAnimatedLength;
+    class SVGPreserveAspectRatio;
+    class SVGLength;
     class SVGDocument;
 
     class SVGImageElement : public SVGStyledTransformableElement,
-                                public SVGTests,
-                                public SVGLangSpace,
-                                public SVGExternalResourcesRequired,
-                                public SVGURIReference
+                            public SVGTests,
+                            public SVGLangSpace,
+                            public SVGExternalResourcesRequired,
+                            public SVGURIReference
     {
     public:
         SVGImageElement(const QualifiedName&, Document*);
@@ -50,29 +51,29 @@ namespace WebCore
         virtual bool isValid() const { return SVGTests::isValid(); }
 
         // 'SVGImageElement' functions
-        SVGAnimatedLength *x() const;
-        SVGAnimatedLength *y() const;
+        virtual void parseMappedAttribute(MappedAttribute*);
+        virtual void notifyAttributeChange() const;
 
-        SVGAnimatedLength *width() const;
-        SVGAnimatedLength *height() const;
-
-        SVGAnimatedPreserveAspectRatio *preserveAspectRatio() const;
-
-        virtual void parseMappedAttribute(MappedAttribute *attr);
         virtual void attach();
 
-        virtual bool rendererIsNeeded(RenderStyle *style) { return StyledElement::rendererIsNeeded(style); }
-        virtual RenderObject *createRenderer(RenderArena *arena, RenderStyle *style);
+        virtual bool rendererIsNeeded(RenderStyle* style) { return StyledElement::rendererIsNeeded(style); }
+        virtual RenderObject* createRenderer(RenderArena*, RenderStyle*);
         
     protected:
         virtual bool haveLoadedRequiredResources();
 
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
+
     private:
-        mutable RefPtr<SVGAnimatedLength> m_x;
-        mutable RefPtr<SVGAnimatedLength> m_y;
-        mutable RefPtr<SVGAnimatedLength> m_width;
-        mutable RefPtr<SVGAnimatedLength> m_height;
-        mutable RefPtr<SVGAnimatedPreserveAspectRatio> m_preserveAspectRatio;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired) 
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGURIReference, String, Href, href)
+
+        ANIMATED_PROPERTY_DECLARATIONS(SVGImageElement, SVGLength, SVGLength, X, x)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGImageElement, SVGLength, SVGLength, Y, y)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGImageElement, SVGLength, SVGLength, Width, width)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGImageElement, SVGLength, SVGLength, Height, height)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGImageElement, SVGPreserveAspectRatio*, RefPtr<SVGPreserveAspectRatio>, PreserveAspectRatio, preserveAspectRatio)
 
         SVGImageLoader m_imageLoader;
     };

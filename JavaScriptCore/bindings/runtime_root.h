@@ -27,7 +27,9 @@
 #define RUNTIME_ROOT_H_
 
 #include "interpreter.h"
+#if PLATFORM(MAC)
 #include "jni_jsobject.h"
+#endif
 #include "protect.h"
 
 namespace KJS {
@@ -37,10 +39,11 @@ namespace Bindings {
 class RootObject;
 
 typedef RootObject *(*FindRootObjectForNativeHandleFunctionPtr)(void *);
+typedef HashCountedSet<JSObject*> ReferencesSet;
 
-extern CFMutableDictionaryRef findReferenceDictionary(JSObject *imp);
-extern const RootObject *rootForImp (JSObject *imp);
-extern const RootObject *rootForInterpreter (Interpreter *interpreter);
+extern ReferencesSet* findReferenceSet(JSObject *imp);
+extern const RootObject* rootObjectForImp(JSObject*);
+extern const RootObject* rootObjectForInterpreter(Interpreter*);
 extern void addNativeReference (const RootObject *root, JSObject *imp);
 extern void removeNativeReference (JSObject *imp);
 
@@ -48,18 +51,18 @@ class RootObject
 {
 friend class JavaJSObject;
 public:
-    RootObject(const void *nativeHandle) : _nativeHandle(nativeHandle), _interpreter(0) {}
+    RootObject(const void* nativeHandle, PassRefPtr<Interpreter> interpreter)
+        : m_nativeHandle(nativeHandle)
+        , m_interpreter(interpreter)
+    {
+    }
     
-    void setRootObjectImp(JSObject* i) { _imp = i; }
-    
-    JSObject *rootObjectImp() const { return _imp.get(); }
-    
-    void setInterpreter (Interpreter *i);
-    Interpreter *interpreter() const { return _interpreter; }
+    const void *nativeHandle() const { return m_nativeHandle; }
+    Interpreter *interpreter() const { return m_interpreter.get(); }
 
-    void removeAllNativeReferences ();
+    void destroy();
 
-
+#if PLATFORM(MAC)
     // Must be called from the thread that will be used to access JavaScript.
     static void setFindRootObjectForNativeHandleFunction(FindRootObjectForNativeHandleFunctionPtr aFunc);
     static FindRootObjectForNativeHandleFunctionPtr findRootObjectForNativeHandleFunction() {
@@ -70,17 +73,17 @@ public:
     static CFRunLoopSourceRef performJavaScriptSource() { return _performJavaScriptSource; }
     
     static void dispatchToJavaScriptThread(JSObjectCallContext *context);
-    
-    const void *nativeHandle() const { return _nativeHandle; }
+#endif
 
 private:
-    const void *_nativeHandle;
-    ProtectedPtr<JSObject> _imp;
-    Interpreter *_interpreter;
+    const void* m_nativeHandle;
+    RefPtr<Interpreter> m_interpreter;
 
+#if PLATFORM(MAC)
     static FindRootObjectForNativeHandleFunctionPtr _findRootObjectForNativeHandleFunctionPtr;
     static CFRunLoopRef _runLoop;
     static CFRunLoopSourceRef _performJavaScriptSource;
+#endif
 };
 
 } // namespace Bindings

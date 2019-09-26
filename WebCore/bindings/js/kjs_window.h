@@ -21,7 +21,7 @@
 #ifndef KJS_WINDOW_H_
 #define KJS_WINDOW_H_
 
-#include "DeprecatedString.h"
+#include "PlatformString.h"
 #include "kjs_binding.h"
 #include <wtf/HashMap.h>
 
@@ -155,7 +155,7 @@ namespace KJS {
     UnprotectedListenersMap jsUnprotectedHTMLEventListeners;
     virtual const ClassInfo* classInfo() const { return &info; }
     static const ClassInfo info;
-    enum { Closed, Crypto, DefaultStatus, Status, DOMException, Frames, History_, Event_, InnerHeight,
+    enum { AToB, BToA, Closed, Crypto, DefaultStatus, Status, DOMException, Frames, History_, Event_, InnerHeight,
            InnerWidth, Length, Location_, Locationbar, Name, Navigator_, ClientInformation,
            Menubar, OffscreenBuffering, Opener, OuterHeight, OuterWidth, PageXOffset, PageYOffset,
            Parent, Personalbar, ScreenX, ScreenY, Scrollbars, Scroll, ScrollBy,
@@ -212,14 +212,14 @@ namespace KJS {
     public:
         ScheduledAction(JSValue *func, const List& args)
             : m_func(func), m_args(args) { }
-        ScheduledAction(const WebCore::DeprecatedString& code)
+        ScheduledAction(const WebCore::String& code)
             : m_code(code) { }
         void execute(Window *);
 
     private:
         ProtectedPtr<JSValue> m_func;
         List m_args;
-        WebCore::DeprecatedString m_code;
+        WebCore::String m_code;
     };
 
   class Location : public DOMObject {
@@ -229,7 +229,7 @@ namespace KJS {
     virtual void put(ExecState *exec, const Identifier &propertyName, JSValue *value, int attr = None);
     virtual JSValue *toPrimitive(ExecState *exec, JSType preferred) const;
     virtual UString toString(ExecState*) const;
-    enum { Hash, Href, Hostname, Host, Pathname, Port, Protocol, Search, EqualEqual,
+    enum { Hash, Href, Hostname, Host, Pathname, Port, Protocol, Search, 
            Replace, Reload, ToString, Assign };
     WebCore::Frame* frame() const { return m_frame; }
     virtual const ClassInfo* classInfo() const { return &info; }
@@ -247,8 +247,8 @@ namespace KJS {
     virtual JSValue *toPrimitive(ExecState *exec, JSType preferred) const;
     virtual UString toString(ExecState*) const;
     enum { AnchorNode, AnchorOffset, FocusNode, FocusOffset, BaseNode, BaseOffset, ExtentNode, ExtentOffset, 
-           IsCollapsed, _Type, EqualEqual, Collapse, CollapseToEnd, CollapseToStart, Empty, ToString, 
-           SetBaseAndExtent, SetPosition, Modify, GetRangeAt };
+           IsCollapsed, _Type, RangeCount, Collapse, CollapseToEnd, CollapseToStart, Empty, ToString, 
+           SetBaseAndExtent, SetPosition, Modify, GetRangeAt, RemoveAllRanges, AddRange };
     WebCore::Frame* frame() const { return m_frame; }
     virtual const ClassInfo* classInfo() const { return &info; }
     static const ClassInfo info;

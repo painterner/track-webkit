@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,23 +20,24 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGPathSegLinetoHorizontalImpl_H
-#define KSVG_SVGPathSegLinetoHorizontalImpl_H
+#ifndef SVGPathSegLinetoHorizontal_H
+#define SVGPathSegLinetoHorizontal_H
+
 #ifdef SVG_SUPPORT
 
-#include <ksvg2/svg/SVGPathSeg.h>
+#include "SVGPathSeg.h"
 
 namespace WebCore
 {
     class SVGPathSegLinetoHorizontalAbs : public SVGPathSeg
     {
     public:
-        SVGPathSegLinetoHorizontalAbs(const SVGStyledElement *context = 0);
+        SVGPathSegLinetoHorizontalAbs(double x);
         virtual ~SVGPathSegLinetoHorizontalAbs();
 
         virtual unsigned short pathSegType() const { return PATHSEG_LINETO_HORIZONTAL_ABS; }
         virtual String pathSegTypeAsLetter() const { return "H"; }
-        virtual String toString() const { return String::sprintf("H %.6lg", m_x); }
+        virtual String toString() const { return String::format("H %.6lg", m_x); }
 
         void setX(double);
         double x() const;
@@ -48,12 +49,12 @@ namespace WebCore
     class SVGPathSegLinetoHorizontalRel : public SVGPathSeg
     {
     public:
-        SVGPathSegLinetoHorizontalRel(const SVGStyledElement *context = 0);
+        SVGPathSegLinetoHorizontalRel(double x);
         virtual ~SVGPathSegLinetoHorizontalRel();
 
         virtual unsigned short pathSegType() const { return PATHSEG_LINETO_HORIZONTAL_REL; }
         virtual String pathSegTypeAsLetter() const { return "h"; }
-        virtual String toString() const { return String::sprintf("h %.6lg", m_x); }
+        virtual String toString() const { return String::format("h %.6lg", m_x); }
 
         void setX(double);
         double x() const;

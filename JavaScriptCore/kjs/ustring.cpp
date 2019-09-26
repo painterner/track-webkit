@@ -206,7 +206,7 @@ PassRefPtr<UString::Rep> UString::Rep::create(PassRefPtr<Rep> base, int offset, 
   r->rc = 1;
   r->_hash = 0;
   r->isIdentifier = 0;
-  r->baseString = base.release();
+  r->baseString = base.releaseRef();
   r->buf = 0;
   r->usedCapacity = 0;
   r->capacity = 0;
@@ -286,9 +286,9 @@ unsigned UString::Rep::computeHash(const char *s)
 
   uint32_t hash = PHI;
   uint32_t tmp;
-  unsigned l = strlen(s);
+  size_t l = strlen(s);
   
-  int rem = l & 1;
+  size_t rem = l & 1;
   l >>= 1;
 
   // Main loop
@@ -374,29 +374,21 @@ void UString::expandPreCapacity(int requiredPreCap)
   }
 }
 
-
-UString::UString(char c)
-{
-    UChar *d = static_cast<UChar *>(fastMalloc(sizeof(UChar)));
-    d[0] = c;
-    m_rep = Rep::create(d, 1);
-}
-
 UString::UString(const char *c)
 {
   if (!c) {
     m_rep = &Rep::null;
     return;
   }
-  int length = strlen(c);
+  size_t length = strlen(c);
   if (length == 0) {
     m_rep = &Rep::empty;
     return;
   }
   UChar *d = static_cast<UChar *>(fastMalloc(sizeof(UChar) * length));
-  for (int i = 0; i < length; i++)
+  for (size_t i = 0; i < length; i++)
     d[i].uc = c[i];
-  m_rep = Rep::create(d, length);
+  m_rep = Rep::create(d, static_cast<int>(length));
 }
 
 UString::UString(const UChar *c, int length)
@@ -495,7 +487,7 @@ UString UString::from(int i)
     }
   }
   
-  return UString(p, end - p);
+  return UString(p, static_cast<int>(end - p));
 }
 
 UString UString::from(unsigned int u)
@@ -513,7 +505,7 @@ UString UString::from(unsigned int u)
     }
   }
   
-  return UString(p, end - p);
+  return UString(p, static_cast<int>(end - p));
 }
 
 UString UString::from(long l)
@@ -543,7 +535,7 @@ UString UString::from(long l)
     }
   }
   
-  return UString(p, end - p);
+  return UString(p, static_cast<int>(end - p));
 }
 
 UString UString::from(double d)
@@ -557,7 +549,7 @@ UString UString::from(double d)
   int sign;
   
   char *result = kjs_dtoa(d, 0, 0, &decimalPoint, &sign, NULL);
-  int length = strlen(result);
+  int length = static_cast<int>(strlen(result));
   
   int i = 0;
   if (sign) {
@@ -600,16 +592,13 @@ UString UString::from(double d)
     // decimalPoint can't be more than 3 digits decimal given the
     // nature of float representation
     int exponential = decimalPoint - 1;
-    if (exponential < 0) {
-      exponential = exponential * -1;
-    }
-    if (exponential >= 100) {
-      buf[i++] = '0' + exponential / 100;
-    }
-    if (exponential >= 10) {
-      buf[i++] = '0' + (exponential % 100) / 10;
-    }
-    buf[i++] = '0' + exponential % 10;
+    if (exponential < 0)
+      exponential = -exponential;
+    if (exponential >= 100)
+      buf[i++] = static_cast<char>('0' + exponential / 100);
+    if (exponential >= 10)
+      buf[i++] = static_cast<char>('0' + (exponential % 100) / 10);
+    buf[i++] = static_cast<char>('0' + exponential % 10);
     buf[i++] = '\0';
   }
   
@@ -690,7 +679,7 @@ UString &UString::append(const char *t)
 {
   int thisSize = size();
   int thisOffset = m_rep->offset;
-  int tSize = strlen(t);
+  int tSize = static_cast<int>(strlen(t));
   int length = thisSize + tSize;
 
   // possible cases:
@@ -760,7 +749,7 @@ UString &UString::append(unsigned short c)
     UChar *d = static_cast<UChar *>(fastMalloc(sizeof(UChar) * newCapacity));
     memcpy(d, data(), length * sizeof(UChar));
     d[length] = c;
-    m_rep = Rep::create(d, length);
+    m_rep = Rep::create(d, length + 1);
     m_rep->capacity = newCapacity;
   }
 
@@ -791,7 +780,7 @@ char *UString::ascii() const
   char *q = statBuffer;
   const UChar *limit = p + length;
   while (p != limit) {
-    *q = p->uc;
+    *q = static_cast<char>(p->uc);
     ++p;
     ++q;
   }
@@ -811,7 +800,7 @@ void UString::globalClear()
 
 UString &UString::operator=(const char *c)
 {
-  int l = c ? strlen(c) : 0;
+  int l = c ? static_cast<int>(strlen(c)) : 0;
   UChar *d;
   if (m_rep->rc == 1 && l <= m_rep->capacity && !m_rep->baseString && m_rep->offset == 0 && m_rep->preCapacity == 0) {
     d = m_rep->buf;
@@ -1024,7 +1013,7 @@ int UString::find(const UString &f, int pos) const
   ++fdata;
   for (const UChar *c = data() + pos; c <= end; c++)
     if (c->uc == fchar && !memcmp(c + 1, fdata, fsizeminusone))
-      return (c-data());
+      return static_cast<int>(c - data());
 
   return -1;
 }
@@ -1036,7 +1025,7 @@ int UString::find(UChar ch, int pos) const
   const UChar *end = data() + size();
   for (const UChar *c = data() + pos; c < end; c++)
     if (*c == ch)
-      return (c-data());
+      return static_cast<int>(c - data());
 
   return -1;
 }
@@ -1057,7 +1046,7 @@ int UString::rfind(const UString &f, int pos) const
   const UChar *fdata = f.data();
   for (const UChar *c = data() + pos; c >= data(); c--) {
     if (*c == *fdata && !memcmp(c + 1, fdata + 1, fsizeminusone))
-      return (c-data());
+      return static_cast<int>(c - data());
   }
 
   return -1;
@@ -1071,7 +1060,7 @@ int UString::rfind(UChar ch, int pos) const
     pos = size() - 1;
   for (const UChar *c = data() + pos; c >= data(); c--) {
     if (*c == ch)
-      return (c-data());
+      return static_cast<int>(c-data());
   }
 
   return -1;

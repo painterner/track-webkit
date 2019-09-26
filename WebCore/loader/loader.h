@@ -27,16 +27,14 @@
 #ifndef loader_h
 #define loader_h
 
-#include "ResourceLoaderClient.h"
+#include "SubresourceLoaderClient.h"
 #include <wtf/HashMap.h>
 #include "DeprecatedPtrList.h"
 
 #ifdef __OBJC__
 @class NSData;
-@class NSURLResponse;
 #else
 class NSData;
-class NSURLResponse;
 #endif
 
 namespace WebCore {
@@ -46,8 +44,7 @@ namespace WebCore {
     class Request;
     class String;
 
-    class Loader : ResourceLoaderClient
-    {
+    class Loader : private SubresourceLoaderClient {
     public:
         Loader();
         ~Loader();
@@ -59,18 +56,16 @@ namespace WebCore {
 
         void removeBackgroundDecodingRequest(Request*);
         
-        // may return 0
-        ResourceLoader* jobForRequest(const String& URL) const;
-
     private:
-        virtual void receivedResponse(ResourceLoader*, PlatformResponse);
-        virtual void receivedData(ResourceLoader*, const char*, int);
-        virtual void receivedAllData(ResourceLoader*, PlatformData);
+        virtual void didReceiveResponse(SubresourceLoader*, const ResourceResponse&);
+        virtual void didReceiveData(SubresourceLoader*, const char*, int);
+        virtual void didFinishLoading(SubresourceLoader*);
+        virtual void didFail(SubresourceLoader*, const ResourceError&);
 
         void servePendingRequests();
 
         DeprecatedPtrList<Request> m_requestsPending;
-        typedef HashMap<ResourceLoader*, Request*> RequestMap;
+        typedef HashMap<RefPtr<SubresourceLoader>, Request*> RequestMap;
         RequestMap m_requestsLoading;
 
         DeprecatedPtrList<Request> m_requestsBackgroundDecoding;

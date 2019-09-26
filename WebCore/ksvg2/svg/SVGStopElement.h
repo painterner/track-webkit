@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -28,7 +28,6 @@
 
 namespace WebCore
 {
-    class SVGAnimatedNumber;
     class SVGStopElement : public SVGStyledElement
     {
     public:
@@ -38,11 +37,9 @@ namespace WebCore
         virtual bool isGradientStop() const { return true; }
 
         // 'SVGStoplement' functions
-        SVGAnimatedNumber *offset() const;
-
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute*);
     private:
-        mutable RefPtr<SVGAnimatedNumber> m_offset;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGStopElement, double, double, Offset, offset)
     };
 
 } // namespace WebCore

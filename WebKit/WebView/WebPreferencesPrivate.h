@@ -42,6 +42,15 @@
 
 #endif
 
+// WebKitEditableLinkBehavior needs to match the EditableLinkBehavior enum in WebCore
+typedef enum {
+    WebKitEditableLinkDefaultBehavior = 0,
+    WebKitEditableLinkAlwaysLive,
+    WebKitEditableLinkOnlyLiveWithShiftKey,
+    WebKitEditableLinkLiveWhenNotFocused,
+    WebKitEditableLinkNeverLive
+} WebKitEditableLinkBehavior;
+
 @interface WebPreferences (WebPrivate)
 
 // Preferences that might be public in a future release
@@ -60,6 +69,13 @@
 // zero means do AutoScale
 - (float)PDFScaleFactor;
 - (void)setPDFScaleFactor:(float)scale;
+
+- (WebKitEditableLinkBehavior)editableLinkBehavior;
+- (void)setEditableLinkBehavior:(WebKitEditableLinkBehavior)behavior;
+
+// For debugging purposes, can be removed when no longer needed
+- (BOOL)_usePDFPreviewView;
+- (void)_setUsePDFPreviewView:(BOOL)newValue;
 
 // Other private methods
 - (size_t)_pageCacheSize;

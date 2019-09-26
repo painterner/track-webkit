@@ -29,12 +29,17 @@
 #include <cairo-win32.h>
 #include "FontData.h"
 #include "FontFallbackList.h"
+#include "GlyphBuffer.h"
 #include "GraphicsContext.h"
 #include "IntRect.h"
 
 namespace WebCore {
 
-static void notImplemented() { puts("Not yet implemented"); _CrtDbgBreak(); }
+#define notImplemented() do { \
+    char buf[256] = {0}; \
+    _snprintf(buf, sizeof(buf), "FIXME: UNIMPLEMENTED: %s:%d\n", __FILE__, __LINE__); \
+    OutputDebugStringA(buf); \
+} while (0)
 
 void Font::drawGlyphs(GraphicsContext* graphicsContext, const FontData* font, const GlyphBuffer& glyphBuffer, 
                       int from, int numGlyphs, const FloatPoint& point) const
@@ -43,8 +48,8 @@ void Font::drawGlyphs(GraphicsContext* graphicsContext, const FontData* font, co
 
     // Set the text color to use for drawing.
     float red, green, blue, alpha;
-    Color penColor = graphicsContext->pen().color();
-    penColor.getRGBA(red, green, blue, alpha);
+    Color color = graphicsContext->strokeColor();
+    color.getRGBA(red, green, blue, alpha);
     cairo_set_source_rgba(context, red, green, blue, alpha);
     
     cairo_surface_t* surface = cairo_get_target(context);
@@ -67,7 +72,8 @@ void Font::drawGlyphs(GraphicsContext* graphicsContext, const FontData* font, co
     // Restore the original transform.
     SetWorldTransform(dc, &savedxform);
 
-    GlyphBufferGlyph* glyphs = glyphBuffer.glyphs(from);
+    // FIXME: This const_cast seems really wrong
+    GlyphBufferGlyph* glyphs = const_cast<GlyphBufferGlyph*>(glyphBuffer.glyphs(from));
 
     float offset = point.x();
 

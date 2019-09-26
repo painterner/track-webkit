@@ -27,92 +27,80 @@
 #import "Screen.h"
 
 #import "FloatRect.h"
-#import "Widget.h"
+#import "Frame.h"
+#import "FrameView.h"
+#import "Page.h"
 
 namespace WebCore {
 
-static NSScreen* screen(Widget* widget)
+int screenDepth(Widget*)
 {
-    if (widget)
-        if (NSScreen* screen = [[widget->getView() window] screen])
-            return screen;
-    return [NSScreen mainScreen];
+    return NSBitsPerPixelFromDepth([[NSScreen deepestScreen] depth]);
 }
 
-NSRect flipScreenRect(NSRect rect)
+int screenDepthPerComponent(Widget*)
 {
-    rect.origin = flipScreenPoint(rect.origin);
-    return rect;
+    return NSBitsPerSampleFromDepth([[NSScreen deepestScreen] depth]);
 }
 
-NSPoint flipScreenPoint(NSPoint point)
+bool screenIsMonochrome(Widget*)
 {
-    point.y = NSMaxY([[[NSScreen screens] objectAtIndex:0] frame]) - point.y;
-    return point;
+    NSString *colorSpace = NSColorSpaceFromDepth([[NSScreen deepestScreen] depth]);
+    return colorSpace == NSCalibratedWhiteColorSpace
+        || colorSpace == NSCalibratedBlackColorSpace
+        || colorSpace == NSDeviceWhiteColorSpace
+        || colorSpace == NSDeviceBlackColorSpace;
 }
 
-FloatRect scaleScreenRectToWidget(FloatRect rect, Widget* widget)
-{
-    NSSize scaleSize = [widget->getOuterView() convertSize:NSMakeSize(1.0, 1.0) fromView:nil];
-    float scaleX = scaleSize.width;
-    float scaleY = scaleSize.height;
-    
-    rect.setWidth(rect.width() * scaleX);
-    rect.setX(rect.x() * scaleX);
-    
-    rect.setHeight(rect.height() * scaleY);
-    rect.setY(rect.y() * scaleY);
-    
-    return rect;
-}
-
-FloatRect scaleWidgetRectToScreen(FloatRect rect, Widget* widget)
-{
-    NSSize scaleSize = [widget->getOuterView() convertSize:NSMakeSize(1.0, 1.0) toView:nil];
-    float scaleX = scaleSize.width;
-    float scaleY = scaleSize.height;
-    
-    rect.setWidth(rect.width() * scaleX);
-    rect.setX(rect.x() * scaleX);
-    
-    rect.setHeight(rect.height() * scaleY);
-    rect.setY(rect.y() * scaleY);
-    
-    return rect;
-}
-
-int screenDepth(Widget* widget)
-{
-    return NSBitsPerPixelFromDepth([screen(widget) depth]);
-}
-
-int screenDepthPerComponent(Widget* widget)
-{
-   return NSBitsPerSampleFromDepth([screen(widget) depth]);
-}
-
-bool screenIsMonochrome(Widget* widget)
-{
-    NSScreen* s = screen(widget);
-    NSDictionary* dd = [s deviceDescription];
-    NSString* colorSpaceName = [dd objectForKey:NSDeviceColorSpaceName];
-    return colorSpaceName == NSCalibratedWhiteColorSpace
-        || colorSpaceName == NSCalibratedBlackColorSpace
-        || colorSpaceName == NSDeviceWhiteColorSpace
-        || colorSpaceName == NSDeviceBlackColorSpace;
-}
-
-// These methods scale between window and WebView coordinates because JavaScript/DOM operations 
-// assume that the WebView and the window share the same coordinate system.
+// These functions scale between screen and page coordinates because JavaScript/DOM operations 
+// assume that the screen and the page share the same coordinate system.
 
 FloatRect screenRect(Widget* widget)
 {
-    return scaleScreenRectToWidget(flipScreenRect([screen(widget) frame]), widget);
+    NSWindow *window = widget ? [widget->getView() window] : nil;
+    return toUserSpace([screenForWindow(window) frame], window);
 }
 
-FloatRect usableScreenRect(Widget* widget)
+FloatRect screenAvailableRect(Widget* widget)
 {
-    return scaleScreenRectToWidget(flipScreenRect([screen(widget) visibleFrame]), widget);
+    NSWindow *window = widget ? [widget->getView() window] : nil;
+    return toUserSpace([screenForWindow(window) visibleFrame], window);
 }
 
+NSScreen *screenForWindow(NSWindow *window)
+{
+    NSScreen *screen = [window screen]; // nil if the window is off-screen
+    if (screen)
+        return screen;
+    
+    NSArray *screens = [NSScreen screens];
+    if ([screens count] > 0)
+        return [screens objectAtIndex:0]; // screen containing the menubar
+    
+    return nil;
 }
+
+FloatRect toUserSpace(const NSRect& rect, NSWindow *destination)
+{
+    FloatRect userRect = rect;
+    userRect.setY(NSMaxY([[destination screen] frame]) - (userRect.y() + userRect.height())); // flip
+    userRect.scale(1 / [destination userSpaceScaleFactor]); // scale down
+    return userRect;
+}
+
+NSRect toDeviceSpace(const FloatRect& rect, NSWindow *source)
+{
+    FloatRect deviceRect = rect;
+    deviceRect.scale([source userSpaceScaleFactor]); // scale up
+    deviceRect.setY(NSMaxY([[source screen] frame]) - (deviceRect.y() + deviceRect.height())); // flip
+    return deviceRect;
+}
+
+NSPoint flipScreenPoint(const NSPoint& screenPoint, NSScreen *screen)
+{
+    NSPoint flippedPoint = screenPoint;
+    flippedPoint.y = NSMaxY([screen frame]) - flippedPoint.y;
+    return flippedPoint;
+}
+
+} // namespace WebCore

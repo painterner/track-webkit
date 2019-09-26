@@ -30,6 +30,7 @@
 namespace WebCore {
 
 class StyleSheet;
+class CSSStyleSheet;
 
 class ProcessingInstruction : public ContainerNode, private CachedResourceClient
 {
@@ -39,8 +40,8 @@ public:
     virtual ~ProcessingInstruction();
 
     // DOM methods & attributes for Notation
-    String target() const { return m_target.get(); }
-    String data() const { return m_data.get(); }
+    String target() const { return m_target; }
+    String data() const { return m_data; }
     void setData(const String&, ExceptionCode&);
 
     virtual String nodeName() const;
@@ -52,27 +53,32 @@ public:
     virtual bool offsetInCharacters() const;
 
     // Other methods (not part of DOM)
-    String localHref() const { return m_localHref.get(); }
+    String localHref() const { return m_localHref; }
     StyleSheet* sheet() const { return m_sheet.get(); }
     bool checkStyleSheet();
-    virtual void setStyleSheet(const String& URL, const String& sheet);
-    void setStyleSheet(StyleSheet*);
+    virtual void setCSSStyleSheet(const String& URL, const String& charset, const String& sheet);
+#if XSLT_SUPPORT
+    virtual void setXSLStyleSheet(const String& URL, const String& sheet);
+#endif
+    void setCSSStyleSheet(CSSStyleSheet*);
     bool isLoading() const;
-    void sheetLoaded();
+    virtual bool sheetLoaded();
     virtual String toString() const;
 
-#ifdef KHTML_XSLT
+#ifdef XSLT_SUPPORT
     bool isXSL() const { return m_isXSL; }
 #endif
 
 private:
-    RefPtr<StringImpl> m_target;
-    RefPtr<StringImpl> m_data;
-    RefPtr<StringImpl> m_localHref;
+    void parseStyleSheet(const String& sheet);
+
+    String m_target;
+    String m_data;
+    String m_localHref;
     CachedResource* m_cachedSheet;
     RefPtr<StyleSheet> m_sheet;
     bool m_loading;
-#ifdef KHTML_XSLT
+#ifdef XSLT_SUPPORT
     bool m_isXSL;
 #endif
 };

@@ -30,6 +30,7 @@
 
 #include "HTMLNames.h"
 #include "EventNames.h"
+#include "Event.h"
 #include "Document.h"
 
 namespace WebCore {
@@ -51,17 +52,7 @@ bool HTMLLabelElement::isFocusable() const
     return false;
 }
 
-void HTMLLabelElement::parseMappedAttribute(MappedAttribute *attr)
-{
-    if (attr->name() == onfocusAttr) {
-        setHTMLEventListener(focusEvent, attr);
-    } else if (attr->name() == onblurAttr) {
-        setHTMLEventListener(blurEvent, attr);
-    } else
-        HTMLElement::parseMappedAttribute(attr);
-}
-
-Element *HTMLLabelElement::formElement()
+HTMLElement* HTMLLabelElement::formElement()
 {
     const AtomicString& formElementId = getAttribute(forAttr);
     if (formElementId.isNull()) {
@@ -78,12 +69,70 @@ Element *HTMLLabelElement::formElement()
     }
     if (formElementId.isEmpty())
         return 0;
-    return document()->getElementById(formElementId);
+        
+    // Only return HTML elements.
+    Element* elt = document()->getElementById(formElementId);
+    if (elt && elt->isHTMLElement())
+        return static_cast<HTMLElement*>(elt);
+    return 0;
+}
+
+void HTMLLabelElement::setActive(bool down, bool pause)
+{
+    if (down == active())
+        return;
+
+    // Update our status first.
+    HTMLElement::setActive(down, pause);
+
+    // Also update our corresponding control.
+    if (Element* element = formElement())
+        element->setActive(down, pause);
+}
+
+void HTMLLabelElement::setHovered(bool over)
+{
+    if (over == hovered())
+        return;
+        
+    // Update our status first.
+    HTMLElement::setHovered(over);
+
+    // Also update our corresponding control.
+    if (Element* element = formElement())
+        element->setHovered(over);
+}
+
+void HTMLLabelElement::defaultEventHandler(Event* evt)
+{
+    static bool processingClick = false;
+
+    if (evt->type() == clickEvent && !processingClick) {
+        RefPtr<HTMLElement> element = formElement();
+
+        // If we can't find a control or if the control received the click
+        // event, then there's no need for us to do anything.
+        if (!element || (evt->target() && element->contains(evt->target()->toNode())))
+            return;
+
+        processingClick = true;
+
+        // Click the corresponding control.
+        element->dispatchSimulatedClick(evt);
+
+        // If the control can be focused via the mouse, then do that too.
+        if (element->isMouseFocusable())
+            element->focus();
+
+        processingClick = false;
+    }
+    
+    HTMLElement::defaultEventHandler(evt);
 }
 
 void HTMLLabelElement::focus()
 {
-    if (Element *element = formElement())
+    if (Element* element = formElement())
         element->focus();
 }
 

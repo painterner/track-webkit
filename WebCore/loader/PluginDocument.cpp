@@ -23,14 +23,15 @@
  */
 
 #include "config.h"
-
 #include "PluginDocument.h"
 
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "Element.h"
 #include "HTMLNames.h"
 #include "RenderWidget.h"
 #include "SegmentedString.h"
+#include "Settings.h"
 #include "Text.h"
 #include "HTMLEmbedElement.h"
 #include "XMLTokenizer.h"
@@ -83,7 +84,7 @@ void PluginTokenizer::createDocumentStructure()
     
     m_embedElement->setAttribute(nameAttr, "plugin");
     m_embedElement->setSrc(m_doc->URL());
-    m_embedElement->setType(m_doc->frame()->resourceRequest().m_responseMIMEType);
+    m_embedElement->setType(m_doc->frame()->loader()->responseMIMEType());
     
     body->appendChild(embedElement, ec);    
 }
@@ -92,8 +93,12 @@ bool PluginTokenizer::writeRawData(const char* data, int len)
 {
     if (!m_embedElement) {
         createDocumentStructure();
-        m_doc->frame()->redirectDataToPlugin(static_cast<RenderWidget*>(m_embedElement->renderer())->widget());
-        finish();
+
+        if (m_doc->frame()->settings()->arePluginsEnabled()) {
+            m_doc->frame()->loader()->redirectDataToPlugin(static_cast<RenderWidget*>(m_embedElement->renderer())->widget());
+            finish();
+        }
+        
         return false;
     }
     

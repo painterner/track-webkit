@@ -28,35 +28,12 @@
 
 // This header contains the WebFrame SPI.
 
-// But it also contains a bunch of internal stuff that should be moved to WebFrameInternal.h
-
 #import <WebKit/WebFrame.h>
-#import <WebKit/WebPolicyDelegatePrivate.h>
 
-@class DOMDocument;
-@class DOMElement;
-@class DOMNode;
-@class NSMutableURLRequest;
-@class NSURLRequest;
-@class WebArchive;
-@class WebFrameBridge;
-@class WebFormState;
-@class WebFrameBridge;
-@class WebFrameView;
-@class WebHistoryItem;
-@class WebPolicyDecisionListener;
-@class WebScriptDebugger;
-@class WebView;
-
-typedef enum {
-    WebFrameStateProvisional,
-    
-    // This state indicates we are ready to commit to a page,
-    // which means the view will transition to use the new data source.
-    WebFrameStateCommittedPage,
-
-    WebFrameStateComplete
-} WebFrameState;
+// Keys for accessing the values in the page cache dictionary.
+extern NSString *WebPageCacheEntryDateKey;
+extern NSString *WebPageCacheDataSourceKey;
+extern NSString *WebPageCacheDocumentViewKey;
 
 typedef enum {
     WebFrameLoadTypeStandard,
@@ -70,95 +47,18 @@ typedef enum {
     WebFrameLoadTypeReplace
 } WebFrameLoadType;
 
-// Keys for accessing the values in the page cache dictionary.
-extern NSString *WebPageCacheEntryDateKey;
-extern NSString *WebPageCacheDataSourceKey;
-extern NSString *WebPageCacheDocumentViewKey;
-
 @interface WebFrame (WebPrivate)
-
-// Other private methods
-- (NSURLRequest *)_webDataRequestForData:(NSData *)data MIMEType:(NSString *)MIMEType textEncodingName:(NSString *)encodingName baseURL:(NSURL *)URL unreachableURL:(NSURL *)unreachableURL;
-
-- (void)_detachFromParent;
-- (void)_detachChildren;
-- (void)_closeOldDataSources;
-- (void)_commitProvisionalLoad:(NSDictionary *)pageCache;
-- (void)_checkLoadCompleteForThisFrame;
-- (void)_handledOnloadEvents;
-- (void)_checkLoadComplete;
-- (WebFrameBridge *)_bridge;
-- (void)_setLoadType:(WebFrameLoadType)loadType;
-- (WebFrameLoadType)_loadType;
-
-- (void)_checkNewWindowPolicyForRequest:(NSURLRequest *)request action:(NSDictionary *)action frameName:(NSString *)frameName formState:(WebFormState *)formState andCall:(id)target withSelector:(SEL)selector;
-
-- (void)_checkNavigationPolicyForRequest:(NSURLRequest *)request dataSource:(WebDataSource *)dataSource formState:(WebFormState *)formState andCall:(id)target withSelector:(SEL)selector;
-
-- (void)_invalidatePendingPolicyDecisionCallingDefaultAction:(BOOL)call;
-
-- (void)_goToItem:(WebHistoryItem *)item withLoadType:(WebFrameLoadType)type;
-- (void)_loadURL:(NSURL *)URL referrer:(NSString *)referrer loadType:(WebFrameLoadType)loadType target:(NSString *)target triggeringEvent:(NSEvent *)event form:(DOMElement *)form formValues:(NSDictionary *)values;
-- (void)_loadURL:(NSURL *)URL referrer:(NSString *)referrer intoChild:(WebFrame *)childFrame;
-- (void)_postWithURL:(NSURL *)URL referrer:(NSString *)referrer target:(NSString *)target data:(NSArray *)postData contentType:(NSString *)contentType triggeringEvent:(NSEvent *)event form:(DOMElement *)form formValues:(NSDictionary *)values;
-
-- (void)_loadRequest:(NSURLRequest *)request inFrameNamed:(NSString *)frameName;
-
-- (void)_clientRedirectedTo:(NSURL *)URL delay:(NSTimeInterval)seconds fireDate:(NSDate *)date lockHistory:(BOOL)lockHistory isJavaScriptFormAction:(BOOL)isJavaScriptFormAction;
-- (void)_clientRedirectCancelledOrFinished:(BOOL)cancelWithLoadInProgress;
-
-- (void)_defersCallbacksChanged;
-
-- (void)_viewWillMoveToHostWindow:(NSWindow *)hostWindow;
-- (void)_viewDidMoveToHostWindow;
-
-- (void)_reloadAllowingStaleDataWithOverrideEncoding:(NSString *)encoding;
-
-- (void)_addChild:(WebFrame *)child;
-
-- (NSDictionary *)_actionInformationForNavigationType:(WebNavigationType)navigationType event:(NSEvent *)event originalURL:(NSURL *)URL;
-
-- (WebHistoryItem *)_itemForSavingDocState;
-- (WebHistoryItem *)_itemForRestoringDocState;
-
-- (void)_saveDocumentAndScrollState;
-
-- (void)_setTitle:(NSString *)title;
-
-- (void)_handleUnimplementablePolicyWithErrorCode:(int)code forURL:(NSURL *)URL;
-- (void)_receivedMainResourceError:(NSError *)error;
-
-- (void)_loadDataSource:(WebDataSource *)dataSource withLoadType:(WebFrameLoadType)type formState:(WebFormState *)formState;
-
-+ (CFAbsoluteTime)_timeOfLastCompletedLoad;
-- (BOOL)_canCachePage;
-- (void)_purgePageCache;
-
-- (void)_opened;
-// used to decide to use loadType=Same
-- (BOOL)_shouldTreatURLAsSameAsCurrent:(NSURL *)URL;
-
-- (WebFrame *)_nextFrameWithWrap:(BOOL)wrapFlag;
-- (WebFrame *)_previousFrameWithWrap:(BOOL)wrapFlag;
-
-- (void)_setShouldCreateRenderers:(BOOL)f;
-- (BOOL)_shouldCreateRenderers;
-
-- (int)_numPendingOrLoadingRequests:(BOOL)recurse;
-
-- (NSColor *)_bodyBackgroundColor;
-
-- (void)_reloadForPluginChanges;
-
 - (BOOL)_isDescendantOfFrame:(WebFrame *)frame;
+- (void)_setShouldCreateRenderers:(BOOL)f;
+- (NSColor *)_bodyBackgroundColor;
 - (BOOL)_isFrameSet;
-
-- (void)_attachScriptDebugger;
-- (void)_detachScriptDebugger;
-
-- (void)_recursive_pauseNullEventsForAllNetscapePlugins;
+- (BOOL)_firstLayoutDone;
+- (WebFrameLoadType)_loadType;
 - (void)_recursive_resumeNullEventsForAllNetscapePlugins;
 
-- (BOOL)_firstLayoutDone;
-
+// These methods take and return NSRanges based on the root editable element as the positional base.
+// This fits with AppKit's idea of an input context. These methods are slow compared to their DOMRange equivalents.
+// You should use WebView's selectedDOMRange and setSelectedDOMRange whenever possible.
+- (NSRange)_selectedNSRange;
+- (void)_selectNSRange:(NSRange)range;
 @end

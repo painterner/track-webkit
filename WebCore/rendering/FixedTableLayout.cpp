@@ -101,11 +101,6 @@ int FixedTableLayout::calcWidthArray(int tableWidth)
     m_width.resize(nEffCols);
     m_width.fill(Length(Auto));
 
-#ifdef DEBUG_LAYOUT
-    qDebug("FixedTableLayout::calcWidthArray(%d)", tableWidth);
-    qDebug("    col elements:");
-#endif
-
     Length grpWidth;
     while (child) {
         if (child->isTableCol()) {
@@ -121,10 +116,6 @@ int FixedTableLayout::calcWidthArray(int tableWidth)
                 if (w.isFixed() && w.value() > 0)
                     effWidth = w.value();
                 
-#ifdef DEBUG_LAYOUT
-                qDebug("    col element: effCol=%d, span=%d: %d w=%d type=%d",
-                       cCol, span, effWidth,  w.value, w.type());
-#endif
                 int usedSpan = 0;
                 int i = 0;
                 while (usedSpan < span) {
@@ -135,13 +126,9 @@ int FixedTableLayout::calcWidthArray(int tableWidth)
                         m_width[nEffCols-1] = Length();
                     }
                     int eSpan = m_table->spanOfEffCol(cCol+i);
-                    if ((w.isFixed() || w.isPercent()) && w.value() > 0) {
-                        m_width[cCol+i] = Length(w.value() * eSpan, w.type());
+                    if ((w.isFixed() || w.isPercent()) && w.isPositive()) {
+                        m_width[cCol+i].setRawValue(w.type(), w.rawValue() * eSpan);
                         usedWidth += effWidth * eSpan;
-#ifdef DEBUG_LAYOUT
-                        qDebug("    setting effCol %d (span=%d) to m_width %d(type=%d)",
-                               cCol+i, eSpan, m_width[cCol+i].value, m_width[cCol+i].type());
-#endif
                     }
                     usedSpan += eSpan;
                     i++;
@@ -161,15 +148,12 @@ int FixedTableLayout::calcWidthArray(int tableWidth)
         child = next;
     }
 
-#ifdef DEBUG_LAYOUT
-    qDebug("    first row:");
-#endif
     // iterate over the first row in case some are unspecified.
-    RenderTableSection *section = m_table->head;
+    RenderTableSection* section = m_table->header();
     if (!section)
-        section = m_table->firstBody;
+        section = m_table->firstBody();
     if (!section)
-        section = m_table->foot;
+        section = m_table->footer();
     if (section) {
         cCol = 0;
         // FIXME: Technically the first row could be in an arbitrary section (e.g., an nth section
@@ -183,12 +167,10 @@ int FixedTableLayout::calcWidthArray(int tableWidth)
                 Length w = cell->styleOrColWidth();
                 int span = cell->colSpan();
                 int effWidth = 0;
-                if ((w.isFixed() || w.isPercent()) && w.value() > 0)
-                    effWidth = w.value();
+                // FIXME: This does not make sense (mixing percentages with absolute length)
+                if ((w.isFixed() || w.isPercent()) && w.isPositive())
+                    effWidth = w.isPercent() ? w.rawValue() / percentScaleFactor : w.value();
                 
-#ifdef DEBUG_LAYOUT
-                qDebug("    table cell: effCol=%d, span=%d: %d",  cCol, span, effWidth);
-#endif
                 int usedSpan = 0;
                 int i = 0;
                 while (usedSpan < span) {
@@ -196,18 +178,9 @@ int FixedTableLayout::calcWidthArray(int tableWidth)
                     int eSpan = m_table->spanOfEffCol(cCol+i);
                     // only set if no col element has already set it.
                     if (m_width[cCol+i].isAuto() && w.type() != Auto) {
-                        m_width[cCol+i] = Length(w.value() * eSpan, w.type());
+                        m_width[cCol+i].setRawValue(w.type(), w.rawValue() * eSpan);
                         usedWidth += effWidth*eSpan;
-#ifdef DEBUG_LAYOUT
-                        qDebug("    setting effCol %d (span=%d) to m_width %d(type=%d)",
-                               cCol+i, eSpan, m_width[cCol+i].value, m_width[cCol+i].type());
-#endif
                     }
-#ifdef DEBUG_LAYOUT
-                    else {
-                        qDebug("    m_width of col %d already defined (span=%d)", cCol, m_table->spanOfEffCol(cCol));
-                    }
-#endif
                     usedSpan += eSpan;
                     i++;
                 }
@@ -221,7 +194,7 @@ int FixedTableLayout::calcWidthArray(int tableWidth)
 
 }
 
-void FixedTableLayout::calcMinMaxWidth()
+void FixedTableLayout::calcMinMaxWidth(int& minWidth, int& maxWidth)
 {
     // FIXME: This entire calculation is incorrect for both minwidth and maxwidth.
     
@@ -237,8 +210,8 @@ void FixedTableLayout::calcMinMaxWidth()
     int tableWidth = m_table->style()->width().isFixed() ? m_table->style()->width().value() - bs : 0;
     int mw = calcWidthArray(tableWidth) + bs;
 
-    m_table->m_minWidth = max(mw, tableWidth);
-    m_table->m_maxWidth = m_table->m_minWidth;
+    minWidth = max(mw, tableWidth);
+    maxWidth = minWidth;
 }
 
 void FixedTableLayout::layout()
@@ -247,11 +220,6 @@ void FixedTableLayout::layout()
     int available = tableWidth;
     int nEffCols = m_table->numEffCols();
     int totalPercent = 0;
-    
-#ifdef DEBUG_LAYOUT
-    qDebug("FixedTableLayout::layout: tableWidth=%d, numEffCols=%d",  tableWidth, nEffCols);
-#endif
-
 
     Vector<int> calcWidth(nEffCols, -1);
 
@@ -259,21 +227,18 @@ void FixedTableLayout::layout()
     if (available > 0) {
         for (int i = 0; i < nEffCols; i++)
             if (m_width[i].isPercent())
-                totalPercent += m_width[i].value();
+                totalPercent += m_width[i].rawValue();
 
         // calculate how much to distribute to percent cells.
-        int base = tableWidth * totalPercent / 100;
+        int base = tableWidth * totalPercent / (100 * percentScaleFactor);
         if (base > available)
             base = available;
         else
-            totalPercent = 100;
+            totalPercent = 100 * percentScaleFactor;
 
-#ifdef DEBUG_LAYOUT
-        qDebug("FixedTableLayout::layout: assigning percent m_width, base=%d, totalPercent=%d", base, totalPercent);
-#endif
         for (int i = 0; available > 0 && i < nEffCols; i++) {
             if (m_width[i].isPercent()) {
-                int w = base * m_width[i].value() / totalPercent;
+                int w = base * m_width[i].rawValue() / totalPercent;
                 available -= w;
                 calcWidth[i] = w;
             }
@@ -325,15 +290,12 @@ void FixedTableLayout::layout()
     int pos = 0;
     int hspacing = m_table->hBorderSpacing();
     for (int i = 0; i < nEffCols; i++) {
-#ifdef DEBUG_LAYOUT
-        qDebug("col %d: %d (m_width %d)", i, pos, calcWidth[i]);
-#endif
-        m_table->columnPos[i] = pos;
+        m_table->columnPositions()[i] = pos;
         pos += calcWidth[i] + hspacing;
     }
-    m_table->columnPos[m_table->columnPos.size()-1] = pos;
+    m_table->columnPositions()[m_table->columnPositions().size()-1] = pos;
 }
 
 #undef DEBUG_LAYOUT
 
-}
+} // namespace WebCore

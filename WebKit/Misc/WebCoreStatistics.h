@@ -35,8 +35,6 @@
 }
 
 + (NSArray *)statistics;
-+ (void)emptyCache;
-+ (void)setCacheDisabled:(BOOL)disabled;
 
 + (size_t)javaScriptObjectsCount;
 + (size_t)javaScriptInterpretersCount;
@@ -45,6 +43,9 @@
 + (void)garbageCollectJavaScriptObjects;
 + (void)garbageCollectJavaScriptObjectsOnAlternateThread:(BOOL)waitUntilDone;
 
+// These have been moved to WebCache but need to be around because they're needed by Tiger Safari.
++ (void)emptyCache;
++ (void)setCacheDisabled:(BOOL)disabled;
 
 // deprecated
 + (size_t)javaScriptNoGCAllowedObjectsCount;

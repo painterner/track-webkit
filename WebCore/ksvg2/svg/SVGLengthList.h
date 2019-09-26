@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,22 +20,23 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGLengthListImpl_H
-#define KSVG_SVGLengthListImpl_H
+#ifndef SVGLengthList_H
+#define SVGLengthList_H
+
 #ifdef SVG_SUPPORT
 
-#include "SVGList.h"
 #include "SVGLength.h"
+#include "SVGList.h"
 
 namespace WebCore
 {
-    class SVGLengthList : public SVGList<SVGLength>
+    class SVGLengthList : public SVGPODList<SVGLength>
     {
     public:
-        SVGLengthList(const SVGStyledElement *context = 0);
+        SVGLengthList();
         virtual ~SVGLengthList();
 
-        void parse(const DeprecatedString &value, const SVGStyledElement *context, LengthMode mode);
+        void parse(const String& value, const SVGStyledElement* context, SVGLengthMode mode);
     };
 
 } // namespace WebCore

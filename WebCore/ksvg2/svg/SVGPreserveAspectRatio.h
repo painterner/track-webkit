@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,21 +20,42 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGPreserveAspectRatioImpl_H
-#define KSVG_SVGPreserveAspectRatioImpl_H
+#ifndef KSVG_SVGPreserveAspectRatio_H
+#define KSVG_SVGPreserveAspectRatio_H
+
 #ifdef SVG_SUPPORT
 
 #include "Shared.h"
 
 namespace WebCore {
 
-    class StringImpl;
-    class SVGMatrix;
+    class String;
+    class AffineTransform;
     class SVGStyledElement;
 
     class SVGPreserveAspectRatio : public Shared<SVGPreserveAspectRatio> { 
     public:
-        SVGPreserveAspectRatio(const SVGStyledElement *context);
+        enum SVGPreserveAspectRatioType {
+            SVG_PRESERVEASPECTRATIO_UNKNOWN     = 0,
+            SVG_PRESERVEASPECTRATIO_NONE        = 1,
+            SVG_PRESERVEASPECTRATIO_XMINYMIN    = 2,
+            SVG_PRESERVEASPECTRATIO_XMIDYMIN    = 3,
+            SVG_PRESERVEASPECTRATIO_XMAXYMIN    = 4,
+            SVG_PRESERVEASPECTRATIO_XMINYMID    = 5,
+            SVG_PRESERVEASPECTRATIO_XMIDYMID    = 6,
+            SVG_PRESERVEASPECTRATIO_XMAXYMID    = 7,
+            SVG_PRESERVEASPECTRATIO_XMINYMAX    = 8,
+            SVG_PRESERVEASPECTRATIO_XMIDYMAX    = 9,
+            SVG_PRESERVEASPECTRATIO_XMAXYMAX    = 10
+        };
+
+        enum SVGMeetOrSliceType {
+            SVG_MEETORSLICE_UNKNOWN    = 0,
+            SVG_MEETORSLICE_MEET       = 1,
+            SVG_MEETORSLICE_SLICE      = 2
+        };
+
+        SVGPreserveAspectRatio(const SVGStyledElement* context);
         virtual ~SVGPreserveAspectRatio();
 
         void setAlign(unsigned short);
@@ -43,24 +64,24 @@ namespace WebCore {
         void setMeetOrSlice(unsigned short);
         unsigned short meetOrSlice() const;
         
-        SVGMatrix *getCTM(float logicX, float logicY,
-                              float logicWidth, float logicHeight,
-                              float physX, float physY, float physWidth,
-                              float physHeight);
+        AffineTransform getCTM(float logicX, float logicY,
+                               float logicWidth, float logicHeight,
+                               float physX, float physY,
+                               float physWidth, float physHeight);
 
         // Helper
-        void parsePreserveAspectRatio(StringImpl *string);
+        void parsePreserveAspectRatio(const String&);
 
     protected:
         unsigned short m_align;
         unsigned short m_meetOrSlice;
 
-        const SVGStyledElement *m_context;
+        const SVGStyledElement* m_context;
     };
 
 } // namespace WebCore
 
 #endif // SVG_SUPPORT
-#endif // KSVG_SVGPreserveAspectRatioImpl_H
+#endif // KSVG_SVGPreserveAspectRatio_H
 
 // vim:ts=4:noet

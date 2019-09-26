@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
+    Copyright (C) 2004, 2005, 2006, 2007 Nikolas Zimmermann <zimmermann@kde.org>
                   2004, 2005 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
@@ -21,26 +21,22 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGStyledElement.h"
 
 #include "Attr.h"
+#include "cssstyleselector.h"
 #include "Document.h"
-#include "KCanvasCreator.h"
-#include "KCanvasRenderingStyle.h"
-#include "KRenderingDevice.h"
+#include "HTMLNames.h"
+#include "ksvgcssproperties.h"
 #include "PlatformString.h"
 #include "RenderView.h"
 #include "RenderPath.h"
-#include "SVGAnimatedString.h"
 #include "SVGElement.h"
-#include "SVGHelper.h"
-#include "SVGMatrix.h"
 #include "SVGNames.h"
 #include "SVGRenderStyle.h"
 #include "SVGSVGElement.h"
-#include "ksvg.h"
-#include "ksvgcssproperties.h"
 
 #include <wtf/Assertions.h>
 
@@ -53,7 +49,6 @@ using namespace SVGNames;
 
 SVGStyledElement::SVGStyledElement(const QualifiedName& tagName, Document* doc)
     : SVGElement(tagName, doc)
-    , m_updateVectorial(false)
 {
 }
 
@@ -61,17 +56,12 @@ SVGStyledElement::~SVGStyledElement()
 {
 }
 
-SVGAnimatedString* SVGStyledElement::className() const
-{
-    return lazy_create(m_className, (SVGStyledElement*)0); // TODO: use notification context?
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGStyledElement, String, String, string, ClassName, className, HTMLNames::classAttr.localName(), m_className)
 
 RenderObject* SVGStyledElement::createRenderer(RenderArena* arena, RenderStyle* style)
 {
-    RefPtr<KCanvasPath> pathData = toPathData();
-    if (!pathData)
-        return 0;
-    return renderingDevice()->createItem(arena, style, this, pathData.get());
+    // The path data is set upon the first layout() call.
+    return new (arena) RenderPath(style, this);
 }
 
 void SVGStyledElement::parseMappedAttribute(MappedAttribute* attr)
@@ -93,12 +83,7 @@ void SVGStyledElement::parseMappedAttribute(MappedAttribute* attr)
 
 void SVGStyledElement::notifyAttributeChange() const
 {
-    // For most cases we need to handle vectorial data changes (ie. rect x changed)
-    if (!ownerDocument()->parsing()) {
-        // TODO: Use a more optimized way of updating, means not calling updateCanvasItem() here!
-        const_cast<SVGStyledElement*>(this)->m_updateVectorial = true;
-        const_cast<SVGStyledElement*>(this)->updateCanvasItem();
-    }
+    // no-op
 }
 
 void SVGStyledElement::attributeChanged(Attribute* attr, bool preserveDecls)
@@ -116,9 +101,9 @@ RenderView* SVGStyledElement::view() const
     return static_cast<RenderView*>(document()->renderer());
 }
 
-void SVGStyledElement::updateCanvasItem()
+void SVGStyledElement::rebuildRenderer() const
 {
-    if (!m_updateVectorial || !renderer() || !renderer()->isRenderPath())
+    if (!renderer() || !renderer()->isRenderPath())
         return;
     
     RenderPath* renderPath = static_cast<RenderPath*>(renderer());
@@ -126,27 +111,17 @@ void SVGStyledElement::updateCanvasItem()
     
     SVGElement* parentElement = svg_dynamic_cast(parentNode());
     if (parentElement && parentElement->renderer() && parentElement->isStyled()
-        && parentElement->childShouldCreateRenderer(this))
+        && parentElement->childShouldCreateRenderer(const_cast<SVGStyledElement*>(this)))
         renderSection = true;
 
     renderPath->setPath(toPathData());
 
     if (renderSection)
         renderPath->setNeedsLayout(true);
-
-    m_updateVectorial = false;
-}
-
-const SVGStyledElement* SVGStyledElement::pushAttributeContext(const SVGStyledElement*)
-{
-    if (view())
-        static_cast<RenderPath*>(renderer())->setPath(toPathData());
-
-    return 0;
 }
 
 }
 
-// vim:ts=4:noet
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

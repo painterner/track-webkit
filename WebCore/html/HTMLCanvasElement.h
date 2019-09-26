@@ -29,8 +29,8 @@
 #include "HTMLElement.h"
 #include "IntSize.h"
 
-#if __APPLE__
-// FIXME: Mac-specific parts need to move to the platform directory.
+#if PLATFORM(CG)
+// FIXME: CG-specific parts need to move to the platform directory.
 typedef struct CGContext* CGContextRef;
 typedef struct CGImage* CGImageRef;
 #endif
@@ -46,6 +46,9 @@ class HTMLCanvasElement : public HTMLElement {
 public:
     HTMLCanvasElement(Document*);
     virtual ~HTMLCanvasElement();
+
+    virtual HTMLTagStatus endTagRequirement() const;
+    virtual int tagPriority() const;
 
     int width() const { return m_size.width(); }
     int height() const { return m_size.height(); }
@@ -65,7 +68,7 @@ public:
 
     GraphicsContext* drawingContext() const;
 
-#if __APPLE__
+#if PLATFORM(CG)
     CGImageRef createPlatformImage() const;
 #endif
 

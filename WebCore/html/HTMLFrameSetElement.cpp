@@ -106,7 +106,8 @@ void HTMLFrameSetElement::parseMappedAttribute(MappedAttribute *attr)
 
 bool HTMLFrameSetElement::rendererIsNeeded(RenderStyle *style)
 {
-    // Ignore display: none but do pay attention if a stylesheet has caused us to delay our loading.
+    // For compatibility, frames render even when display: none is set.
+    // However, we delay creating a renderer until stylesheets have loaded. 
     return style->isStyleAvailable();
 }
 
@@ -137,11 +138,11 @@ void HTMLFrameSetElement::attach()
 
 void HTMLFrameSetElement::defaultEventHandler(Event* evt)
 {
-    if (evt->isMouseEvent() && !noresize && renderer()) {
-        static_cast<RenderFrameSet*>(renderer())->userResize(static_cast<MouseEvent*>(evt));
-        evt->setDefaultHandled();
-    }
-
+    if (evt->isMouseEvent() && !noresize && renderer())
+        if (static_cast<RenderFrameSet*>(renderer())->userResize(static_cast<MouseEvent*>(evt))) {
+            evt->setDefaultHandled();
+            return;
+        }
     HTMLElement::defaultEventHandler(evt);
 }
 

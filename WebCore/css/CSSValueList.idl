@@ -30,4 +30,5 @@ module css {
         readonly attribute unsigned long    length;
         CSSValue           item(in unsigned long index);
     };
+
 }

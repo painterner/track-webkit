@@ -26,14 +26,15 @@
 #ifndef Clipboard_h
 #define Clipboard_h
 
+#include <wtf/HashSet.h>
 #include "AtomicString.h"
+#include "ClipboardAccessPolicy.h"
 #include "Node.h"
 #include "Shared.h"
 
 namespace WebCore {
 
     class CachedImage;
-    class DeprecatedStringList;
     class IntPoint;
 
     // State available during IE's events for drag and drop and copy/paste
@@ -55,13 +56,15 @@ namespace WebCore {
         virtual bool setData(const String& type, const String& data) = 0;
     
         // extensions beyond IE's API
-        virtual DeprecatedStringList types() const = 0;
+        virtual HashSet<String> types() const = 0;
     
         virtual IntPoint dragLocation() const = 0;
         virtual CachedImage* dragImage() const = 0;
         virtual void setDragImage(CachedImage*, const IntPoint&) = 0;
         virtual Node* dragImageElement() = 0;
         virtual void setDragImageElement(Node*, const IntPoint&) = 0;
+
+        virtual void setAccessPolicy(ClipboardAccessPolicy) = 0;
     };
 
 } // namespace WebCore

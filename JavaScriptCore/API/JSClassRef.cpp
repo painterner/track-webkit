@@ -24,6 +24,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
+#include <wtf/Platform.h>
 #include "APICast.h"
 #include "JSCallbackObject.h"
 #include "JSClassRef.h"
@@ -52,6 +53,7 @@ OpaqueJSClass::OpaqueJSClass(const JSClassDefinition* definition, OpaqueJSClass*
     , callAsConstructor(definition->callAsConstructor)
     , hasInstance(definition->hasInstance)
     , convertToType(definition->convertToType)
+    , cachedPrototype(0)
 {
     if (JSStaticValue* staticValue = definition->staticValues) {
         staticValues = new StaticValuesTable();
@@ -91,7 +93,7 @@ OpaqueJSClass::~OpaqueJSClass()
         JSClassRelease(prototypeClass);
 }
 
-JSClassRef OpaqueJSClass::createNoPrototype(const JSClassDefinition* definition)
+JSClassRef OpaqueJSClass::createNoAutomaticPrototype(const JSClassDefinition* definition)
 {
     return new OpaqueJSClass(definition, 0);
 }
@@ -112,7 +114,7 @@ JSClassRef OpaqueJSClass::create(const JSClassDefinition* definition)
         protoDefinition.finalize = clearReferenceToPrototype;
         OpaqueJSClass* protoClass = new OpaqueJSClass(&protoDefinition, 0);
 
-        // remove functions from the original definition
+        // remove functions from the original class
         JSClassDefinition objectDefinition = *definition;
         objectDefinition.staticFunctions = 0;
         return new OpaqueJSClass(&objectDefinition, protoClass);

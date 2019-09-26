@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -22,19 +22,21 @@
 
 #include "config.h"
 #ifdef SVG_SUPPORT
-#include "Attr.h"
-
-#include "SVGNames.h"
-#include "SVGHelper.h"
-//#include "SVGDocument.h"
 #include "SVGTextPositioningElement.h"
-#include "SVGAnimatedLengthList.h"
-#include "SVGAnimatedNumberList.h"
 
-using namespace WebCore;
+#include "SVGLengthList.h"
+#include "SVGNames.h"
+#include "SVGNumberList.h"
 
-SVGTextPositioningElement::SVGTextPositioningElement(const QualifiedName& tagName, Document *doc)
-: SVGTextContentElement(tagName, doc)
+namespace WebCore {
+
+SVGTextPositioningElement::SVGTextPositioningElement(const QualifiedName& tagName, Document* doc)
+    : SVGTextContentElement(tagName, doc)
+    , m_x(new SVGLengthList)
+    , m_y(new SVGLengthList)
+    , m_dx(new SVGLengthList)
+    , m_dy(new SVGLengthList)
+    , m_rotate(new SVGNumberList)
 {
 }
 
@@ -42,47 +44,30 @@ SVGTextPositioningElement::~SVGTextPositioningElement()
 {
 }
 
-SVGAnimatedLengthList *SVGTextPositioningElement::x() const
-{
-    return lazy_create<SVGAnimatedLengthList>(m_x, this);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGTextPositioningElement, SVGLengthList*, LengthList, lengthList, X, x, SVGNames::xAttr.localName(), m_x.get())
+ANIMATED_PROPERTY_DEFINITIONS(SVGTextPositioningElement, SVGLengthList*, LengthList, lengthList, Y, y, SVGNames::yAttr.localName(), m_y.get())
+ANIMATED_PROPERTY_DEFINITIONS(SVGTextPositioningElement, SVGLengthList*, LengthList, lengthList, Dx, dx, SVGNames::dxAttr.localName(), m_dx.get())
+ANIMATED_PROPERTY_DEFINITIONS(SVGTextPositioningElement, SVGLengthList*, LengthList, lengthList, Dy, dy, SVGNames::dyAttr.localName(), m_dy.get())
+ANIMATED_PROPERTY_DEFINITIONS(SVGTextPositioningElement, SVGNumberList*, NumberList, numberList, Rotate, rotate, SVGNames::rotateAttr.localName(), m_rotate.get())
 
-SVGAnimatedLengthList *SVGTextPositioningElement::y() const
-{
-    return lazy_create<SVGAnimatedLengthList>(m_y, this);
-}
-
-SVGAnimatedLengthList *SVGTextPositioningElement::dx() const
-{
-    return lazy_create<SVGAnimatedLengthList>(m_dx, this);
-}
-
-SVGAnimatedLengthList *SVGTextPositioningElement::dy() const
-{
-    return lazy_create<SVGAnimatedLengthList>(m_dy, this);
-}
-
-SVGAnimatedNumberList *SVGTextPositioningElement::rotate() const
-{
-    return lazy_create<SVGAnimatedNumberList>(m_rotate, this);
-}
-
-void SVGTextPositioningElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGTextPositioningElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     
     if (attr->name() == SVGNames::xAttr)
-        x()->baseVal()->parse(value.deprecatedString(), this, LM_WIDTH);
+        xBaseValue()->parse(value, this, LengthModeWidth);
     else if (attr->name() == SVGNames::yAttr)
-        y()->baseVal()->parse(value.deprecatedString(), this, LM_HEIGHT);
+        yBaseValue()->parse(value, this, LengthModeHeight);
     else if (attr->name() == SVGNames::dxAttr)
-        dx()->baseVal()->parse(value.deprecatedString(), this, LM_WIDTH);
+        dxBaseValue()->parse(value, this, LengthModeWidth);
     else if (attr->name() == SVGNames::dyAttr)
-        dy()->baseVal()->parse(value.deprecatedString(), this, LM_HEIGHT);
+        dyBaseValue()->parse(value, this, LengthModeHeight);
     else if (attr->name() == SVGNames::rotateAttr)
-        rotate()->baseVal()->parse(value.deprecatedString(), this);
+        rotateBaseValue()->parse(value);
     else
         SVGTextContentElement::parseMappedAttribute(attr);
+}
+
 }
 
 // vim:ts=4:noet

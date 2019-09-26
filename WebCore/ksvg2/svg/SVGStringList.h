@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,26 +20,31 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGStringListImpl_H
-#define KSVG_SVGStringListImpl_H
+#ifndef SVGStringList_H
+#define SVGStringList_H
+
 #ifdef SVG_SUPPORT
 
+#include "PlatformString.h"
 #include "SVGList.h"
 
 namespace WebCore {
 
-    class SVGStringList : public SVGList<StringImpl> {
+    class SVGStringList : public SVGList<String>
+    {
     public:
-        SVGStringList(const SVGStyledElement *context = 0);
+        SVGStringList();
         virtual ~SVGStringList();
         
         // Internal
-        void reset(const DeprecatedString &str);
+        void reset(const String& str);
+
+        void parse(const String& data, UChar delimiter = ',');
     };
 
 } // namespace WebCore
 
 #endif // SVG_SUPPORT
-#endif // KSVG_SVGStringListImpl_H
+#endif // SVGStringList_H
 
 // vim:ts=4:noet

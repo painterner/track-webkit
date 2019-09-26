@@ -26,18 +26,14 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-JavaScriptCore Bakefile project file. 
+JavaScriptCore Bakefile project file.
 -->
 
-
-
 <makefile>
-
     <set var="SRCDIR">.</set>
-    <!-- Common definitions etc.: -->
+
     <include file="../Bakefiles/presets.bkl"/>
     <include file="JavaScriptCoreSources.bkl"/>
-
 
     <set var="BUILDDIR">obj-$(FORMAT)</set>
 
@@ -45,29 +41,27 @@ JavaScriptCore Bakefile project file.
         <pic>on</pic>
         <threading>multi</threading>
         <dirname>$(SRCDIR)</dirname>
-        
+
         <include>$(SRCDIR)</include>
+        <include>$(SRCDIR)/DerivedSources/JavaScriptCore</include>
         <include>$(SRCDIR)/ForwardingHeaders</include>
-        <include>$(SRCDIR)/kjs</include>
-        <include>$(SRCDIR)/pcre</include>
-        <include>$(SRCDIR)/bindings</include>
         <include>$(SRCDIR)/bindings/c</include>
         <include>$(SRCDIR)/bindings/jni</include>
-        <include>$(SRCDIR)/kxmlcore</include>
-        <include>$(SRCDIR)/DerivedSources/JavaScriptCore</include>
-
-        <define>APPLE_CHANGES=1</define>
+        <include>$(SRCDIR)/bindings</include>
+        <include>$(SRCDIR)/kjs</include>
+        <include>$(SRCDIR)/pcre</include>
+        <include>$(SRCDIR)/wtf</include>
 
         <!-- this GC version requires Mach's thread suspend/resume: -->
-        <if cond="PLATFORM_MACOSX=='1'">
+        <if cond="PLATFORM_MACOSX!='1'">
             <define>USE_CONSERVATIVE_GC=0</define>
         </if>
-        
+
         <if cond="PLATFORM_MACOSX=='1'">
             <define>USE_CONSERVATIVE_GC=1</define>
-        </if> 
+        </if>
 
-        <define>KHTML_XSLT=1</define>
+        <define>XSLT_SUPPORT=1</define>
 
         <if cond="FORMAT=='gnu'">
             <!-- FIXME: we need proper configure checks -->
@@ -83,33 +77,35 @@ JavaScriptCore Bakefile project file.
             <define>HAVE_FUNC__FINITE=1</define>
         </if>
 
-    </template>   
+    </template>
 
     <exe id="dftables">
         <dirname>$(SRCDIR)</dirname>
+        <include>$(SRCDIR)/wtf</include>
         <sources>$(SRCDIR)/pcre/dftables.c</sources>
     </exe>
 
     <action id="DerivedSources">
-        <is-phony/>
+        <is-phony />
         <command>bash make-generated-sources.sh</command>
     </action>
 
     <lib id="jscore" template="jscore_base">
         <objects-depend>dftables</objects-depend>
         <pre-build-target>DerivedSources</pre-build-target>
+        <warnings>default</warnings>
+        <cxx-rtti>off</cxx-rtti>
+        <cxx-exceptions>off</cxx-exceptions>
+        <debug-info>on</debug-info>
         <sources>
-			$(JSCORE_SOURCES_WTF)
-            $(JSCORE_SOURCES_PCRE)
+            $(JSCORE_SOURCES_BINDINGS)
             $(JSCORE_SOURCES_KJS)
+            $(JSCORE_SOURCES_PCRE)
+            $(JSCORE_SOURCES_WTF)
         </sources>
         <if cond="PLATFORM_WIN32=='1'">
             $(JSCORE_SOURCES_WIN)
-		</if>
-		<install-to>$(BUILDDIR)</install-to>
+        </if>
+        <install-to>$(BUILDDIR)</install-to>
     </lib>
-
 </makefile>
-
-
-

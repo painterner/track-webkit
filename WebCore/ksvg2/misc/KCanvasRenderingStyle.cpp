@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
                   2004, 2005 Rob Buis <buis@kde.org>
                         2006 Alexander Kellett <lypanov@kde.org>
 
@@ -22,102 +22,100 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
+#include "KCanvasRenderingStyle.h"
 
 #include "CSSValueList.h"
 #include "Document.h"
-#include "KCanvasPath.h"
-#include "KCanvasRenderingStyle.h"
-#include "KRenderingDevice.h"
-#include "KRenderingFillPainter.h"
-#include "KRenderingPaintServer.h"
-#include "KRenderingPaintServerGradient.h"
-#include "KRenderingPaintServerSolid.h"
-#include "KRenderingStrokePainter.h"
-#include "PlatformString.h"
 #include "RenderObject.h"
+#include "RenderPath.h"
 #include "SVGLength.h"
+#include "SVGPaintServerGradient.h"
+#include "SVGPaintServerSolid.h"
+#include "SVGURIReference.h"
 #include "SVGRenderStyle.h"
 #include "SVGStyledElement.h"
-#include "ksvg.h"
-#include "RenderStyle.h"
+
+#include <wtf/PassRefPtr.h>
 
 namespace WebCore {
 
-static KRenderingPaintServerSolid* sharedSolidPaintServer()
+static SVGPaintServerSolid* sharedSolidPaintServer()
 {
-    static KRenderingPaintServerSolid* _sharedSolidPaintServer = 0;
+    static SVGPaintServerSolid* _sharedSolidPaintServer = 0;
     if (!_sharedSolidPaintServer)
-        _sharedSolidPaintServer = static_cast<KRenderingPaintServerSolid *>(renderingDevice()->createPaintServer(PS_SOLID));
+        _sharedSolidPaintServer = new SVGPaintServerSolid();
     return _sharedSolidPaintServer;
 }
 
-bool KSVGPainterFactory::isFilled(const RenderStyle *style)
+SVGPaintServer* KSVGPainterFactory::fillPaintServer(const RenderStyle* style, const RenderObject* item)
 {
-    SVGPaint *fill = style->svgStyle()->fillPaint();
-    if (fill && fill->paintType() == SVG_PAINTTYPE_NONE)
-        return false;
-    return true;
-}
-
-KRenderingPaintServer *KSVGPainterFactory::fillPaintServer(const RenderStyle* style, const RenderObject* item)
-{
-    if (!isFilled(style))
+    if (!style->svgStyle()->hasFill())
         return 0;
 
-    SVGPaint *fill = style->svgStyle()->fillPaint();
+    SVGPaint* fill = style->svgStyle()->fillPaint();
 
-    KRenderingPaintServer *fillPaintServer;
-    if (!fill) {
-        // initial value (black)
-        fillPaintServer = sharedSolidPaintServer();
-        static_cast<KRenderingPaintServerSolid *>(fillPaintServer)->setColor(Color::black);
-    } else if (fill->paintType() == SVG_PAINTTYPE_URI) {
-        String id(fill->uri());
-        fillPaintServer = getPaintServerById(item->document(), AtomicString(id.substring(1)));
-        if (item && fillPaintServer && item->isRenderPath())
+    SVGPaintServer* fillPaintServer = 0;
+    if (fill->paintType() == SVGPaint::SVG_PAINTTYPE_URI) {
+        AtomicString id(SVGURIReference::getTarget(fill->uri()));
+        fillPaintServer = getPaintServerById(item->document(), id);
+
+        if (item->isRenderPath() && fillPaintServer)
             fillPaintServer->addClient(static_cast<const RenderPath*>(item));
+        else if (!fillPaintServer) {
+            SVGElement* svgElement = static_cast<SVGElement*>(item->element());
+            ASSERT(svgElement && svgElement->document() && svgElement->isStyled());
+            svgElement->document()->accessSVGExtensions()->addPendingResource(id, static_cast<SVGStyledElement*>(svgElement)); 
+        }
     } else {
         fillPaintServer = sharedSolidPaintServer();
-        KRenderingPaintServerSolid *fillPaintServerSolid = static_cast<KRenderingPaintServerSolid *>(fillPaintServer);
-        if (fill->paintType() == SVG_PAINTTYPE_CURRENTCOLOR)
+        SVGPaintServerSolid* fillPaintServerSolid = static_cast<SVGPaintServerSolid*>(fillPaintServer);
+        if (fill->paintType() == SVGPaint::SVG_PAINTTYPE_CURRENTCOLOR)
             fillPaintServerSolid->setColor(style->color());
         else
             fillPaintServerSolid->setColor(fill->color());
+        // FIXME: Ideally invalid colors would never get set on the RenderStyle and this could turn into an ASSERT
+        if (!fillPaintServerSolid->color().isValid())
+            fillPaintServer = 0;
     }
-
+    if (!fillPaintServer) {
+        // default value (black), see bug 11017
+        fillPaintServer = sharedSolidPaintServer();
+        static_cast<SVGPaintServerSolid*>(fillPaintServer)->setColor(Color::black);
+    }
     return fillPaintServer;
 }
 
-
-bool KSVGPainterFactory::isStroked(const RenderStyle *style)
+SVGPaintServer* KSVGPainterFactory::strokePaintServer(const RenderStyle* style, const RenderObject* item)
 {
-    SVGPaint *stroke = style->svgStyle()->strokePaint();
-    if (!stroke || stroke->paintType() == SVG_PAINTTYPE_NONE)
-        return false;
-    return true;
-}
-
-KRenderingPaintServer *KSVGPainterFactory::strokePaintServer(const RenderStyle* style, const RenderObject* item)
-{
-    if (!isStroked(style))
+    if (!style->svgStyle()->hasStroke())
         return 0;
 
-    SVGPaint *stroke = style->svgStyle()->strokePaint();
+    SVGPaint* stroke = style->svgStyle()->strokePaint();
 
-    KRenderingPaintServer *strokePaintServer;
-    if (stroke && stroke->paintType() == SVG_PAINTTYPE_URI) {
-        String id(stroke->uri());
-        strokePaintServer = getPaintServerById(item->document(), AtomicString(id.substring(1)));
-        if(item && strokePaintServer && item->isRenderPath())
+    SVGPaintServer* strokePaintServer = 0;
+    if (stroke->paintType() == SVGPaint::SVG_PAINTTYPE_URI) {
+        AtomicString id(SVGURIReference::getTarget(stroke->uri()));
+        strokePaintServer = getPaintServerById(item->document(), id);
+
+        if (item->isRenderPath() && strokePaintServer)
             strokePaintServer->addClient(static_cast<const RenderPath*>(item));
+        else if (!strokePaintServer) {
+            SVGElement* svgElement = static_cast<SVGElement*>(item->element());
+            ASSERT(svgElement && svgElement->document() && svgElement->isStyled());
+            svgElement->document()->accessSVGExtensions()->addPendingResource(id, static_cast<SVGStyledElement*>(svgElement)); 
+        }
     } else {
         strokePaintServer = sharedSolidPaintServer();
-        KRenderingPaintServerSolid *strokePaintServerSolid = static_cast<KRenderingPaintServerSolid *>(strokePaintServer);
-        if (stroke->paintType() == SVG_PAINTTYPE_CURRENTCOLOR)
+        SVGPaintServerSolid* strokePaintServerSolid = static_cast<SVGPaintServerSolid*>(strokePaintServer);
+        if (stroke->paintType() == SVGPaint::SVG_PAINTTYPE_CURRENTCOLOR)
             strokePaintServerSolid->setColor(style->color());
         else
             strokePaintServerSolid->setColor(stroke->color());
+        // FIXME: Ideally invalid colors would never get set on the RenderStyle and this could turn into an ASSERT
+        if (!strokePaintServerSolid->color().isValid())
+            strokePaintServer = 0;
     }
 
     return strokePaintServer;
@@ -125,67 +123,46 @@ KRenderingPaintServer *KSVGPainterFactory::strokePaintServer(const RenderStyle* 
 
 double KSVGPainterFactory::cssPrimitiveToLength(const RenderObject* item, CSSValue *value, double defaultValue)
 {
-    CSSPrimitiveValue *primitive = static_cast<CSSPrimitiveValue *>(value);
+    CSSPrimitiveValue* primitive = static_cast<CSSPrimitiveValue*>(value);
 
     unsigned short cssType = (primitive ? primitive->primitiveType() : (unsigned short) CSSPrimitiveValue::CSS_UNKNOWN);
-    if(!(cssType > CSSPrimitiveValue::CSS_UNKNOWN && cssType <= CSSPrimitiveValue::CSS_PC))
+    if (!(cssType > CSSPrimitiveValue::CSS_UNKNOWN && cssType <= CSSPrimitiveValue::CSS_PC))
         return defaultValue;
 
-    if(cssType == CSSPrimitiveValue::CSS_PERCENTAGE)
-    {
-        SVGElement *element = static_cast<SVGElement *>(item->element());
-        SVGElement *viewportElement = (element ? element->viewportElement() : 0);
-        if(viewportElement)
-        {
+    if (cssType == CSSPrimitiveValue::CSS_PERCENTAGE) {
+        SVGStyledElement* element = static_cast<SVGStyledElement*>(item->element());
+        SVGElement* viewportElement = (element ? element->viewportElement() : 0);
+        if (viewportElement) {
             double result = primitive->getFloatValue() / 100.0;
-            return SVGHelper::PercentageOfViewport(result, viewportElement, LM_OTHER);
+            return SVGLength::PercentageOfViewport(result, element, LengthModeOther);
         }
     }
 
-    return primitive->computeLengthFloat(const_cast<RenderStyle *>(item->style()));
+    return primitive->computeLengthFloat(const_cast<RenderStyle*>(item->style()));
 }
 
-KRenderingStrokePainter KSVGPainterFactory::strokePainter(const RenderStyle* style, const RenderObject* item)
+KCDashArray KSVGPainterFactory::dashArrayFromRenderingStyle(const RenderStyle* style)
 {
-    KRenderingStrokePainter strokePainter;
-
-    strokePainter.setOpacity(style->svgStyle()->strokeOpacity());
-    strokePainter.setStrokeWidth(KSVGPainterFactory::cssPrimitiveToLength(item, style->svgStyle()->strokeWidth(), 1.0));
-
-    CSSValueList *dashes = style->svgStyle()->strokeDashArray();
+    KCDashArray array;
+    
+    CSSValueList* dashes = style->svgStyle()->strokeDashArray();
     if (dashes) {
-        CSSPrimitiveValue *dash = 0;
-        KCDashArray array;
+        CSSPrimitiveValue* dash = 0;
         unsigned long len = dashes->length();
         for (unsigned long i = 0; i < len; i++) {
-            dash = static_cast<CSSPrimitiveValue *>(dashes->item(i));
-            if (dash)
-                array.append((float) dash->computeLengthFloat(const_cast<RenderStyle *>(style)));
-        }
+            dash = static_cast<CSSPrimitiveValue*>(dashes->item(i));
+            if (!dash)
+                continue;
 
-        strokePainter.setDashArray(array);
-        strokePainter.setDashOffset(KSVGPainterFactory::cssPrimitiveToLength(item, style->svgStyle()->strokeDashOffset(), 0.0));
+            array.append((float) dash->computeLengthFloat(const_cast<RenderStyle*>(style)));
+        }
     }
 
-    strokePainter.setStrokeMiterLimit(style->svgStyle()->strokeMiterLimit());
-    strokePainter.setStrokeCapStyle((KCCapStyle) style->svgStyle()->capStyle());
-    strokePainter.setStrokeJoinStyle((KCJoinStyle) style->svgStyle()->joinStyle());
-
-    return strokePainter;
-}
-
-KRenderingFillPainter KSVGPainterFactory::fillPainter(const RenderStyle* style, const RenderObject* item)
-{
-    KRenderingFillPainter fillPainter;
-    
-    fillPainter.setFillRule(style->svgStyle()->fillRule() == WR_NONZERO ? RULE_NONZERO : RULE_EVENODD);
-    fillPainter.setOpacity(style->svgStyle()->fillOpacity());
-
-    return fillPainter;
+    return array;
 }
 
 }
 
-// vim:ts=4:noet
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

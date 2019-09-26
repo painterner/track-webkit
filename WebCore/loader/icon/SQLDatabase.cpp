@@ -23,10 +23,20 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
+#include "config.h"
 #include "SQLDatabase.h"
-#include "Logging.h"
 
-using namespace WebCore;
+#include "Logging.h"
+#include <sqlite3.h>
+#include "SQLStatement.h"
+
+
+namespace WebCore {
+
+const int SQLResultError = SQLITE_ERROR;
+const int SQLResultDone = SQLITE_DONE;
+const int SQLResultOk = SQLITE_OK;
+const int SQLResultRow = SQLITE_ROW;
 
 SQLDatabase::SQLDatabase()
     : m_db(0)
@@ -74,7 +84,7 @@ void SQLDatabase::setFullsync(bool fsync)
 
 void SQLDatabase::setSynchronous(SynchronousPragma sync)
 {
-    executeCommand(String::sprintf("PRAGMA synchronous = %i", sync));
+    executeCommand(String::format("PRAGMA synchronous = %i", sync));
 }
 
 void SQLDatabase::setBusyTimeout(int ms)
@@ -82,7 +92,7 @@ void SQLDatabase::setBusyTimeout(int ms)
     if (m_db)
         sqlite3_busy_timeout(m_db, ms);
     else
-        LOG(IconDatabase, "BusyTimeout set on non-open database");
+        LOG(SQLDatabase, "BusyTimeout set on non-open database");
 }
 
 void SQLDatabase::setBusyHandler(int(*handler)(void*, int))
@@ -90,7 +100,7 @@ void SQLDatabase::setBusyHandler(int(*handler)(void*, int))
     if (m_db)
         sqlite3_busy_handler(m_db, handler, NULL);
     else
-        LOG(IconDatabase, "Busy handler set on non-open database");
+        LOG(SQLDatabase, "Busy handler set on non-open database");
 }
 
 bool SQLDatabase::executeCommand(const String& sql)
@@ -115,6 +125,29 @@ bool SQLDatabase::tableExists(const String& tablename)
     return sql.step() == SQLITE_ROW;
 }
 
+void SQLDatabase::clearAllTables()
+{
+    String query = "SELECT name FROM sqlite_master WHERE type='table';";
+    Vector<String> tables;
+    if (!SQLStatement(*this, query).returnTextResults16(0, tables)) {
+        LOG(SQLDatabase, "Unable to retrieve list of tables from database");
+        return;
+    }
+    
+    for (Vector<String>::iterator table = tables.begin(); table != tables.end(); ++table ) {
+        if (*table == "sqlite_sequence")
+            continue;
+        if (!executeCommand("DROP TABLE " + *table))
+            LOG(SQLDatabase, "Unable to drop table %s", (*table).ascii().data());
+    }
+}
+
+void SQLDatabase::runVacuumCommand()
+{
+    if (!executeCommand("VACUUM;"))
+        LOG(SQLDatabase, "Unable to vacuum database - %s", lastErrorMsg());
+}
+
 int64_t SQLDatabase::lastInsertRowID()
 {
     if (!m_db)
@@ -122,5 +155,23 @@ int64_t SQLDatabase::lastInsertRowID()
     return sqlite3_last_insert_rowid(m_db);
 }
 
+int SQLDatabase::lastChanges()
+{
+    if (!m_db)
+        return 0;
+    return sqlite3_changes(m_db);
+}
+
+int SQLDatabase::lastError()
+{
+    return m_db ? sqlite3_errcode(m_db) : SQLITE_ERROR;
+}
+
+const char* SQLDatabase::lastErrorMsg()
+{ 
+    return sqlite3_errmsg(m_db);
+}
+
+} // namespace WebCore
 
 

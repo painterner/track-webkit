@@ -30,23 +30,21 @@
 
 #include "CachedResource.h"
 #include "TextEncoding.h"
-#include <wtf/Vector.h>
 
 namespace WebCore {
+
     class DocLoader;
 
     class CachedScript : public CachedResource {
     public:
-        CachedScript(DocLoader*, const String& URL, CachePolicy, time_t expireDate, const DeprecatedString& charset);
-        CachedScript(const String& URL, const DeprecatedString& scriptData);
+        CachedScript(DocLoader*, const String& URL, CachePolicy, time_t expireDate, const String& charset);
         virtual ~CachedScript();
 
         const String& script() const { return m_script; }
 
         virtual void ref(CachedResourceClient*);
-        virtual void deref(CachedResourceClient*);
 
-        virtual void setCharset(const DeprecatedString&);
+        virtual void setEncoding(const String&);
         virtual void data(Vector<char>&, bool allDataReceived);
         virtual void error();
 

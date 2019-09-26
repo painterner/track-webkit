@@ -25,12 +25,10 @@
 #ifdef SVG_SUPPORT
 
 #include "SVGFilterPrimitiveStandardAttributes.h"
-#include "KCanvasFilters.h"
+#include "SVGFEOffset.h"
 
 namespace WebCore
 {
-    class SVGAnimatedString;
-    class SVGAnimatedNumber;
 
     class SVGFEOffsetElement : public SVGFilterPrimitiveStandardAttributes
     {
@@ -39,20 +37,19 @@ namespace WebCore
         virtual ~SVGFEOffsetElement();
 
         // 'SVGFEOffsetElement' functions
-        SVGAnimatedString *in1() const;
-        SVGAnimatedNumber *dx() const;
-        SVGAnimatedNumber *dy() const;
-
         // Derived from: 'Element'
         virtual void parseMappedAttribute(MappedAttribute *attr);
 
-        virtual KCanvasFEOffset *filterEffect() const;
+        virtual SVGFEOffset *filterEffect() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedString> m_in1;
-        mutable RefPtr<SVGAnimatedNumber> m_dx;
-        mutable RefPtr<SVGAnimatedNumber> m_dy;
-        mutable KCanvasFEOffset *m_filterEffect;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEOffsetElement, String, String, In1, in1)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEOffsetElement, double, double, Dx, dx)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEOffsetElement, double, double, Dy, dy)
+        mutable SVGFEOffset *m_filterEffect;
     };
 
 } // namespace WebCore

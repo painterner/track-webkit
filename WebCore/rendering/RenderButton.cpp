@@ -26,8 +26,8 @@
 #include "Document.h"
 #include "GraphicsContext.h"
 #include "HTMLInputElement.h"
-#include "RenderText.h"
 #include "HTMLNames.h"
+#include "RenderText.h"
 
 namespace WebCore {
 
@@ -44,7 +44,7 @@ void RenderButton::addChild(RenderObject* newChild, RenderObject* beforeChild)
 {
     if (!m_inner) {
         // Create an anonymous block.
-        assert(!m_first);
+        ASSERT(!firstChild());
         m_inner = createAnonymousBlock();
         m_inner->style()->setBoxFlex(1.0f);
         RenderFlexibleBox::addChild(m_inner);
@@ -58,8 +58,7 @@ void RenderButton::removeChild(RenderObject* oldChild)
     if (oldChild == m_inner || !m_inner) {
         RenderFlexibleBox::removeChild(oldChild);
         m_inner = 0;
-    }
-    else
+    } else
         m_inner->removeChild(oldChild);
 }
 
@@ -79,19 +78,24 @@ void RenderButton::updateFromElement()
     if (element()->hasTagName(inputTag)) {
         HTMLInputElement* input = static_cast<HTMLInputElement*>(element());
         String value = input->valueWithDefault();
-        if (value.isEmpty()) {
-            if (m_buttonText) {
-                m_buttonText->destroy();
-                m_buttonText = 0;
-            }
-        } else {
-            if (m_buttonText)
-                m_buttonText->setText(value.impl());
-            else {
-                m_buttonText = new (renderArena()) RenderText(document(), value.impl());
-                m_buttonText->setStyle(style());
-                addChild(m_buttonText);
-            }
+        setText(value);
+    }
+}
+
+void RenderButton::setText(const String& str)
+{
+    if (str.isEmpty()) {
+        if (m_buttonText) {
+            m_buttonText->destroy();
+            m_buttonText = 0;
+        }
+    } else {
+        if (m_buttonText)
+            m_buttonText->setText(str.impl());
+        else {
+            m_buttonText = new (renderArena()) RenderText(document(), str.impl());
+            m_buttonText->setStyle(style());
+            addChild(m_buttonText);
         }
     }
 }
@@ -104,24 +108,24 @@ void RenderButton::updatePseudoChild(RenderStyle::PseudoId type)
         updatePseudoChildForObject(type, this);
 }
 
-void RenderButton::paintObject(PaintInfo& i, int _tx, int _ty)
+void RenderButton::paintObject(PaintInfo& paintInfo, int tx, int ty)
 {
     // Push a clip.
-    if (m_inner && i.phase == PaintPhaseForeground) {
-        IntRect clipRect(_tx + borderLeft(), _ty + borderTop(),
+    if (m_inner && paintInfo.phase == PaintPhaseForeground) {
+        IntRect clipRect(tx + borderLeft(), ty + borderTop(),
             width() - borderLeft() - borderRight(), height() - borderBottom() - borderTop());
         if (clipRect.width() == 0 || clipRect.height() == 0)
             return;
-        i.p->save();
-        i.p->addClip(clipRect);
+        paintInfo.context->save();
+        paintInfo.context->clip(clipRect);
     }
-    
+
     // Paint the children.
-    RenderBlock::paintObject(i, _tx, _ty);
-    
+    RenderBlock::paintObject(paintInfo, tx, ty);
+
     // Pop the clip.
-    if (m_inner && i.phase == PaintPhaseForeground)
-        i.p->restore();
+    if (m_inner && paintInfo.phase == PaintPhaseForeground)
+        paintInfo.context->restore();
 }
 
-}
+} // namespace WebCore

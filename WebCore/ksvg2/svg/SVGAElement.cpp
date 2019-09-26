@@ -21,28 +21,30 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
+
 #include "SVGAElement.h"
 
 #include "Attr.h"
 #include "Document.h"
-#include "Event.h"
 #include "EventNames.h"
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "MouseEvent.h"
-#include "MouseEvent.h"
-#include "SVGAnimatedString.h"
-#include "SVGHelper.h"
+#include "RenderSVGContainer.h"
+#include "ResourceRequest.h"
 #include "SVGNames.h"
 #include "csshelper.h"
-#include <kcanvas/RenderSVGContainer.h>
-#include <kcanvas/KCanvasCreator.h>
-#include <kcanvas/device/KRenderingDevice.h>
 
 namespace WebCore {
 
 SVGAElement::SVGAElement(const QualifiedName& tagName, Document *doc)
-: SVGStyledTransformableElement(tagName, doc), SVGURIReference(), SVGTests(), SVGLangSpace(), SVGExternalResourcesRequired()
+    : SVGStyledTransformableElement(tagName, doc)
+    , SVGURIReference()
+    , SVGTests()
+    , SVGLangSpace()
+    , SVGExternalResourcesRequired()
 {
 }
 
@@ -50,16 +52,13 @@ SVGAElement::~SVGAElement()
 {
 }
 
-SVGAnimatedString *SVGAElement::target() const
-{
-    return lazy_create<SVGAnimatedString>(m_target, this);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGAElement, String, String, string, Target, target, SVGNames::targetAttr.localName(), m_target)
 
 void SVGAElement::parseMappedAttribute(MappedAttribute *attr)
 {
     const AtomicString& value(attr->value());
     if (attr->name() == SVGNames::targetAttr) {
-        target()->setBaseVal(value.impl());
+        setTargetBaseValue(value);
     } else {
         if (SVGURIReference::parseMappedAttribute(attr)) {
             m_isLink = attr->value() != 0;
@@ -83,30 +82,23 @@ RenderObject* SVGAElement::createRenderer(RenderArena* arena, RenderStyle* style
 void SVGAElement::defaultEventHandler(Event *evt)
 {
     // TODO : should use CLICK instead
-    if((evt->type() == EventNames::mouseupEvent && m_isLink))
-    {
+    if ((evt->type() == EventNames::mouseupEvent && m_isLink)) {
         MouseEvent *e = static_cast<MouseEvent*>(evt);
 
-        DeprecatedString url;
-        DeprecatedString utarget;
-        if(e && e->button() == 2)
-        {
+        if (e && e->button() == 2) {
             SVGStyledTransformableElement::defaultEventHandler(evt);
             return;
         }
-        url = parseURL(href()->baseVal()).deprecatedString();
-        utarget = getAttribute(SVGNames::targetAttr).deprecatedString();
 
-        if(e && e->button() == 1)
-            utarget = "_blank";
+        String url = parseURL(href());
 
-        if (!evt->defaultPrevented()) {
-            if(ownerDocument() && ownerDocument()->view() && ownerDocument()->frame())
-            {
-                //document()->view()->resetCursor();
-                document()->frame()->urlSelected(url, utarget);
-            }
-        }
+        String target = getAttribute(SVGNames::targetAttr);
+        if (e && e->button() == 1)
+            target = "_blank";
+
+        if (!evt->defaultPrevented())
+            if (document() && document()->frame())
+                document()->frame()->loader()->urlSelected(document()->completeURL(url), target, evt);
 
         evt->setDefaultHandled();
     }
@@ -114,7 +106,7 @@ void SVGAElement::defaultEventHandler(Event *evt)
     SVGStyledTransformableElement::defaultEventHandler(evt);
 }
 
-}
+} // namespace WebCore
 
 // vim:ts=4:noet
 #endif // SVG_SUPPORT

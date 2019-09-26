@@ -46,7 +46,7 @@
 }
 
 - (id)initWithFrame:(NSRect)r
-             plugin:(WebNetscapePluginPackage *)plugin
+      pluginPackage:(WebNetscapePluginPackage *)thePluginPackage
                 URL:(NSURL *)URL
             baseURL:(NSURL *)baseURL
            MIMEType:(NSString *)MIME
@@ -54,8 +54,6 @@
     attributeValues:(NSArray *)values
        loadManually:(BOOL)loadManually
          DOMElement:(DOMElement *)anElement;
-
-- (void)setWebFrame:(WebFrame *)webFrame;
 
 - (void)redeliverStream;
 

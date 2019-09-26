@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,81 +20,94 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGLengthImpl_H
-#define KSVG_SVGLengthImpl_H
+#ifndef SVGLength_H
+#define SVGLength_H
+
 #ifdef SVG_SUPPORT
 
 #include "PlatformString.h"
-#include <ksvg2/svg/SVGHelper.h>
 
 namespace WebCore {
 
-    class RenderPath;
-    class SVGElement;
     class SVGStyledElement;
 
-    class SVGLength : public Shared<SVGLength> {
+    enum SVGLengthType {
+        LengthTypeUnknown = 0,
+        LengthTypeNumber = 1,
+        LengthTypePercentage = 2,
+        LengthTypeEMS = 3,
+        LengthTypeEXS = 4,
+        LengthTypePX = 5,
+        LengthTypeCM = 6,
+        LengthTypeMM = 7,
+        LengthTypeIN = 8,
+        LengthTypePT = 9,
+        LengthTypePC = 10
+    };
+
+    enum SVGLengthMode {
+        LengthModeWidth = 0,
+        LengthModeHeight,
+        LengthModeOther
+    };
+
+    class SVGLength {
     public:
-        SVGLength(const SVGStyledElement* context, LengthMode mode = LM_UNKNOWN, const SVGElement* viewport = 0);
-        virtual ~SVGLength();
-        
-        enum SVGLengthType {
-            SVG_LENGTHTYPE_UNKNOWN          = 0,
-            SVG_LENGTHTYPE_NUMBER           = 1,
-            SVG_LENGTHTYPE_PERCENTAGE       = 2,
-            SVG_LENGTHTYPE_EMS              = 3,
-            SVG_LENGTHTYPE_EXS              = 4,
-            SVG_LENGTHTYPE_PX               = 5,
-            SVG_LENGTHTYPE_CM               = 6,
-            SVG_LENGTHTYPE_MM               = 7,
-            SVG_LENGTHTYPE_IN               = 8,
-            SVG_LENGTHTYPE_PT               = 9,
-            SVG_LENGTHTYPE_PC               = 10
+        // Forward declare these enums in the w3c naming scheme, for IDL generation
+        enum {
+            SVG_LENGTHTYPE_UNKNOWN = LengthTypeUnknown,
+            SVG_LENGTHTYPE_NUMBER = LengthTypeNumber,
+            SVG_LENGTHTYPE_PERCENTAGE = LengthTypePercentage,
+            SVG_LENGTHTYPE_EMS = LengthTypeEMS,
+            SVG_LENGTHTYPE_EXS = LengthTypeEXS,
+            SVG_LENGTHTYPE_PX = LengthTypePX,
+            SVG_LENGTHTYPE_CM = LengthTypeCM,
+            SVG_LENGTHTYPE_MM = LengthTypeMM,
+            SVG_LENGTHTYPE_IN = LengthTypeIN,
+            SVG_LENGTHTYPE_PT = LengthTypePT,
+            SVG_LENGTHTYPE_PC = LengthTypePC
         };
 
+        SVGLength(const SVGStyledElement* context = 0, SVGLengthMode mode = LengthModeOther, const String& valueAsString = String());
+
         // 'SVGLength' functions
-        unsigned short unitType() const;
+        SVGLengthType unitType() const;
 
         float value() const;
-        void setValue(float value);
+        void setValue(float);
 
         float valueInSpecifiedUnits() const;
-        void setValueInSpecifiedUnits(float valueInSpecifiedUnits);
+        void setValueInSpecifiedUnits(float);
+        
+        float valueAsPercentage() const;
 
         String valueAsString() const;
         void setValueAsString(const String&);
 
-        void newValueSpecifiedUnits(unsigned short unitType, float valueInSpecifiedUnits);
-        void convertToSpecifiedUnits(unsigned short unitType);
+        void newValueSpecifiedUnits(unsigned short, float valueInSpecifiedUnits);
+        void convertToSpecifiedUnits(unsigned short);
 
-        // Helpers
-        bool bboxRelative() const;
-        void setBboxRelative(bool);
+        // Helper functions
+        static float PercentageOfViewport(float value, const SVGStyledElement*, SVGLengthMode);
 
-        const SVGStyledElement* context() const;
-        void setContext(const SVGStyledElement *context);
-
+        inline bool isRelative() const
+        {
+            SVGLengthType type = unitType();
+            return (type == LengthTypePercentage || type == LengthTypeEMS || type == LengthTypeEXS);
+        }
+ 
     private:
-        bool updateValueInSpecifiedUnits(bool notify = true);
-        void updateValue(bool notify = true);
-
         double dpi() const;
 
-        float m_value;
         float m_valueInSpecifiedUnits;
+        unsigned int m_unit;
 
-        unsigned m_mode : 2; // LengthMode
-        bool m_bboxRelative : 1;
-        unsigned m_unitType : 4;
-        bool m_requiresLayout : 1;
-
-        const SVGStyledElement *m_context;
-        const SVGElement *m_viewportElement;
+        const SVGStyledElement* m_context;
     };
 
 } // namespace WebCore
 
 #endif // SVG_SUPPORT
-#endif // KSVG_SVGLengthImpl_H
+#endif // SVGLength_H
 
 // vim:ts=4:noet

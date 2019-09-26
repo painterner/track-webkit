@@ -26,16 +26,21 @@
 #ifndef SQLDatabase_H
 #define SQLDatabase_H
 
-#include "config.h"
-
 #include "PlatformString.h"
-#include <sqlite3.h>
 #include <wtf/Noncopyable.h>
 #include <wtf/Vector.h>
+
+
+typedef struct sqlite3 sqlite3;
 
 namespace WebCore {
 
 class SQLStatement;
+
+extern const int SQLResultError;
+extern const int SQLResultDone;
+extern const int SQLResultOk;
+extern const int SQLResultRow;
 
 class SQLDatabase : public Noncopyable
 {
@@ -45,15 +50,18 @@ public:
 
     bool open(const String& filename);
     bool isOpen() { return m_db; }
-    String getPath(){ return m_path; }
+    String path(){ return m_path; }
     void close();
 
     bool executeCommand(const String&);
     bool returnsAtLeastOneResult(const String&);
     
     bool tableExists(const String&);
+    void clearAllTables();
+    void runVacuumCommand();
     
     int64_t lastInsertRowID();
+    int lastChanges();
 
     void setBusyTimeout(int ms);
     void setBusyHandler(int(*)(void*, int));
@@ -70,8 +78,8 @@ public:
     };
     void setSynchronous(SynchronousPragma);
     
-    int lastError() { return m_db ? sqlite3_errcode(m_db) : SQLITE_ERROR; }
-    const char* lastErrorMsg() { return sqlite3_errmsg(m_db); }
+    int lastError();
+    const char* lastErrorMsg();
     
 private:
     String   m_path;
@@ -80,79 +88,12 @@ private:
     
 }; // class SQLDatabase
 
-class SQLTransaction : public Noncopyable
+inline String escapeSQLString(const String& s)
 {
-public:
-    SQLTransaction(SQLDatabase& db, bool start = false);
-    ~SQLTransaction();
-    
-    void begin();
-    void commit();
-    void rollback();
-    
-private:
-    SQLDatabase& m_db;
-    bool m_began;
-
-};
-
-class SQLStatement : public Noncopyable
-{
-public:
-    SQLStatement(SQLDatabase& db, const String&);
-    ~SQLStatement();
-    
-    int prepare();
-    bool isPrepared() { return m_statement; }
-    int bindBlob(int index, const void* blob, int size, bool copy = true);
-    int bindText(int index, const char* text, bool copy = true);
-    int bindInt64(int index, int64_t integer);
-
-    int step();
-    int finalize();
-    int reset();
-    
-    int prepareAndStep() { prepare();  return step(); }
-    
-    // prepares, steps, and finalizes the query.
-    // returns true if all 3 steps succeed with step() returning SQLITE_DONE
-    // returns false otherwise  
-    bool executeCommand();
-    
-    // prepares, steps, and finalizes.  
-    // returns true is step() returns SQLITE_ROW
-    // returns false otherwise
-    bool returnsAtLeastOneResult();
-    
-    // Returns -1 on last-step failing.  Otherwise, returns number of rows
-    // returned in the last step()
-    int columnCount();
-    
-    String getColumnName(int col);
-    String getColumnName16(int col);
-    String getColumnText(int col);
-    String getColumnText16(int col);
-    double getColumnDouble(int col);
-    int getColumnInt(int col);
-    int64_t getColumnInt64(int col);
-    const void* getColumnBlob(int col, int& size);
-    Vector<unsigned char> getColumnBlobAsVector(int col);
-
-    bool returnTextResults(int col, Vector<String>& v);
-    bool returnTextResults16(int col, Vector<String>& v);
-    bool returnIntResults(int col, Vector<int>& v);
-    bool returnInt64Results(int col, Vector<int64_t>& v);
-    bool returnDoubleResults(int col, Vector<double>& v);
-
-    int lastError() { return m_database.lastError(); }
-    const char* lastErrorMsg() { return m_database.lastErrorMsg(); }
-    
-private:
-    SQLDatabase& m_database;
-    String      m_query;
-
-    sqlite3_stmt* m_statement;
-};
+    String es = s;
+    es.replace('\'', "''");
+    return es;
+}
 
 } // namespace WebCore
 

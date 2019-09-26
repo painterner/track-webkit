@@ -5,6 +5,7 @@
  *  Copyright (C) 2001 Peter Kelly (pmk@post.com)
  *  Copyright (C) 2004-2006 Apple Computer, Inc.
  *  Copyright (C) 2006 James G. Speth (speth@end.com)
+ *  Copyright (C) 2006 Samuel Weinig (sam@webkit.org)
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -48,6 +49,13 @@
 #include <kjs/string_object.h>
 
 #include "kjs_css.lut.h"
+
+#ifdef SVG_SUPPORT
+#include "JSSVGColor.h"
+#include "JSSVGPaint.h"
+#include "SVGColor.h"
+#include "SVGPaint.h"
+#endif
 
 using namespace WebCore;
 using namespace HTMLNames;
@@ -211,24 +219,13 @@ void DOMCSSStyleDeclaration::put(ExecState* exec, const Identifier &propertyName
     if (isCSSPropertyName(propertyName)) {
       bool pixelOrPos;
       String prop = cssPropertyName(propertyName, &pixelOrPos);
-      String propvalue = value->toString(exec);
+      String propValue = valueToStringWithNullCheck(exec, value);
       if (pixelOrPos)
-        propvalue += "px";
+        propValue += "px";
 #ifdef KJS_VERBOSE
       kdDebug(6070) << "DOMCSSStyleDeclaration: prop=" << prop << " propvalue=" << propvalue << endl;
 #endif
-      styleDecl.removeProperty(prop, exception);
-      if (!exception && !propvalue.isEmpty()) {
-        // We have to ignore exceptions here, because of the following unfortunate situation:
-        //   1) Older versions ignored exceptions here by accident, because the put function
-        //      that translated exceptions did not translate CSS exceptions.
-        //   2) Gecko does not raise an exception in this case, although WinIE does.
-        //   3) At least some Dashboard widgets are depending on this behavior.
-        // It would be nice to fix this some day, perhaps with some kind of "quirks mode",
-        // but it's likely that the Dashboard widgets are already using a strict mode DOCTYPE.
-        ExceptionCode ec = 0;
-        styleDecl.setProperty(prop, propvalue, ec);
-      }
+      styleDecl.setProperty(prop, propValue, exception);
     } else {
       DOMObject::put(exec, propertyName, value, attr);
     }
@@ -258,7 +255,7 @@ JSValue* DOMCSSStyleDeclarationProtoFunc::callAsFunction(ExecState* exec, JSObje
     case DOMCSSStyleDeclaration::IsPropertyImplicit:
       return jsBoolean(styleDecl.isPropertyImplicit(s));
     case DOMCSSStyleDeclaration::SetProperty:
-      styleDecl.setProperty(s, args[1]->toString(exec), args[2]->toString(exec), exception);
+      styleDecl.setProperty(s, valueToStringWithNullCheck(exec, args[1]), args[2]->toString(exec), exception);
       return jsUndefined();
     case DOMCSSStyleDeclaration::Item:
       return jsStringOrNull(styleDecl.item(args[0]->toInt32(exec)));
@@ -611,8 +608,9 @@ JSValue* DOMCSSStyleSheet::getValueProperty(ExecState* exec, int token) const
   case OwnerRule:
     return toJS(exec, static_cast<CSSStyleSheet*>(impl())->ownerRule());
   case CssRules:
-  case Rules:
     return toJS(exec, static_cast<CSSStyleSheet*>(impl())->cssRules());
+  case Rules:
+    return toJS(exec, static_cast<CSSStyleSheet*>(impl())->cssRules(true));
   default:
     assert(0);
     return jsUndefined();
@@ -732,6 +730,11 @@ bool DOMCSSRule::getOwnPropertySlot(ExecState* exec, const Identifier& propertyN
   // first try the properties specific to this rule type
   const HashEntry* entry = Lookup::findEntry(DOMCSSRule::classInfo()->propHashTable, propertyName);
   if (entry) {
+    // FIXME: for now we single out the media rule functions.
+    // This is a temporary hack since we should try to generate
+    // them. See http://bugs.webkit.org/show_bug.cgi?id=11898
+    if (entry->attr & Function)
+      return getStaticPropertySlot<DOMCSSRuleFunc, DOMCSSRule, DOMObject>(exec, &DOMCSSMediaRuleTable, this, propertyName, slot);
     slot.setStaticEntry(this, entry, staticValueGetter<DOMCSSRule>);
     return true;
   }
@@ -836,14 +839,23 @@ JSValue* DOMCSSRuleFunc::callAsFunction(ExecState* exec, JSObject* thisObj, cons
 {
   if (!thisObj->inherits(&KJS::DOMCSSRule::info))
     return throwError(exec, TypeError);
-  CSSRule &cssRule = *static_cast<DOMCSSRule*>(thisObj)->impl();
+  CSSRule& cssRule = *static_cast<DOMCSSRule*>(thisObj)->impl();
 
   if (cssRule.type() == CSSRule::MEDIA_RULE) {
-    CSSMediaRule &rule = static_cast<CSSMediaRule &>(cssRule);
-    if (id == DOMCSSRule::Media_InsertRule)
-      return jsNumber(rule.insertRule(args[0]->toString(exec), args[1]->toInt32(exec)));
-    else if (id == DOMCSSRule::Media_DeleteRule)
-      rule.deleteRule(args[0]->toInt32(exec));
+    CSSMediaRule& rule = static_cast<CSSMediaRule&>(cssRule);
+    switch (id) {
+      case DOMCSSRule::Media_InsertRule: {
+        ExceptionCode ec = 0;
+        JSValue* result = jsNumber(rule.insertRule(args[0]->toString(exec), args[1]->toInt32(exec), ec));
+        setDOMException(exec, ec);
+        return result;
+      }
+      case DOMCSSRule::Media_DeleteRule: {
+        ExceptionCode ec = 0;
+        rule.deleteRule(args[0]->toInt32(exec), ec);
+        setDOMException(exec, ec);
+      }
+    }
   }
 
   return jsUndefined();
@@ -924,6 +936,12 @@ JSValue* toJS(ExecState* exec, CSSValue *v)
   else {
     if (v->isValueList())
       ret = new JSCSSValueList(exec, static_cast<CSSValueList*>(v));
+#ifdef SVG_SUPPORT
+    else if (v->isSVGColor())
+      ret = new JSSVGColor(exec, static_cast<SVGColor*>(v));
+    else if (v->isSVGPaint())
+      ret = new JSSVGPaint(exec, static_cast<SVGPaint*>(v));
+#endif
     else if (v->isPrimitiveValue())
       ret = new JSCSSPrimitiveValue(exec, static_cast<CSSPrimitiveValue*>(v));
     else

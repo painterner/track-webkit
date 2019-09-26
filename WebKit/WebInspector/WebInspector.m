@@ -82,6 +82,7 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
 
     _private = [[WebInspectorPrivate alloc] init];
     _private->ignoreWhitespace = YES;
+    _private->showUserAgentStyles = YES;
 
     return self;
 }
@@ -122,10 +123,17 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
         [window setDelegate:self];
         [window setMinSize:NSMakeSize(280.0f, 450.0f)];
 
-        // Keep preferences separate from the rest of the client.
+        // Keep preferences separate from the rest of the client, making sure we are using expected preference values.
         // One reason this is good is that it keeps the inspector out of history via "private browsing".
         WebPreferences *preferences = [[WebPreferences alloc] init];
         [preferences setPrivateBrowsingEnabled:YES];
+        [preferences setLoadsImagesAutomatically:YES];
+        [preferences setPlugInsEnabled:YES];
+        [preferences setJavaScriptEnabled:YES];
+        [preferences setUserStyleSheetEnabled:NO];
+        [preferences setTabsToLinks:NO];
+        [preferences setMinimumFontSize:0];
+        [preferences setMinimumLogicalFontSize:9];
 
         _private->webView = [[WebView alloc] initWithFrame:[[window contentView] frame] frameName:nil groupName:nil];
         [_private->webView setPreferences:preferences];
@@ -135,7 +143,6 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
         [_private->webView setProhibitsMainFrameScrolling:YES];
         [_private->webView _setDashboardBehavior:WebDashboardBehaviorAlwaysSendMouseEventsToAllWindows to:YES];
         [_private->webView _setDashboardBehavior:WebDashboardBehaviorAlwaysAcceptsFirstMouse to:YES];
-        [[_private->webView windowScriptObject] setValue:self forKey:@"Inspector"];
 
         [preferences release];
 
@@ -188,7 +195,7 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
         [[NSNotificationCenter defaultCenter] removeObserver:self name:WebViewProgressFinishedNotification object:[_private->webFrame webView]];
         [_private->webFrame _removeInspector:self];
     }
-    
+
     [webFrame retain];
     [_private->webFrame release];
     _private->webFrame = webFrame;
@@ -326,6 +333,13 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
     [item setState:_private->ignoreWhitespace];
     [menu addItem:item];
 
+    item = [[[NSMenuItem alloc] init] autorelease];
+    [item setTitle:@"Show User Agent Styles"];
+    [item setTarget:self];
+    [item setAction:@selector(_toggleShowUserAgentStyles:)];
+    [item setState:_private->showUserAgentStyles];
+    [menu addItem:item];
+
     [NSMenu popUpContextMenu:menu withEvent:[[self window] currentEvent] forView:_private->webView];
     [menu release];
 
@@ -391,15 +405,15 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
 
         NSNumber *baseValue = [topArea valueForKey:@"clientHeight"];
         NSString *newValue = [NSString stringWithFormat:@"%dpx", [baseValue unsignedLongValue] - delta];
-        [[topArea style] setProperty:@"height" :newValue :@""];
+        [[topArea style] setProperty:@"height" value:newValue priority:@""];
 
         baseValue = [splitter valueForKey:@"offsetTop"];
         newValue = [NSString stringWithFormat:@"%dpx", [baseValue unsignedLongValue] - delta];
-        [[splitter style] setProperty:@"top" :newValue :@""];
+        [[splitter style] setProperty:@"top" value:newValue priority:@""];
 
         baseValue = [bottomArea valueForKey:@"offsetTop"];
         newValue = [NSString stringWithFormat:@"%dpx", [baseValue unsignedLongValue] - delta];
-        [[bottomArea style] setProperty:@"top" :newValue :@""];
+        [[bottomArea style] setProperty:@"top" value:newValue priority:@""];
 
         [window setFrame:proposedRect display:YES];
         lastLocation = newLocation;
@@ -530,6 +544,13 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
     [self _updateTreeScrollbar];
 }
 
+- (IBAction)_toggleShowUserAgentStyles:(id)sender
+{
+    _private->showUserAgentStyles = !_private->showUserAgentStyles;
+    if (_private->webViewLoaded)
+        [[_private->webView windowScriptObject] evaluateWebScript:@"toggleShowUserAgentStyles()"];
+}
+
 - (void)_highlightNode:(DOMNode *)node
 {
     if (_private->currentHighlight) {
@@ -543,10 +564,14 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
     if (!NSIsEmptyRect(bounds)) {
         NSArray *rects = nil;
         if ([node isKindOfClass:[DOMElement class]]) {
-            DOMCSSStyleDeclaration *style = [_private->domDocument getComputedStyle:(DOMElement *)node :@""];
+            DOMCSSStyleDeclaration *style = [_private->domDocument getComputedStyle:(DOMElement *)node pseudoElement:@""];
             if ([[style getPropertyValue:@"display"] isEqualToString:@"inline"])
                 rects = [node lineBoxRects];
-        } else if ([node isKindOfClass:[DOMText class]])
+        } else if ([node isKindOfClass:[DOMText class]]
+#ifdef SVG_SUPPORT
+                   && ![[node parentNode] isKindOfClass:NSClassFromString(@"DOMSVGElement")]
+#endif
+                  )
             rects = [node lineBoxRects];
 
         if (![rects count])
@@ -572,10 +597,10 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
 
 - (void)_focusRootNode:(id)sender
 {
-    int index = [sender selectedRow];
-    if (index == -1 || !sender)
+    int index = [_private->treeOutlineView selectedRow];
+    if (index == -1 || !_private->treeOutlineView)
         return;
-    DOMNode *node = [sender itemAtRow:index];
+    DOMNode *node = [_private->treeOutlineView itemAtRow:index];
     if (![node isSameNode:[self rootDOMNode]])
         [self setRootDOMNode:node];
 }
@@ -738,10 +763,7 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
     if (!_private->webViewLoaded || _private->searchResultsVisible)
         return;
 
-    DOMHTMLElement *titleArea = (DOMHTMLElement *)[_private->domDocument getElementById:@"treePopupTitleArea"];
-    [titleArea setTextContent:[[self rootDOMNode] _displayName]];
-
-    DOMHTMLElement *popup = (DOMHTMLElement *)[_private->domDocument getElementById:@"realTreePopup"];
+    DOMHTMLElement *popup = (DOMHTMLElement *)[_private->domDocument getElementById:@"treePopup"];
     [popup setInnerHTML:@""]; // reset the list
 
     DOMNode *currentNode = [self rootDOMNode];
@@ -785,7 +807,7 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
         [[[_private->domDocument getElementsByTagName:@"head"] item:0] appendChild:style];
     }
 
-    [style setAttribute:@"id" :@"systemColors"];
+    [style setAttribute:@"id" value:@"systemColors"];
     [style setTextContent:styleText];
 }
 
@@ -998,7 +1020,7 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
     return nil;
 }
 
-- (void)outlineView:(NSOutlineView *)outlineView willDisplayOutlineCell:(id)cell forTableColumn:(NSTableColumn *)tableColumn item:(id)item
+- (void)outlineView:(NSOutlineView *)outlineView willDisplayOutlineCell:(NSCell *)cell forTableColumn:(NSTableColumn *)tableColumn item:(id)item
 {
     if (outlineView == _private->treeOutlineView)
         [cell setImage:([cell state] ? _private->downArrowImage : _private->rightArrowImage)];
@@ -1126,8 +1148,10 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
 
 - (unsigned long)_lengthOfChildNodesIgnoringWhitespace
 {
-    if (!lengthIgnoringWhitespaceCache)
-        lengthIgnoringWhitespaceCache = NSCreateMapTable(NSObjectMapKeyCallBacks, NSIntMapValueCallBacks, 300);
+    if (!lengthIgnoringWhitespaceCache) {
+        NSMapTableValueCallBacks integerMapValueCallBacks = {NULL, NULL, NULL};
+        lengthIgnoringWhitespaceCache = NSCreateMapTable(NSObjectMapKeyCallBacks, integerMapValueCallBacks, 300);
+    }
 
     void *lookup = NSMapGet(lengthIgnoringWhitespaceCache, self);
     if (lookup)
@@ -1149,10 +1173,12 @@ static NSMapTable *lastChildIgnoringWhitespaceCache = NULL;
     unsigned long count = 0;
     DOMNode *node = nil;
 
-    if (!lastChildIndexIgnoringWhitespaceCache)
-        lastChildIndexIgnoringWhitespaceCache = NSCreateMapTable(NSObjectMapKeyCallBacks, NSIntMapValueCallBacks, 300);
     if (!lastChildIgnoringWhitespaceCache)
         lastChildIgnoringWhitespaceCache = NSCreateMapTable(NSObjectMapKeyCallBacks, NSObjectMapValueCallBacks, 300);
+    if (!lastChildIndexIgnoringWhitespaceCache) {
+        NSMapTableValueCallBacks integerMapValueCallBacks = {NULL, NULL, NULL};
+        lastChildIndexIgnoringWhitespaceCache = NSCreateMapTable(NSObjectMapKeyCallBacks, integerMapValueCallBacks, 300);
+    }
 
     void *cachedLastIndex = NSMapGet(lastChildIndexIgnoringWhitespaceCache, self);
     if (cachedLastIndex) {

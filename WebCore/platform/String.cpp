@@ -23,7 +23,9 @@
 #include "config.h"
 #include "PlatformString.h"
 
+#include "CString.h"
 #include "DeprecatedString.h"
+#include "TextEncoding.h"
 #include <kjs/identifier.h>
 #include <wtf/Vector.h>
 #include <stdarg.h>
@@ -155,6 +157,14 @@ void String::insert(const String& str, unsigned pos)
         m_impl->insert(str.m_impl.get(), pos);
 }
 
+void String::insert(const UChar* str, unsigned length, unsigned pos)
+{
+    if (!m_impl)
+        m_impl = new StringImpl(str, length);
+    else
+        m_impl->insert(str, length, pos);
+}
+
 UChar String::operator[](unsigned i) const
 {
     if (!m_impl || i >= m_impl->length())
@@ -188,13 +198,6 @@ String String::substring(unsigned pos, unsigned len) const
     return m_impl->substring(pos, len);
 }
 
-String String::split(unsigned pos)
-{
-    if (!m_impl)
-        return String();
-    return m_impl->split(pos);
-}
-
 String String::lower() const
 {
     if (!m_impl)
@@ -207,6 +210,20 @@ String String::upper() const
     if (!m_impl)
         return String();
     return m_impl->upper();
+}
+
+String String::stripWhiteSpace() const
+{
+    if (!m_impl)
+        return String();
+    return m_impl->stripWhiteSpace();
+}
+
+String String::simplifyWhiteSpace() const
+{
+    if (!m_impl)
+        return String();
+    return m_impl->simplifyWhiteSpace();
 }
 
 String String::foldCase() const
@@ -251,43 +268,31 @@ DeprecatedString String::deprecatedString() const
     return DeprecatedString(reinterpret_cast<const DeprecatedChar*>(m_impl->characters()), m_impl->length());
 }
 
-String String::sprintf(const char *format, ...)
+String String::format(const char *format, ...)
 {
     va_list args;
     va_start(args, format);
 
     Vector<char, 256> buffer;
-#if PLATFORM(WIN_OS)
-    // Windows vsnprintf does not return the expected size on overflow
-    // So we just have to keep looping until our vsprintf call works!
-    int result = 0;
-    do {
-        if (result < 0)
-            buffer.resize(buffer.capacity() * 2);
-        result = vsnprintf(buffer.data(), buffer.capacity(), format, args);
-        // Windows vsnprintf returns -1 for both errors. Since there is no
-        // way to distinguish between "not enough room" and "invalid format"
-        // we just keep trying until we hit an arbitrary size and then stop.
-    } while (result < 0 && (buffer.capacity() * 2) < 2048);
-    if (result == 0)
-        return String("");
-    else if (result < 0)
-        return String();
-    unsigned len = result;
-#else
+
     // Do the format once to get the length.
+#if PLATFORM(WIN_OS)
+    int result = _vscprintf(format, args);
+#else
     char ch;
     int result = vsnprintf(&ch, 1, format, args);
+#endif
+
     if (result == 0)
         return String("");
-    else if (result < 0)
+    if (result < 0)
         return String();
     unsigned len = result;
     buffer.resize(len + 1);
     
     // Now do the formatting again, guaranteed to fit.
     vsnprintf(buffer.data(), buffer.size(), format, args);
-#endif
+
     va_end(args);
     
     return new StringImpl(buffer.data(), len);
@@ -295,45 +300,45 @@ String String::sprintf(const char *format, ...)
 
 String String::number(int n)
 {
-    return String::sprintf("%d", n);
+    return String::format("%d", n);
 }
 
 String String::number(unsigned n)
 {
-    return String::sprintf("%u", n);
+    return String::format("%u", n);
 }
 
 String String::number(long n)
 {
-    return String::sprintf("%ld", n);
+    return String::format("%ld", n);
 }
 
 String String::number(unsigned long n)
 {
-    return String::sprintf("%lu", n);
+    return String::format("%lu", n);
 }
 
 String String::number(long long n)
 {
 #if PLATFORM(WIN_OS)
-    return String::sprintf("%I64i", n);
+    return String::format("%I64i", n);
 #else
-    return String::sprintf("%lli", n);
+    return String::format("%lli", n);
 #endif
 }
 
 String String::number(unsigned long long n)
 {
 #if PLATFORM(WIN_OS)
-    return String::sprintf("%I64u", n);
+    return String::format("%I64u", n);
 #else
-    return String::sprintf("%llu", n);
+    return String::format("%llu", n);
 #endif
 }
     
 String String::number(double n)
 {
-    return String::sprintf("%.6lg", n);
+    return String::format("%.6lg", n);
 }
 
 int String::toInt(bool* ok) const
@@ -344,6 +349,16 @@ int String::toInt(bool* ok) const
         return 0;
     }
     return m_impl->toInt(ok);
+}
+
+double String::toDouble(bool* ok) const
+{
+    if (!m_impl) {
+        if (ok)
+            *ok = false;
+        return 0;
+    }
+    return m_impl->toDouble(ok);
 }
 
 String String::copy() const
@@ -368,6 +383,30 @@ Length* String::toLengthArray(int& len) const
     return m_impl ? m_impl->toLengthArray(len) : 0;
 }
 
+Vector<String> String::split(const String& separator, bool allowEmptyEntries) const
+{
+    Vector<String> result;
+    
+    int startPos = 0;
+    int endPos;
+    while ((endPos = find(separator, startPos)) != -1) {
+        if (allowEmptyEntries || startPos != endPos)
+            result.append(substring(startPos, endPos - startPos));
+        startPos = endPos + separator.length();
+    }
+    if (allowEmptyEntries || startPos != (int)length())
+        result.append(substring(startPos));
+    
+    return result;
+}
+
+Vector<String> String::split(UChar separator, bool allowEmptyEntries) const
+{
+    Vector<String> result;
+  
+    return split(String(&separator, 1), allowEmptyEntries);
+}
+
 #ifndef NDEBUG
 Vector<char> String::ascii() const
 {
@@ -383,6 +422,16 @@ Vector<char> String::ascii() const
     return buffer;
 }
 #endif
+
+CString String::latin1() const
+{
+    return Latin1Encoding().encode(characters(), length());
+}
+    
+CString String::utf8() const
+{
+    return UTF8Encoding().encode(characters(), length());
+}
 
 bool operator==(const String& a, const DeprecatedString& b)
 {
@@ -428,6 +477,20 @@ String::operator UString() const
     if (!m_impl)
         return UString();
     return UString(reinterpret_cast<const KJS::UChar*>(m_impl->characters()), m_impl->length());
+}
+
+String String::newUninitialized(size_t length, UChar*& characterBuffer)
+{
+    return StringImpl::newUninitialized(length, characterBuffer);
+}
+
+String String::adopt(Vector<UChar>& buffer)
+{
+    // For an empty buffer, construct an empty string, not a null string,
+    // and use a standard constructor so we get the shared empty string.
+    if (buffer.isEmpty())
+        return "";
+    return StringImpl::adopt(buffer);
 }
 
 } // namespace WebCore

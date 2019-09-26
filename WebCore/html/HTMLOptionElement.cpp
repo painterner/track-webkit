@@ -29,6 +29,7 @@
 
 #include "Document.h"
 #include "ExceptionCode.h"
+#include "EventNames.h"
 #include "HTMLNames.h"
 #include "HTMLSelectElement.h"
 #include "RenderMenuList.h"
@@ -39,6 +40,7 @@
 namespace WebCore {
 
 using namespace HTMLNames;
+using namespace EventNames;
 
 HTMLOptionElement::HTMLOptionElement(Document* doc, HTMLFormElement* f)
     : HTMLGenericFormElement(optionTag, doc, f)
@@ -159,7 +161,7 @@ String HTMLOptionElement::value() const
     if ( !m_value.isNull() )
         return m_value;
     // Use the text if the value wasn't set.
-    return text().deprecatedString().stripWhiteSpace();
+    return text().stripWhiteSpace();
 }
 
 void HTMLOptionElement::setValue(const String& value)
@@ -169,7 +171,7 @@ void HTMLOptionElement::setValue(const String& value)
 
 void HTMLOptionElement::setSelected(bool selected)
 {
-    if (m_selected == selected)
+    if (m_selected == selected || disabled())
         return;
     m_selected = selected;
     if (HTMLSelectElement* select = getSelect())
@@ -236,6 +238,11 @@ String HTMLOptionElement::optionText()
         itemText.prepend("    ");
         
     return itemText;
+}
+
+bool HTMLOptionElement::disabled() const
+{ 
+    return HTMLGenericFormElement::disabled() || (parentNode() && static_cast<HTMLGenericFormElement*>(parentNode())->disabled()); 
 }
 
 } // namespace

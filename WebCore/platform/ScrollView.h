@@ -26,12 +26,23 @@
 #ifndef ScrollView_H
 #define ScrollView_H
 
-#include "ScrollBarMode.h"
+#include "ScrollTypes.h"
 #include "Widget.h"
-#include <wtf/Platform.h>
+
+#if PLATFORM(QT)
+class QScrollArea;
+#endif
+
+#if PLATFORM(WIN)
+typedef struct HRGN__* HRGN;
+#endif
 
 namespace WebCore {
+
     class FloatRect;
+    class IntRect;
+    class PlatformWheelEvent;
+    class PlatformScrollbar;
 
     class ScrollView : public Widget {
     public:
@@ -48,42 +59,71 @@ namespace WebCore {
 
         virtual void setContentsPos(int x, int y);
 
-        virtual void setVScrollBarMode(ScrollBarMode);
-        virtual void setHScrollBarMode(ScrollBarMode);
+        virtual void setVScrollbarMode(ScrollbarMode);
+        virtual void setHScrollbarMode(ScrollbarMode);
 
-        // Set the mode for both scroll bars at once.
-        virtual void setScrollBarsMode(ScrollBarMode);
+        // Set the mode for both scrollbars at once.
+        virtual void setScrollbarsMode(ScrollbarMode);
 
         // This gives us a means of blocking painting on our scrollbars until the first layout has occurred.
-        void suppressScrollBars(bool suppressed, bool repaintOnUnsuppress = false);
+        void suppressScrollbars(bool suppressed, bool repaintOnUnsuppress = false);
         
-        ScrollBarMode vScrollBarMode() const;
-        ScrollBarMode hScrollBarMode() const;
+        ScrollbarMode vScrollbarMode() const;
+        ScrollbarMode hScrollbarMode() const;
 
-        void addChild(Widget*, int x = 0, int y = 0);
+        void addChild(Widget*);
         void removeChild(Widget*);
 
         virtual void resizeContents(int w, int h);
         void updateContents(const IntRect&, bool now = false);
 
-        IntPoint contentsToViewport(const IntPoint&);
-        IntPoint viewportToContents(const IntPoint&);
-
+        // Event coordinates are assumed to be in the coordinate space of a window that contains
+        // the entire widget hierarchy.  It is up to the platform to decide what the precise definition
+        // of containing window is.  (For example on Mac it is the containing NSWindow.)
+        IntPoint windowToContents(const IntPoint&) const;
+        IntPoint contentsToWindow(const IntPoint&) const;
+ 
         void setStaticBackground(bool);
 
         bool inWindow() const;
 
-#if __APPLE__
+        // For platforms that need to hit test scrollbars from within the engine's event handlers (like Win32).
+        PlatformScrollbar* scrollbarUnderMouse(const PlatformMouseEvent& mouseEvent);
+
+        // This method exists for scrollviews that need to handle wheel events manually.
+        // On Mac the underlying NSScrollView just does the scrolling, but on other platforms
+        // (like Windows), we need this method in order to do the scroll ourselves.
+        void wheelEvent(PlatformWheelEvent&);
+
+        void scroll(ScrollDirection, ScrollGranularity);
+
+#if PLATFORM(MAC)
         NSView* getDocumentView() const;
 #endif
 
 #if PLATFORM(WIN)
         ScrollView();
         ~ScrollView();
+
+        virtual void paint(GraphicsContext*, const IntRect&);
+        virtual void themeChanged();
+        
+        virtual IntPoint convertChildToSelf(const Widget*, const IntPoint&) const;
+        virtual IntPoint convertSelfToChild(const Widget*, const IntPoint&) const;
+        
+        virtual void geometryChanged() const;
+        virtual void setFrameGeometry(const IntRect&);
+        
+        IntRect windowResizerRect();
+        bool resizerOverlapsContent() const;
+
+        void addToDirtyRegion(const IntRect&);
+        void scrollBackingStore(int dx, int dy, const IntRect& scrollViewRect, const IntRect& clipRect);
+        void updateBackingStore();
+
     private:
-        void updateScrollBars();
+        void updateScrollbars(const IntSize& desiredOffset);
         IntSize maximumScroll() const;
-        int updateScrollInfo(short type, int current, int max, int pageSize);
         class ScrollViewPrivate;
         ScrollViewPrivate* m_data;
 #endif
@@ -95,11 +135,21 @@ namespace WebCore {
         ScrollView();
         ~ScrollView();
     private:
-        void updateScrollBars();
+        void updateScrollbars();
         IntSize maximumScroll() const;
         int updateScrollInfo(short type, int current, int max, int pageSize);
         class ScrollViewPrivate;
         ScrollViewPrivate* m_data;
+#endif
+
+#if PLATFORM(QT)
+        ScrollView();
+        ~ScrollView();
+
+        virtual void setParentWidget(QWidget*);
+
+    private:
+        QScrollArea* m_area;
 #endif
     };
 

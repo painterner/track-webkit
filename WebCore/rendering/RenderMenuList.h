@@ -24,14 +24,24 @@
 #define RenderMenuList_H
 
 #include "RenderFlexibleBox.h"
+#include "PopupMenuClient.h"
+#include "PopupMenu.h"
+
+#if PLATFORM(MAC)
+#define POPUP_MENU_PULLS_DOWN 0
+#else
+#define POPUP_MENU_PULLS_DOWN 1
+#endif
 
 namespace WebCore {
 
 class HTMLSelectElement;
+class PopupMenu;
 
-class RenderMenuList : public RenderFlexibleBox {
+class RenderMenuList : public RenderFlexibleBox, public PopupMenuClient {
 public:
     RenderMenuList(HTMLSelectElement*);
+    ~RenderMenuList();
 
     virtual bool isMenuList() const { return true; }
 
@@ -49,12 +59,40 @@ public:
 
     virtual void calcMinMaxWidth();
 
+    RefPtr<PopupMenu> popup() const { return m_popup; }
+    bool popupIsVisible() const { return m_popupIsVisible; }
     void showPopup();
+    void hidePopup();
 
     void setOptionsChanged(bool c) { m_optionsChanged = c; }
-    void valueChanged(unsigned listIndex);
+    void valueChanged(unsigned listIndex, bool fireOnChange = true);
 
     String text();
+    void setTextFromOption(int optionIndex);
+    
+    // PopupClient methods
+    String itemText(unsigned listIndex) const;
+    bool itemIsEnabled(unsigned listIndex) const;
+    RenderStyle* itemStyle(unsigned listIndex) const;
+    RenderStyle* clientStyle() const;
+    Document* clientDocument() const;
+    int clientPaddingLeft() const;
+    int clientPaddingRight() const;
+    unsigned listSize() const;
+    int selectedIndex() const;
+    bool itemIsSeparator(unsigned listIndex) const;
+    bool itemIsLabel(unsigned listIndex) const;
+    bool itemIsSelected(unsigned listIndex) const;
+    void setTextFromItem(unsigned listIndex);
+    bool valueShouldChangeOnHotTrack() const { return true; }
+#if POPUP_MENU_PULLS_DOWN
+    bool shouldPopOver() const { return false; }
+#else
+    bool shouldPopOver() const { return true; }
+#endif
+
+protected:
+    virtual bool hasLineIfEmpty() const { return true; }
 
 private:
     void createInnerBlock();
@@ -65,6 +103,9 @@ private:
 
     bool m_optionsChanged;
     int m_optionsWidth;
+
+    RefPtr<PopupMenu> m_popup;
+    bool m_popupIsVisible;
 };
 
 }

@@ -29,12 +29,18 @@
 
 #include "StringImpl.h"
 
-#if __APPLE__
-#include <CoreFoundation/CoreFoundation.h>
+#if PLATFORM(CF)
+typedef const struct __CFString * CFStringRef;
+#endif
+
+#if PLATFORM(QT)
+class QString;
 #endif
 
 namespace WebCore {
 
+class CString;
+    
 /**
  * Currently, strings are explicitly shared (they behave like pointers), meaning
  * that modifications to one instance will also modify all others. If you
@@ -52,6 +58,9 @@ public:
     String(const char*);
     String(const char*, unsigned length);
     String(StringImpl* i) : m_impl(i) { }
+
+    static String newUninitialized(size_t length, UChar*& characterBuffer);
+    static String adopt(Vector<UChar>&);
 
     operator KJS::Identifier() const;
     operator KJS::UString() const;
@@ -72,6 +81,11 @@ public:
         { return m_impl ? m_impl->find(str, start, caseSensitive) : -1; }
     int find(const String& str, int start = 0, bool caseSensitive = true) const
         { return m_impl ? m_impl->find(str.impl(), start, caseSensitive) : -1; }
+
+    int reverseFind(UChar c, int start = -1) const
+        { return m_impl ? m_impl->reverseFind(c, start) : -1; }
+    int reverseFind(const String& str, int start = -1, bool caseSensitive = true) const
+        { return m_impl ? m_impl->reverseFind(str.impl(), start, caseSensitive) : -1; }
     
     bool startsWith(const String& s, bool caseSensitive = true) const
         { return m_impl ? m_impl->startsWith(s.impl(), caseSensitive) : s.isEmpty(); }
@@ -82,6 +96,7 @@ public:
     void append(char);
     void append(UChar);
     void insert(const String&, unsigned pos);
+    void insert(const UChar*, unsigned length, unsigned pos);
 
     String& replace(UChar a, UChar b) { if (m_impl) m_impl = m_impl->replace(a, b); return *this; }
     String& replace(UChar a, const String& b) { if (m_impl) m_impl = m_impl->replace(a, b.impl()); return *this; }
@@ -94,13 +109,13 @@ public:
     String left(unsigned len) const { return substring(0, len); }
     String right(unsigned len) const { return substring(length() - len, len); }
 
-    // Splits the string into two. The original string gets truncated to pos, and the rest is returned.
-    String split(unsigned pos);
-
     // Returns a lowercase/uppercase version of the string
     String lower() const;
     String upper() const;
 
+    String stripWhiteSpace() const;
+    String simplifyWhiteSpace() const;
+    
     // Return the string with case folded for case insensitive comparison.
     String foldCase() const;
 
@@ -112,13 +127,17 @@ public:
     static String number(unsigned long long);
     static String number(double);
     
-    static String sprintf(const char *, ...)
+    static String format(const char *, ...)
 #if __GNUC__
         __attribute__ ((format (printf, 1, 2)))
 #endif
         ;
 
+    Vector<String> split(const String& separator, bool allowEmptyEntries = false) const;
+    Vector<String> split(UChar separator, bool allowEmptyEntries = false) const;
+
     int toInt(bool* ok = 0) const;
+    double toDouble(bool* ok = 0) const;
     Length* toLengthArray(int& len) const;
     Length* toCoordsArray(int& len) const;
     bool percentage(int &_percentage) const;
@@ -130,13 +149,28 @@ public:
 
     StringImpl* impl() const { return m_impl.get(); }
 
-#if __APPLE__
+#if PLATFORM(CF)
     String(CFStringRef);
-    CFStringRef createCFString() const { return m_impl ? m_impl->createCFString() : CFSTR(""); }
+    CFStringRef createCFString() const;
 #endif
+
 #ifdef __OBJC__
     String(NSString*);
+    
+    // This conversion maps NULL to "", which loses the meaning of NULL, but we 
+    // need this mapping because AppKit crashes when passed nil NSStrings.
     operator NSString*() const { if (!m_impl) return @""; return *m_impl; }
+#endif
+
+#if PLATFORM(QT)
+    String(const QString&);
+    operator QString() const;
+#endif
+
+#if PLATFORM(SYMBIAN)
+    String(const TDesC&);
+    operator TPtrC() const { return des(); }
+    TPtrC des() const { if (!m_impl) return KNullDesC(); return m_impl->des(); }
 #endif
 
 #ifndef NDEBUG
@@ -144,6 +178,9 @@ public:
     Vector<char> ascii() const;
 #endif
 
+    CString latin1() const;
+    CString utf8() const;
+    
     String(const DeprecatedString&);
     DeprecatedString deprecatedString() const;
     
@@ -173,6 +210,15 @@ bool operator==(const String& a, const DeprecatedString& b);
 inline bool operator==(const DeprecatedString& b, const String& a) { return a == b; }
 inline bool operator!=(const String& a, const DeprecatedString& b) { return !(a == b); }
 inline bool operator!=(const DeprecatedString& b, const String& a ) { return !(a == b); }
+
+inline bool operator!(const String& str) { return str.isNull(); }
+
+#ifdef __OBJC__
+// This is for situations in WebKit where the long standing behavior has been
+// "nil if empty", so we try to maintain longstanding behavior for the sake of
+// entrenched clients
+inline NSString* nsStringNilIfEmpty(const String& str) {  return str.isEmpty() ? nil : (NSString*)str; }
+#endif
 
 }
 

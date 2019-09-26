@@ -20,40 +20,35 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef RenderContainer_H
-#define RenderContainer_H
+#ifndef RenderContainer_h
+#define RenderContainer_h
 
 #include "RenderBox.h"
 
 namespace WebCore {
 
-class Position;
-
-/**
- * Base class for rendering objects that can have children
- */
-class RenderContainer : public RenderBox
-{
+// Base class for rendering objects that can have children.
+class RenderContainer : public RenderBox {
 public:
     RenderContainer(Node*);
     virtual ~RenderContainer();
 
-    RenderObject *firstChild() const { return m_first; }
-    RenderObject *lastChild() const { return m_last; }
+    virtual RenderObject* firstChild() const { return m_firstChild; }
+    virtual RenderObject* lastChild() const { return m_lastChild; }
 
     virtual bool canHaveChildren() const;
-    virtual void addChild(RenderObject *newChild, RenderObject *beforeChild = 0);
-    virtual void removeChild(RenderObject *oldChild);
+    virtual void addChild(RenderObject* newChild, RenderObject* beforeChild = 0);
+    virtual void removeChild(RenderObject*);
 
     virtual void destroy();
     void destroyLeftoverChildren();
-    
-    virtual RenderObject* removeChildNode(RenderObject* child);
-    virtual void appendChildNode(RenderObject* child);
+
+    virtual RenderObject* removeChildNode(RenderObject*);
+    virtual void appendChildNode(RenderObject*);
     virtual void insertChildNode(RenderObject* child, RenderObject* before);
 
     virtual void layout();
-    virtual void calcMinMaxWidth() { setMinMaxKnown( true ); }
+    virtual void calcMinMaxWidth() { setMinMaxKnown(true); }
 
     virtual void removeLeftoverAnonymousBoxes();
 
@@ -62,17 +57,14 @@ public:
     void updatePseudoChildForObject(RenderStyle::PseudoId, RenderObject*);
 
     virtual VisiblePosition positionForCoordinates(int x, int y);
-    
-    virtual DeprecatedValueList<IntRect> lineBoxRects();
 
-protected:
-    void setFirstChild(RenderObject *first) { m_first = first; }
-    void setLastChild(RenderObject *last) { m_last = last; }
+    virtual void addLineBoxRects(Vector<IntRect>&, unsigned startOffset = 0, unsigned endOffset = UINT_MAX);
 
-protected:
-    RenderObject *m_first;
-    RenderObject *m_last;
+private:
+    RenderObject* m_firstChild;
+    RenderObject* m_lastChild;
 };
 
-}
-#endif
+} // namespace WebCore
+
+#endif // RenderContainer_h

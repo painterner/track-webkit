@@ -39,10 +39,11 @@
 #include "SVGStyledElement.h"
 #include "CSSValueKeywords.h"
 #include "CSSValueList.h"
-#include "ksvg.h"
 #include "ksvgcssvalues.h"
 #include "ksvgcssproperties.h"
 #include <stdlib.h>
+#include <math.h>
+#include <wtf/MathExtras.h>
 
 #define HANDLE_INHERIT(prop, Prop) \
 if (isInherit) \
@@ -298,10 +299,10 @@ void CSSStyleSelector::applySVGProperty(int id, CSSValue* value)
             switch (primitiveValue->getIdent())
             {
                 case SVGCSS_VAL_NONZERO:
-                    svgstyle->setClipRule(WR_NONZERO);
+                    svgstyle->setClipRule(RULE_NONZERO);
                     break;
                 case SVGCSS_VAL_EVENODD:
-                    svgstyle->setClipRule(WR_EVENODD);
+                    svgstyle->setClipRule(RULE_EVENODD);
                     break;
                 default:
                     break;
@@ -318,10 +319,10 @@ void CSSStyleSelector::applySVGProperty(int id, CSSValue* value)
             switch (primitiveValue->getIdent())
             {
                 case SVGCSS_VAL_NONZERO:
-                    svgstyle->setFillRule(WR_NONZERO);
+                    svgstyle->setFillRule(RULE_NONZERO);
                     break;
                 case SVGCSS_VAL_EVENODD:
-                    svgstyle->setFillRule(WR_EVENODD);
+                    svgstyle->setFillRule(RULE_EVENODD);
                 default:
                     return;
             }
@@ -338,13 +339,13 @@ void CSSStyleSelector::applySVGProperty(int id, CSSValue* value)
             switch (primitiveValue->getIdent())
             {
                 case SVGCSS_VAL_MITER:
-                    svgstyle->setJoinStyle(JS_MITER);
+                    svgstyle->setJoinStyle(MiterJoin);
                     break;
                 case CSS_VAL_ROUND:
-                    svgstyle->setJoinStyle(JS_ROUND);
+                    svgstyle->setJoinStyle(RoundJoin);
                     break;
                 case SVGCSS_VAL_BEVEL:
-                    svgstyle->setJoinStyle(JS_BEVEL);
+                    svgstyle->setJoinStyle(BevelJoin);
                 default:
                     return;
             }
@@ -479,10 +480,10 @@ void CSSStyleSelector::applySVGProperty(int id, CSSValue* value)
             if (!primitiveValue)
                 return;
 
-            DeprecatedString s;
+            String s;
             int type = primitiveValue->primitiveType();
             if (type == CSSPrimitiveValue::CSS_URI)
-                s = primitiveValue->getStringValue().deprecatedString();
+                s = primitiveValue->getStringValue();
             else
                 return;
 
@@ -495,10 +496,10 @@ void CSSStyleSelector::applySVGProperty(int id, CSSValue* value)
             if (!primitiveValue)
                 return;
 
-            DeprecatedString s;
+            String s;
             int type = primitiveValue->primitiveType();
             if (type == CSSPrimitiveValue::CSS_URI)
-                s = primitiveValue->getStringValue().deprecatedString();
+                s = primitiveValue->getStringValue();
             else
                 return;
 
@@ -511,10 +512,10 @@ void CSSStyleSelector::applySVGProperty(int id, CSSValue* value)
             if (!primitiveValue)
                 return;
 
-            DeprecatedString s;
+            String s;
             int type = primitiveValue->primitiveType();
             if (type == CSSPrimitiveValue::CSS_URI)
-                s = primitiveValue->getStringValue().deprecatedString();
+                s = primitiveValue->getStringValue();
             else
                 return;
 
@@ -530,13 +531,13 @@ void CSSStyleSelector::applySVGProperty(int id, CSSValue* value)
             switch (primitiveValue->getIdent())
             {
                 case SVGCSS_VAL_BUTT:
-                    svgstyle->setCapStyle(CS_BUTT);
+                    svgstyle->setCapStyle(ButtCap);
                     break;
                 case CSS_VAL_ROUND:
-                    svgstyle->setCapStyle(CS_ROUND);
+                    svgstyle->setCapStyle(RoundCap);
                     break;
                 case CSS_VAL_SQUARE:
-                    svgstyle->setCapStyle(CS_SQUARE);
+                    svgstyle->setCapStyle(SquareCap);
                 default:
                     return;
             }
@@ -565,10 +566,10 @@ void CSSStyleSelector::applySVGProperty(int id, CSSValue* value)
             if (!primitiveValue)
                 return;
 
-            DeprecatedString s;
+            String s;
             int type = primitiveValue->primitiveType();
             if (type == CSSPrimitiveValue::CSS_URI)
-                s = primitiveValue->getStringValue().deprecatedString();
+                s = primitiveValue->getStringValue();
             else
                 return;
             svgstyle->setFilter(s);
@@ -580,10 +581,10 @@ void CSSStyleSelector::applySVGProperty(int id, CSSValue* value)
             if (!primitiveValue)
                 return;
 
-            DeprecatedString s;
+            String s;
             int type = primitiveValue->primitiveType();
             if (type == CSSPrimitiveValue::CSS_URI)
-                s = primitiveValue->getStringValue().deprecatedString();
+                s = primitiveValue->getStringValue();
             else
                 return;
 
@@ -596,10 +597,10 @@ void CSSStyleSelector::applySVGProperty(int id, CSSValue* value)
             if (!primitiveValue)
                 return;
 
-            DeprecatedString s;
+            String s;
             int type = primitiveValue->primitiveType();
             if (type == CSSPrimitiveValue::CSS_URI)
-                s = primitiveValue->getStringValue().deprecatedString();
+                s = primitiveValue->getStringValue();
             else
                 return;
 

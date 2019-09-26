@@ -26,9 +26,10 @@
 
 #include "config.h"
 #include "RenderTableRow.h"
-#include "RenderTableCell.h"
+
 #include "Document.h"
 #include "HTMLNames.h"
+#include "RenderTableCell.h"
 
 namespace WebCore {
 
@@ -43,9 +44,8 @@ RenderTableRow::RenderTableRow(Node* node)
 
 void RenderTableRow::destroy()
 {
-    RenderTableSection *s = section();
-    if (s)
-        s->setNeedCellRecalc();
+    if (RenderTableSection* s = section())
+        s->setNeedsCellRecalc();
     
     RenderContainer::destroy();
 }
@@ -53,7 +53,7 @@ void RenderTableRow::destroy()
 void RenderTableRow::setStyle(RenderStyle* newStyle)
 {
     if (section() && style() && style()->height() != newStyle->height())
-        section()->setNeedCellRecalc();
+        section()->setNeedsCellRecalc();
 
     newStyle->setDisplay(TABLE_ROW);
 
@@ -94,7 +94,7 @@ void RenderTableRow::addChild(RenderObject* child, RenderObject* beforeChild)
         return;
     } 
     
-    // If the next renderer is actually wrapped in an anonymous table cell, we need to go up and find that
+    // If the next renderer is actually wrapped in an anonymous table cell, we need to go up and find that.
     while (beforeChild && !beforeChild->isTableCell())
         beforeChild = beforeChild->parent();
 
@@ -105,7 +105,7 @@ void RenderTableRow::addChild(RenderObject* child, RenderObject* beforeChild)
     RenderContainer::addChild(cell, beforeChild);
 
     if (beforeChild || nextSibling())
-        section()->setNeedCellRecalc();
+        section()->setNeedsCellRecalc();
 }
 
 void RenderTableRow::layout()
@@ -113,9 +113,9 @@ void RenderTableRow::layout()
     ASSERT(needsLayout());
     ASSERT(minMaxKnown());
 
-    for (RenderObject *child = firstChild(); child; child = child->nextSibling()) {
+    for (RenderObject* child = firstChild(); child; child = child->nextSibling()) {
         if (child->isTableCell()) {
-            RenderTableCell *cell = static_cast<RenderTableCell *>(child);
+            RenderTableCell* cell = static_cast<RenderTableCell*>(child);
             if (child->needsLayout()) {
                 cell->calcVerticalMargins();
                 cell->layout();
@@ -130,15 +130,14 @@ IntRect RenderTableRow::getAbsoluteRepaintRect()
     // For now, just repaint the whole table.
     // FIXME: Find a better way to do this, e.g., need to repaint all the cells that we
     // might have propagated a background color into.
-    RenderTable* parentTable = table();
-    if (parentTable)
+    if (RenderTable* parentTable = table())
         return parentTable->getAbsoluteRepaintRect();
-    else
-        return IntRect();
+
+    return IntRect();
 }
 
 // Hit Testing
-bool RenderTableRow::nodeAtPoint(NodeInfo& info, int x, int y, int tx, int ty, HitTestAction action)
+bool RenderTableRow::nodeAtPoint(const HitTestRequest& request, HitTestResult& result, int x, int y, int tx, int ty, HitTestAction action)
 {
     // Table rows cannot ever be hit tested.  Effectively they do not exist.
     // Just forward to our children always.
@@ -147,8 +146,8 @@ bool RenderTableRow::nodeAtPoint(NodeInfo& info, int x, int y, int tx, int ty, H
         // at the moment (a demoted inline <form> for example). If we ever implement a
         // table-specific hit-test method (which we should do for performance reasons anyway),
         // then we can remove this check.
-        if (!child->layer() && !child->isInlineFlow() && child->nodeAtPoint(info, x, y, tx, ty, action)) {
-            setInnerNode(info);
+        if (!child->layer() && !child->isInlineFlow() && child->nodeAtPoint(request, result, x, y, tx, ty, action)) {
+            setInnerNode(result);
             return true;
         }
     }
@@ -156,23 +155,23 @@ bool RenderTableRow::nodeAtPoint(NodeInfo& info, int x, int y, int tx, int ty, H
     return false;
 }
 
-void RenderTableRow::paint(PaintInfo& i, int tx, int ty)
+void RenderTableRow::paint(PaintInfo& paintInfo, int tx, int ty)
 {
-    assert(m_layer);
+    ASSERT(m_layer);
     if (!m_layer)
         return;
 
     for (RenderObject* child = firstChild(); child; child = child->nextSibling()) {
         if (child->isTableCell()) {
             // Paint the row background behind the cell.
-            if (i.phase == PaintPhaseBlockBackground || i.phase == PaintPhaseChildBlockBackground) {
+            if (paintInfo.phase == PaintPhaseBlockBackground || paintInfo.phase == PaintPhaseChildBlockBackground) {
                 RenderTableCell* cell = static_cast<RenderTableCell*>(child);
-                cell->paintBackgroundsBehindCell(i, tx, ty, this);
+                cell->paintBackgroundsBehindCell(paintInfo, tx, ty, this);
             }
             if (!child->layer())
-                child->paint(i, tx, ty);
+                child->paint(paintInfo, tx, ty);
         }
     }
 }
 
-}
+} // namespace WebCore

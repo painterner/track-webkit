@@ -24,12 +24,11 @@
 #include "config.h"
 #ifdef SVG_SUPPORT
 
-#include "ksvg.h"
-
 #include "SVGPaint.h"
 #include "CSSInheritedValue.h"
 #include "CSSInitialValue.h"
 #include "cssparser.h"
+#include "CSSProperty.h"
 #include "CSSPropertyNames.h"
 #include "CSSQuirkPrimitiveValue.h"
 #include "CSSValueKeywords.h"
@@ -41,15 +40,12 @@ using namespace std;
 
 namespace WebCore {
 
-typedef Value KDOMCSSValue;
-typedef ValueList KDOMCSSValueList;
-
 bool CSSParser::parseSVGValue(int propId, bool important)
 {
     if (!valueList)
         return false;
 
-    KDOMCSSValue *value = valueList->current();
+    Value* value = valueList->current();
     if (!value)
         return false;
 
@@ -70,7 +66,7 @@ bool CSSParser::parseSVGValue(int propId, bool important)
     }
     
     bool valid_primitive = false;
-    CSSValue *parsedValue = 0;
+    CSSValue* parsedValue = 0;
 
     switch(propId)
     {
@@ -116,8 +112,7 @@ bool CSSParser::parseSVGValue(int propId, bool important)
     case SVGCSS_PROP_MASK:
         if (id == CSS_VAL_NONE)
             valid_primitive = true;
-        else if (value->unit == CSSPrimitiveValue::CSS_URI)
-        {
+        else if (value->unit == CSSPrimitiveValue::CSS_URI) {
             parsedValue = new CSSPrimitiveValue(domString(value->string), CSSPrimitiveValue::CSS_URI);
             if (parsedValue)
                 valueList->next();
@@ -187,9 +182,9 @@ bool CSSParser::parseSVGValue(int propId, bool important)
      */
 
     case SVGCSS_PROP_POINTER_EVENTS:
-    // visiblePainted | visibleFill | visibleStroke | visible |
-    // painted | fill | stroke || all | inherit
-        if (id == CSS_VAL_VISIBLE || 
+    // none | visiblePainted | visibleFill | visibleStroke | visible |
+    // painted | fill | stroke | none | all | inherit
+        if (id == CSS_VAL_VISIBLE || id == CSS_VAL_NONE ||
           (id >= SVGCSS_VAL_VISIBLEPAINTED && id <= SVGCSS_VAL_ALL))
             valid_primitive = true;
         break;
@@ -200,8 +195,7 @@ bool CSSParser::parseSVGValue(int propId, bool important)
         break;
 
     case SVGCSS_PROP_GLYPH_ORIENTATION_VERTICAL: // auto | <angle> | inherit
-        if (id == CSS_VAL_AUTO)
-        {
+        if (id == CSS_VAL_AUTO) {
             valid_primitive = true;
             break;
         }
@@ -219,11 +213,11 @@ bool CSSParser::parseSVGValue(int propId, bool important)
     case SVGCSS_PROP_STROKE:               // <paint> | inherit
         {
             if (id == CSS_VAL_NONE)
-                parsedValue = new SVGPaint(SVG_PAINTTYPE_NONE);
+                parsedValue = new SVGPaint(SVGPaint::SVG_PAINTTYPE_NONE);
             else if (id == SVGCSS_VAL_CURRENTCOLOR)
-                parsedValue = new SVGPaint(SVG_PAINTTYPE_CURRENTCOLOR);
+                parsedValue = new SVGPaint(SVGPaint::SVG_PAINTTYPE_CURRENTCOLOR);
             else if (value->unit == CSSPrimitiveValue::CSS_URI)
-                parsedValue = new SVGPaint(SVG_PAINTTYPE_URI, domString(value->string).impl());
+                parsedValue = new SVGPaint(SVGPaint::SVG_PAINTTYPE_URI, domString(value->string));
             else
                 parsedValue = parseSVGPaint();
 
@@ -235,7 +229,7 @@ bool CSSParser::parseSVGValue(int propId, bool important)
     case CSS_PROP_COLOR:                // <color> | inherit
         if ((id >= CSS_VAL_AQUA && id <= CSS_VAL_WINDOWTEXT) ||
            (id >= SVGCSS_VAL_ALICEBLUE && id <= SVGCSS_VAL_YELLOWGREEN))
-            parsedValue = new SVGColor(domString(value->string).impl());
+            parsedValue = new SVGColor(domString(value->string));
         else
             parsedValue = parseSVGColor();
 
@@ -248,7 +242,7 @@ bool CSSParser::parseSVGValue(int propId, bool important)
     case SVGCSS_PROP_LIGHTING_COLOR:
         if ((id >= CSS_VAL_AQUA && id <= CSS_VAL_WINDOWTEXT) ||
            (id >= SVGCSS_VAL_ALICEBLUE && id <= SVGCSS_VAL_YELLOWGREEN))
-            parsedValue = new SVGColor(domString(value->string).impl());
+            parsedValue = new SVGColor(domString(value->string));
         else if (id == SVGCSS_VAL_CURRENTCOLOR)
             parsedValue = new SVGColor(SVGColor::SVG_COLORTYPE_CURRENTCOLOR);
         else // TODO : svgcolor (iccColor)
@@ -288,8 +282,7 @@ bool CSSParser::parseSVGValue(int propId, bool important)
     case SVGCSS_PROP_FILTER:
         if (id == CSS_VAL_NONE)
             valid_primitive = true;
-        else if (value->unit == CSSPrimitiveValue::CSS_URI)
-        {
+        else if (value->unit == CSSPrimitiveValue::CSS_URI) {
             parsedValue = new CSSPrimitiveValue(domString(value->string), (CSSPrimitiveValue::UnitTypes) value->unit);
             if (parsedValue)
                 valueList->next();
@@ -299,24 +292,27 @@ bool CSSParser::parseSVGValue(int propId, bool important)
     /* shorthand properties */
     case SVGCSS_PROP_MARKER:
     {
-        const int properties[3] = { SVGCSS_PROP_MARKER_START,
-                                    SVGCSS_PROP_MARKER_MID,
-                                    SVGCSS_PROP_MARKER_END };
-        return parseShorthand(propId, properties, 3, important);
+        if (!parseValue(SVGCSS_PROP_MARKER_START, important))
+            return false;
+        CSSValue *value = parsedProperties[numParsedProperties - 1]->value();
+        m_implicitShorthand = true;
+        addProperty(SVGCSS_PROP_MARKER_MID, value, important);
+        addProperty(SVGCSS_PROP_MARKER_END, value, important);
+        m_implicitShorthand = false;
+        return true;
     }
     default:
         return false;
     }
 
-    if (valid_primitive)
-    {
+    if (valid_primitive) {
         if (id != 0)
             parsedValue = new CSSPrimitiveValue(id);
         else if (value->unit == CSSPrimitiveValue::CSS_STRING)
             parsedValue = new CSSPrimitiveValue(domString(value->string), (CSSPrimitiveValue::UnitTypes) value->unit);
         else if (value->unit >= CSSPrimitiveValue::CSS_NUMBER && value->unit <= CSSPrimitiveValue::CSS_KHZ)
             parsedValue = new CSSPrimitiveValue(value->fValue, (CSSPrimitiveValue::UnitTypes) value->unit);
-        else if (value->unit >= KDOMCSSValue::Q_EMS)
+        else if (value->unit >= Value::Q_EMS)
             parsedValue = new CSSQuirkPrimitiveValue(value->fValue, CSSPrimitiveValue::CSS_EMS);
         valueList->next();
     }
@@ -333,7 +329,7 @@ bool CSSParser::parseSVGValue(int propId, bool important)
 CSSValue* CSSParser::parseSVGStrokeDasharray()
 {
     CSSValueList* ret = new CSSValueList;
-    KDOMCSSValue* value = valueList->current();
+    Value* value = valueList->current();
     bool valid_primitive = true;
     while(valid_primitive && value) {
         valid_primitive = validUnit(value, FLength | FPercent |FNonNeg, false);
@@ -344,7 +340,7 @@ CSSValue* CSSParser::parseSVGStrokeDasharray()
         else if (value->unit >= CSSPrimitiveValue::CSS_NUMBER && value->unit <= CSSPrimitiveValue::CSS_KHZ)
             ret->append(new CSSPrimitiveValue(value->fValue, (CSSPrimitiveValue::UnitTypes) value->unit));
         value = valueList->next();
-        if (value && value->unit == KDOMCSSValue::Operator && value->iValue == ',')
+        if (value && value->unit == Value::Operator && value->iValue == ',')
             value = valueList->next();
     }
     if (!valid_primitive) {
@@ -355,93 +351,20 @@ CSSValue* CSSParser::parseSVGStrokeDasharray()
     return ret;
 }
 
-CSSValue *CSSParser::parseSVGPaint()
+CSSValue* CSSParser::parseSVGPaint()
 {
-    KDOMCSSValue *value = valueList->current();
-    if (!strict && value->unit == CSSPrimitiveValue::CSS_NUMBER &&
-       value->fValue >= 0. && value->fValue < 1000000.) {
-        String str = String::sprintf("%06d", (int)(value->fValue+.5));
-        return new SVGPaint(SVG_PAINTTYPE_RGBCOLOR, 0, str.impl());
-    } else if (value->unit == CSSPrimitiveValue::CSS_RGBCOLOR) {
-        String str = "#" + domString(value->string);
-        return new SVGPaint(SVG_PAINTTYPE_RGBCOLOR, 0, str.impl());
-    } else if (value->unit == CSSPrimitiveValue::CSS_IDENT ||
-           (!strict && value->unit == CSSPrimitiveValue::CSS_DIMENSION))
-        return new SVGPaint(SVG_PAINTTYPE_RGBCOLOR, 0, domString(value->string).impl());
-    else if (value->unit == KDOMCSSValue::Function && value->function->args != 0 &&
-            domString(value->function->name).lower() == "rgb(")
-    {
-        KDOMCSSValueList *args = value->function->args;
-        KDOMCSSValue *v = args->current();
-        if (!validUnit(v, FInteger|FPercent, true))
-            return 0;
-        int r = (int) (v->fValue * (v->unit == CSSPrimitiveValue::CSS_PERCENTAGE ? 256./100. : 1.));
-        v = args->next();
-        if (v->unit != KDOMCSSValue::Operator && v->iValue != ',')
-            return 0;
-        v = args->next();
-        if (!validUnit(v, FInteger|FPercent, true))
-            return 0;
-        int g = (int) (v->fValue * (v->unit == CSSPrimitiveValue::CSS_PERCENTAGE ? 256./100. : 1.));
-        v = args->next();
-        if (v->unit != KDOMCSSValue::Operator && v->iValue != ',')
-            return 0;
-        v = args->next();
-        if (!validUnit(v, FInteger|FPercent, true))
-            return 0;
-        int b = (int) (v->fValue * (v->unit == CSSPrimitiveValue::CSS_PERCENTAGE ? 256./100. : 1.));
-        r = max(0, min(255, r));
-        g = max(0, min(255, g));
-        b = max(0, min(255, b));
-        
-        return new SVGPaint(SVG_PAINTTYPE_RGBCOLOR, 0, String::sprintf("rgb(%d, %d, %d)", r, g, b).impl());
-    }
-    else
-        return 0;
-
-    return new SVGPaint();
+    RGBA32 c = Color::transparent;
+    if (!parseColorFromValue(valueList->current(), c, true))
+        return new SVGPaint();
+    return new SVGPaint(Color(c));
 }
 
-CSSValue *CSSParser::parseSVGColor()
+CSSValue* CSSParser::parseSVGColor()
 {
-    KDOMCSSValue *value = valueList->current();
-    if (!strict && value->unit == CSSPrimitiveValue::CSS_NUMBER && value->fValue >= 0. && value->fValue < 1000000.)
-        return new SVGColor(String::sprintf("%06d", (int)(value->fValue+.5)).impl());
-    else if (value->unit == CSSPrimitiveValue::CSS_RGBCOLOR) {
-        String str = "#" + domString(value->string);
-        return new SVGColor(str.impl());
-    } else if (value->unit == CSSPrimitiveValue::CSS_IDENT || (!strict && value->unit == CSSPrimitiveValue::CSS_DIMENSION))
-        return new SVGColor(domString(value->string).impl());
-    else if (value->unit == KDOMCSSValue::Function && value->function->args != 0 && domString(value->function->name).lower() == "rgb(") {
-        KDOMCSSValueList *args = value->function->args;
-        KDOMCSSValue *v = args->current();
-        if (!validUnit(v, FInteger|FPercent, true))
-            return 0;
-        int r = (int) (v->fValue * (v->unit == CSSPrimitiveValue::CSS_PERCENTAGE ? 256./100. : 1.));
-        v = args->next();
-        if (v->unit != Value::Operator && v->iValue != ',')
-            return 0;
-        v = args->next();
-        if (!validUnit(v, FInteger|FPercent, true))
-            return 0;
-        int g = (int) (v->fValue * (v->unit == CSSPrimitiveValue::CSS_PERCENTAGE ? 256./100. : 1.));
-        v = args->next();
-        if (v->unit != Value::Operator && v->iValue != ',')
-            return 0;
-        v = args->next();
-        if (!validUnit(v, FInteger|FPercent, true))
-            return 0;
-        int b = (int) (v->fValue * (v->unit == CSSPrimitiveValue::CSS_PERCENTAGE ? 256./100. : 1.));
-        r = max(0, min(255, r));
-        g = max(0, min(255, g));
-        b = max(0, min(255, b));
-        
-        return new SVGColor(String::sprintf("rgb(%d, %d, %d)", r, g, b).impl());
-    }
-    else
+    RGBA32 c = Color::transparent;
+    if (!parseColorFromValue(valueList->current(), c, true))
         return 0;
-
-    return new SVGPaint();
+    return new SVGColor(Color(c));
 }
 
 }

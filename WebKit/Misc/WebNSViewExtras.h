@@ -32,12 +32,14 @@
 
 @class DOMElement;
 @class WebFrameView;
+@class WebView;
 
 @interface NSView (WebExtras)
 
 // Returns the nearest enclosing view of the given class, or nil if none.
-- (NSView *)_web_superviewOfClass:(Class)class;
+- (NSView *)_web_superviewOfClass:(Class)viewClass;
 - (WebFrameView *)_web_parentWebFrameView;
+- (WebView *)_webView;
 
 // returns whether a drag should begin starting with mouseDownEvent; if the time
 // passes expiration or the mouse moves less than the hysteresis before the mouseUp event,

@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,15 +20,18 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGRadialGradientElementImpl_H
-#define KSVG_SVGRadialGradientElementImpl_H
+#ifndef SVGRadialGradientElement_H
+#define SVGRadialGradientElement_H
+
 #ifdef SVG_SUPPORT
 
-#include <SVGGradientElement.h>
+#include "SVGGradientElement.h"
 
 namespace WebCore
 {
-    class SVGAnimatedLength;
+    struct RadialGradientAttributes;
+    class SVGLength;
+
     class SVGRadialGradientElement : public SVGGradientElement
     {
     public:
@@ -36,24 +39,23 @@ namespace WebCore
         virtual ~SVGRadialGradientElement();
 
         // 'SVGRadialGradientElement' functions
-        SVGAnimatedLength *cx() const;
-        SVGAnimatedLength *cy() const;
-        SVGAnimatedLength *fx() const;
-        SVGAnimatedLength *fy() const;
-        SVGAnimatedLength *r() const;
-
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute*);
 
     protected:
-        virtual void buildGradient(KRenderingPaintServerGradient *grad) const;
-        virtual KCPaintServerType gradientType() const { return PS_RADIAL_GRADIENT; }
+        virtual void buildGradient() const;
+        virtual SVGPaintServerType gradientType() const { return RadialGradientPaintServer; }
+
+        RadialGradientAttributes collectGradientProperties() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedLength> m_cx;
-        mutable RefPtr<SVGAnimatedLength> m_cy;
-        mutable RefPtr<SVGAnimatedLength> m_r;
-        mutable RefPtr<SVGAnimatedLength> m_fx;
-        mutable RefPtr<SVGAnimatedLength> m_fy;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGRadialGradientElement, SVGLength, SVGLength, Cx, cx)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGRadialGradientElement, SVGLength, SVGLength, Cy, cy)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGRadialGradientElement, SVGLength, SVGLength, R, r)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGRadialGradientElement, SVGLength, SVGLength, Fx, fx)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGRadialGradientElement, SVGLength, SVGLength, Fy, fy)
     };
 
 } // namespace WebCore

@@ -29,22 +29,27 @@
 #include "PlatformString.h"
 #include <wtf/Platform.h>
 
+#if PLATFORM(MAC)
 #ifdef __OBJC__
 @class NSEvent;
 #else
 class NSEvent;
 #endif
+#endif
 
 #if PLATFORM(WIN)
 typedef struct HWND__ *HWND;
-typedef unsigned    WPARAM;
-typedef long        LPARAM;
+typedef unsigned WPARAM;
+typedef long LPARAM;
 #endif
 
 #if PLATFORM(GDK)
 typedef union _GdkEvent GdkEvent;
 #endif
 
+#if PLATFORM(QT)
+class QKeyEvent;
+#endif
 
 namespace WebCore {
 
@@ -55,6 +60,7 @@ namespace WebCore {
         String keyIdentifier() const { return m_keyIdentifier; }
         bool isKeyUp() const { return m_isKeyUp; }
         bool isAutoRepeat() const { return m_autoRepeat; }
+        void setIsAutoRepeat(bool in) { m_autoRepeat = in; }
         int WindowsKeyCode() const { return m_WindowsKeyCode; }
         bool isKeypad() const { return m_isKeypad; }
         bool shiftKey() const { return m_shiftKey; }
@@ -62,7 +68,7 @@ namespace WebCore {
         bool altKey() const { return m_altKey; }
         bool metaKey() const { return m_metaKey; }
 
-#ifdef __APPLE__
+#if PLATFORM(MAC)
         PlatformKeyboardEvent(NSEvent*, bool forceAutoRepeat = false);
 #endif
 
@@ -72,6 +78,10 @@ namespace WebCore {
 
 #if PLATFORM(GDK)
         PlatformKeyboardEvent(GdkEvent*);
+#endif
+
+#if PLATFORM(QT)
+        PlatformKeyboardEvent(QKeyEvent*, bool isKeyUp);
 #endif
 
     private:

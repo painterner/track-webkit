@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -24,14 +24,12 @@
 #define KSVG_SVGStylableImpl_H
 #ifdef SVG_SUPPORT
 
-#include "PlatformString.h"
-
 namespace WebCore {
 
-    class String;
     class CSSValue;
     class CSSStyleDeclaration;
-    class SVGAnimatedString;
+    class String;
+    class StringImpl;
 
     class SVGStylable {
     public:
@@ -39,8 +37,6 @@ namespace WebCore {
         virtual ~SVGStylable();
 
         // 'SVGStylable' functions
-        virtual SVGAnimatedString* className() const = 0;
-
         virtual CSSStyleDeclaration* style() = 0;
         virtual CSSValue* getPresentationAttribute(StringImpl* name) = 0;
     };

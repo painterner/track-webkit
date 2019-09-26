@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -22,23 +22,23 @@
 
 #include "config.h"
 #ifdef SVG_SUPPORT
-#include "DeprecatedStringList.h"
-
-#include "Attr.h"
-
-#include "ksvg.h"
-#include "SVGNames.h"
-#include "SVGHelper.h"
-#include "SVGRenderStyle.h"
 #include "SVGComponentTransferFunctionElement.h"
-#include "SVGAnimatedNumber.h"
-#include "SVGAnimatedEnumeration.h"
-#include "SVGAnimatedNumberList.h"
 
-using namespace WebCore;
+#include "SVGFEComponentTransferElement.h"
+#include "SVGNames.h"
+#include "SVGNumberList.h"
 
-SVGComponentTransferFunctionElement::SVGComponentTransferFunctionElement(const QualifiedName& tagName, Document *doc) : 
-SVGElement(tagName, doc)
+namespace WebCore {
+
+SVGComponentTransferFunctionElement::SVGComponentTransferFunctionElement(const QualifiedName& tagName, Document* doc)
+    : SVGElement(tagName, doc)
+    , m_type(0)
+    , m_tableValues(new SVGNumberList)
+    , m_slope(0.0)
+    , m_intercept(0.0)
+    , m_amplitude(0.0)
+    , m_exponent(0.0)
+    , m_offset(0.0)
 {
 }
 
@@ -46,94 +46,64 @@ SVGComponentTransferFunctionElement::~SVGComponentTransferFunctionElement()
 {
 }
 
-SVGAnimatedEnumeration *SVGComponentTransferFunctionElement::type() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedEnumeration>(m_type, dummy);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGComponentTransferFunctionElement, int, Enumeration, enumeration, Type, type, SVGNames::typeAttr.localName(), m_type)
+ANIMATED_PROPERTY_DEFINITIONS(SVGComponentTransferFunctionElement, SVGNumberList*, NumberList, numberList, TableValues, tableValues, SVGNames::tableValuesAttr.localName(), m_tableValues.get())
+ANIMATED_PROPERTY_DEFINITIONS(SVGComponentTransferFunctionElement, double, Number, number, Slope, slope, SVGNames::slopeAttr.localName(), m_slope)
+ANIMATED_PROPERTY_DEFINITIONS(SVGComponentTransferFunctionElement, double, Number, number, Intercept, intercept, SVGNames::interceptAttr.localName(), m_intercept)
+ANIMATED_PROPERTY_DEFINITIONS(SVGComponentTransferFunctionElement, double, Number, number, Amplitude, amplitude, SVGNames::amplitudeAttr.localName(), m_amplitude)
+ANIMATED_PROPERTY_DEFINITIONS(SVGComponentTransferFunctionElement, double, Number, number, Exponent, exponent, SVGNames::exponentAttr.localName(), m_exponent)
+ANIMATED_PROPERTY_DEFINITIONS(SVGComponentTransferFunctionElement, double, Number, number, Offset, offset, SVGNames::offsetAttr.localName(), m_offset)
 
-SVGAnimatedNumberList *SVGComponentTransferFunctionElement::tableValues() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumberList>(m_tableValues, dummy);
-}
-
-SVGAnimatedNumber *SVGComponentTransferFunctionElement::slope() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_slope, dummy);
-}
-
-SVGAnimatedNumber *SVGComponentTransferFunctionElement::intercept() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_intercept, dummy);
-}
-
-SVGAnimatedNumber *SVGComponentTransferFunctionElement::amplitude() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_amplitude, dummy);
-}
-
-SVGAnimatedNumber *SVGComponentTransferFunctionElement::exponent() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_exponent, dummy);
-}
-
-SVGAnimatedNumber *SVGComponentTransferFunctionElement::offset() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedNumber>(m_offset, dummy);
-}
-
-void SVGComponentTransferFunctionElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGComponentTransferFunctionElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::typeAttr)
     {
-        if(value == "identity")
-            type()->setBaseVal(SVG_FECOMPONENTTRANSFER_TYPE_IDENTITY);
-        else if(value == "table")
-            type()->setBaseVal(SVG_FECOMPONENTTRANSFER_TYPE_TABLE);
-        else if(value == "discrete")
-            type()->setBaseVal(SVG_FECOMPONENTTRANSFER_TYPE_DISCRETE);
-        else if(value == "linear")
-            type()->setBaseVal(SVG_FECOMPONENTTRANSFER_TYPE_LINEAR);
-        else if(value == "gamma")
-            type()->setBaseVal(SVG_FECOMPONENTTRANSFER_TYPE_GAMMA);
+        if (value == "identity")
+            setTypeBaseValue(SVG_FECOMPONENTTRANSFER_TYPE_IDENTITY);
+        else if (value == "table")
+            setTypeBaseValue(SVG_FECOMPONENTTRANSFER_TYPE_TABLE);
+        else if (value == "discrete")
+            setTypeBaseValue(SVG_FECOMPONENTTRANSFER_TYPE_DISCRETE);
+        else if (value == "linear")
+            setTypeBaseValue(SVG_FECOMPONENTTRANSFER_TYPE_LINEAR);
+        else if (value == "gamma")
+            setTypeBaseValue(SVG_FECOMPONENTTRANSFER_TYPE_GAMMA);
     }
     else if (attr->name() == SVGNames::tableValuesAttr)
-        tableValues()->baseVal()->parse(value.deprecatedString());
+        tableValuesBaseValue()->parse(value);
     else if (attr->name() == SVGNames::slopeAttr)
-        slope()->setBaseVal(value.deprecatedString().toDouble());
+        setSlopeBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::interceptAttr)
-        intercept()->setBaseVal(value.deprecatedString().toDouble());
+        setInterceptBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::amplitudeAttr)
-        amplitude()->setBaseVal(value.deprecatedString().toDouble());
+        setAmplitudeBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::exponentAttr)
-        exponent()->setBaseVal(value.deprecatedString().toDouble());
+        setExponentBaseValue(value.toDouble());
     else if (attr->name() == SVGNames::offsetAttr)
-        offset()->setBaseVal(value.deprecatedString().toDouble());
+        setOffsetBaseValue(value.toDouble());
     else
         SVGElement::parseMappedAttribute(attr);
 }
 
-KCComponentTransferFunction SVGComponentTransferFunctionElement::transferFunction() const
+SVGComponentTransferFunction SVGComponentTransferFunctionElement::transferFunction() const
 {
-    KCComponentTransferFunction func;
-    func.type = (KCComponentTransferType)(type()->baseVal() - 1);
-    func.slope = slope()->baseVal();
-    func.intercept = intercept()->baseVal();
-    func.amplitude = amplitude()->baseVal();
-    func.exponent = exponent()->baseVal();
-    func.offset = offset()->baseVal();
-    SVGNumberList *numbers = tableValues()->baseVal();
+    SVGComponentTransferFunction func;
+    func.type = (SVGComponentTransferType) type();
+    func.slope = slope();
+    func.intercept = intercept();
+    func.amplitude = amplitude();
+    func.exponent = exponent();
+    func.offset = offset();
+    SVGNumberList* numbers = tableValues();
+
+    ExceptionCode ec = 0;
     unsigned int nr = numbers->numberOfItems();
     for (unsigned int i = 0; i < nr; i++)
-        func.tableValues.append(numbers->getItem(i)->value());
+        func.tableValues.append(numbers->getItem(i, ec));
     return func;
+}
+
 }
 
 // vim:ts=4:noet

@@ -20,8 +20,8 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGSetElementImpl_H
-#define KSVG_SVGSetElementImpl_H
+#ifndef SVGSetElement_H
+#define SVGSetElement_H
 #ifdef SVG_SUPPORT
 
 #include "SVGAnimationElement.h"
@@ -34,10 +34,15 @@ namespace WebCore
         SVGSetElement(const QualifiedName&, Document*);
         virtual ~SVGSetElement();
 
-        virtual void handleTimerEvent(double timePercentage);
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
+        
+        virtual bool updateCurrentValue(double timePercentage);
+        virtual bool handleStartCondition();
+        virtual void handleEndCondition();
 
     private:
-        DeprecatedString m_savedTo;
+        String m_savedTo;
     };
 
 } // namespace WebCore

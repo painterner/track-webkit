@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2005 Apple Computer, Inc.  All rights reserved.
+ *           (C) 2006 Graham Dennis (graham.dennis@gmail.com)
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,8 +35,6 @@
 #import <WebKit/WebNSDictionaryExtras.h>
 #import <WebKit/WebNSURLExtras.h>
 #import <WebKitSystemInterface.h>
-
-#import <WebCore/WebCoreSettings.h>
 
 NSString *WebPreferencesChangedNotification = @"WebPreferencesChangedNotification";
 
@@ -212,7 +211,7 @@ NS_ENDHANDLER
         @"13",                          WebKitDefaultFixedFontSizePreferenceKey,
         @"ISO-8859-1",                  WebKitDefaultTextEncodingNamePreferenceKey,
         @"3",                           WebKitPageCacheSizePreferenceKey,
-        @"16777216",                    WebKitObjectCacheSizePreferenceKey,
+        @"33554432",                    WebKitObjectCacheSizePreferenceKey,
         [NSNumber numberWithBool:NO],   WebKitUserStyleSheetEnabledPreferenceKey,
         @"",                            WebKitUserStyleSheetLocationPreferenceKey,
         [NSNumber numberWithBool:NO],   WebKitShouldPrintBackgroundsPreferenceKey,
@@ -231,6 +230,9 @@ NS_ENDHANDLER
         [NSNumber numberWithBool:NO],   WebKitShowsURLsInToolTipsPreferenceKey,
         @"1",                           WebKitPDFDisplayModePreferenceKey,
         @"0",                           WebKitPDFScaleFactorPreferenceKey,
+        @"1",                           WebKitUsePDFPreviewViewPreferenceKey,
+        [NSNumber numberWithInt:WebKitEditableLinkDefaultBehavior], 
+                                        WebKitEditableLinkBehaviorPreferenceKey,
         nil];
 
     // This value shouldn't ever change, which is assumed in the initialization of WebKitPDFDisplayModePreferenceKey above
@@ -656,6 +658,37 @@ NS_ENDHANDLER
 {
     [self _setIntegerValue:mode forKey:WebKitPDFDisplayModePreferenceKey];
 }
+
+- (BOOL)_usePDFPreviewView
+{
+    return [self _boolValueForKey:WebKitUsePDFPreviewViewPreferenceKey];
+}
+
+- (void)_setUsePDFPreviewView:(BOOL)newValue
+{
+    [self _setBoolValue:newValue forKey:WebKitUsePDFPreviewViewPreferenceKey];
+}
+
+- (WebKitEditableLinkBehavior)editableLinkBehavior
+{
+    WebKitEditableLinkBehavior value = [self _integerValueForKey:WebKitEditableLinkBehaviorPreferenceKey];
+    if (value != WebKitEditableLinkDefaultBehavior &&
+        value != WebKitEditableLinkAlwaysLive &&
+        value != WebKitEditableLinkNeverLive &&
+        value != WebKitEditableLinkOnlyLiveWithShiftKey &&
+        value != WebKitEditableLinkLiveWhenNotFocused) {
+        // ensure that a valid result is returned
+        value = WebKitEditableLinkDefaultBehavior;
+    }
+    
+    return value;
+}
+
+- (void)setEditableLinkBehavior:(WebKitEditableLinkBehavior)behavior
+{
+    [self _setIntegerValue:behavior forKey:WebKitEditableLinkBehaviorPreferenceKey];
+}
+
 
 static NSMutableDictionary *webPreferencesInstances = nil;
 

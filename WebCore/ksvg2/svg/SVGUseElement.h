@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <wildfox@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,24 +20,25 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGUseElementImpl_H
-#define KSVG_SVGUseElementImpl_H
+#ifndef SVGUseElement_H
+#define SVGUseElement_H
+
 #ifdef SVG_SUPPORT
 
-#include "SVGTests.h"
-#include "SVGLangSpace.h"
-#include "SVGURIReference.h"
-#include "SVGStyledTransformableElement.h"
 #include "SVGExternalResourcesRequired.h"
+#include "SVGLangSpace.h"
+#include "SVGStyledTransformableElement.h"
+#include "SVGTests.h"
+#include "SVGURIReference.h"
 
 namespace WebCore
 {
-    class SVGAnimatedLength;
+    class SVGLength;
     class SVGUseElement : public SVGStyledTransformableElement,
-                              public SVGTests,
-                              public SVGLangSpace,
-                              public SVGExternalResourcesRequired,
-                              public SVGURIReference
+                          public SVGTests,
+                          public SVGLangSpace,
+                          public SVGExternalResourcesRequired,
+                          public SVGURIReference
     {
     public:
         SVGUseElement(const QualifiedName&, Document*);
@@ -51,22 +52,22 @@ namespace WebCore
         virtual void closeRenderer();
 
         // 'SVGUseElement' functions
-        SVGAnimatedLength *x() const;
-        SVGAnimatedLength *y() const;
+        virtual void parseMappedAttribute(MappedAttribute*);
 
-        SVGAnimatedLength *width() const;
-        SVGAnimatedLength *height() const;
+        virtual bool rendererIsNeeded(RenderStyle* style) { return StyledElement::rendererIsNeeded(style); }
+        virtual RenderObject* createRenderer(RenderArena*, RenderStyle*);
 
-        virtual void parseMappedAttribute(MappedAttribute *attr);
-
-        virtual bool rendererIsNeeded(RenderStyle *style) { return StyledElement::rendererIsNeeded(style); }
-        virtual RenderObject *createRenderer(RenderArena *arena, RenderStyle *style);
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedLength> m_x;
-        mutable RefPtr<SVGAnimatedLength> m_y;
-        mutable RefPtr<SVGAnimatedLength> m_width;
-        mutable RefPtr<SVGAnimatedLength> m_height;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired)
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGURIReference, String, Href, href)
+
+        ANIMATED_PROPERTY_DECLARATIONS(SVGUseElement, SVGLength, SVGLength, X, x)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGUseElement, SVGLength, SVGLength, Y, y)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGUseElement, SVGLength, SVGLength, Width, width)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGUseElement, SVGLength, SVGLength, Height, height)
     };
 
 } // namespace WebCore

@@ -39,15 +39,21 @@ namespace WebCore
         virtual ~SVGScriptElement();
 
         // 'SVGScriptElement' functions
-        StringImpl *type() const;
-        void setType(StringImpl *type);
+        String type() const;
+        void setType(const String&);
 
         // Internal
         virtual void parseMappedAttribute(MappedAttribute *attr);
 
         static void executeScript(Document *document, StringImpl *jsCode);
 
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
+
     private:
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGURIReference, String, Href, href)
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired)
+
         String m_type;
     };
 

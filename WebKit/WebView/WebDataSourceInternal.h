@@ -26,105 +26,49 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <WebKit/WebDataSourcePrivate.h>
-#import <WebKitSystemInterface.h>
+#import "WebDataSourcePrivate.h"
 
-@class NSURL;
+#ifdef __cplusplus
+namespace WebCore {
+    class DocumentLoader;
+}
+typedef WebCore::DocumentLoader WebCoreDocumentLoader;
+class WebDocumentLoaderMac;
+#else
+@class WebCoreDocumentLoader;
+@class WebDocumentLoaderMac;
+#endif
 
 @class DOMDocumentFragment;
 @class DOMElement;
-@class DOMRange;
 @class NSError;
-@class NSURLRequest;
-@class NSURLResponse;
+@class NSURL;
 @class WebArchive;
-@class WebLoader;
 @class WebFrameBridge;
-@class WebHistoryItem;
-@class WebIconLoader;
-@class WebMainResourceLoader;
-@class WebPolicyDecisionListener;
 @class WebResource;
-@class WebUnarchivingState;
 @class WebView;
+
 @protocol WebDocumentRepresentation;
 
 @interface WebDataSource (WebInternal)
-- (void)_addPlugInStreamLoader:(WebLoader *)loader;
-- (void)_removePlugInStreamLoader:(WebLoader *)loader;
-- (void)_stopLoadingWithError:(NSError *)error;
-- (void)_setTitle:(NSString *)title;
-- (NSString *)_overrideEncoding;
-- (void)_setIconURL:(NSURL *)URL;
-- (void)_setTitle:(NSString *)title;
-- (NSString *)_overrideEncoding;
-- (void)_setIconURL:(NSURL *)URL;
-- (void)_setIconURL:(NSURL *)URL withType:(NSString *)iconType;
-- (void)_addSubresourceLoader:(WebLoader *)loader;
-- (void)_removeSubresourceLoader:(WebLoader *)loader;
-- (NSURLRequest *)_originalRequest;
-- (WebView *)_webView;
-- (WebResource *)_archivedSubresourceForURL:(NSURL *)URL;
-- (void)_addResponse:(NSURLResponse *)r;
-- (WebFrameBridge *)_bridge;
-- (void)_setOverrideEncoding:(NSString *)overrideEncoding;
-- (void)_replaceSelectionWithArchive:(WebArchive *)archive selectReplacement:(BOOL)selectReplacement;
-- (NSURL *)_URL;
-+ (NSMutableDictionary *)_repTypesAllowImageTypeOmission:(BOOL)allowImageTypeOmission;
-- (void)_setPrimaryLoadComplete:(BOOL)flag;
-- (void)_setMainDocumentError:(NSError *)error;
 - (void)_addToUnarchiveState:(WebArchive *)archive;
-- (NSURL *)_URLForHistory;
-- (void)_setWebFrame:(WebFrame *)frame;
-- (BOOL)_isClientRedirect;
 - (void)_makeRepresentation;
-- (double)_loadingStartedTime;
-- (BOOL)_isStopping;
-- (void)_finishedLoading;
-- (void)_setResponse:(NSURLResponse *)response;
-- (void)_setupForReplaceByMIMEType:(NSString *)mimeType;
-- (void)_setRequest:(NSURLRequest *)request;
-- (void)_receivedData:(NSData *)data;
-- (void)_receivedMainResourceError:(NSError *)error complete:(BOOL)isComplete;
 - (BOOL)_isDocumentHTML;
+- (WebView *)_webView;
+- (WebFrameBridge *)_bridge;
+- (WebArchive *)_popSubframeArchiveWithName:(NSString *)frameName;
+- (NSURL *)_URL;
+- (DOMElement *)_imageElementWithImageResource:(WebResource *)resource;
 - (DOMDocumentFragment *)_documentFragmentWithImageResource:(WebResource *)resource;
 - (DOMDocumentFragment *)_documentFragmentWithArchive:(WebArchive *)archive;
-- (NSString *)_title;
-- (void)_stopRecordingResponses;
-- (BOOL)_loadingFromPageCache;
-- (NSArray *)_responses;
-- (void)_stopLoading;
-- (void)__adoptRequest:(NSMutableURLRequest *)request;
-- (void)_setTriggeringAction:(NSDictionary *)action;
-- (NSDictionary *)_triggeringAction;
-- (NSURLRequest *)_lastCheckedRequest;
-- (void)_setLastCheckedRequest:(NSURLRequest *)request;
-- (void)_setURL:(NSURL *)URL;
-- (void)_setIsClientRedirect:(BOOL)flag;
-- (WebArchive *)_popSubframeArchiveWithName:(NSString *)frameName;
-- (void)_defersCallbacksChanged;
-- (void)_startLoading;
-- (void)_loadFromPageCache:(NSDictionary *)pageCache;
-- (DOMElement *)_imageElementWithImageResource:(WebResource *)resource;
-- (void)_finishedLoadingResource;
-- (void)_mainReceivedBytesSoFar:(unsigned)bytesSoFar complete:(BOOL)isComplete;
-- (void)_receivedError:(NSError *)error;
-- (void)_mainReceivedError:(NSError *)error complete:(BOOL)isComplete;
-- (BOOL)_defersCallbacks;
-- (id)_identifierForInitialRequest:(NSURLRequest *)clientRequest;
-- (NSURLRequest *)_willSendRequest:(NSMutableURLRequest *)clientRequest forResource:(id)identifier redirectResponse:(NSURLResponse *)redirectResponse;
-- (void)_didReceiveAuthenticationChallenge:(NSURLAuthenticationChallenge *)currentWebChallenge forResource:(id)identifier;
-- (void)_didCancelAuthenticationChallenge:(NSURLAuthenticationChallenge *)currentWebChallenge forResource:(id)identifier;
-- (void)_didReceiveResponse:(NSURLResponse *)r forResource:(id)identifier;
-- (void)_didReceiveData:(NSData *)data contentLength:(int)lengthReceived forResource:(id)identifier;
-- (void)_didFinishLoadingForResource:(id)identifier;
-- (void)_didFailLoadingWithError:(NSError *)error forResource:(id)identifier;
-- (void)_downloadWithLoadingConnection:(NSURLConnection *)connection request:(NSURLRequest *)request response:(NSURLResponse *)r proxy:(WKNSURLConnectionDelegateProxyPtr) proxy;
-- (BOOL)_privateBrowsingEnabled;
-+ (NSString *)_generatedMIMETypeForURLScheme:(NSString *)URLScheme;
-+ (BOOL)_representationExistsForURLScheme:(NSString *)URLScheme;
-+ (BOOL)_canShowMIMEType:(NSString *)MIMEType;
-- (void)_handleFallbackContent;
-- (void)_decidePolicyForMIMEType:(NSString *)MIMEType decisionListener:(WebPolicyDecisionListener *)listener;
-
++ (NSMutableDictionary *)_repTypesAllowImageTypeOmission:(BOOL)allowImageTypeOmission;
+- (void)_replaceSelectionWithArchive:(WebArchive *)archive selectReplacement:(BOOL)selectReplacement;
+- (WebResource *)_archivedSubresourceForURL:(NSURL *)URL;
+- (id)_initWithDocumentLoader:(WebDocumentLoaderMac*)loader;
+- (void)_finishedLoading;
+- (void)_receivedData:(NSData *)data;
+- (void)_revertToProvisionalState;
+- (void)_setMainDocumentError:(NSError *)error;
+- (void)_clearUnarchivingState;
+- (WebCoreDocumentLoader*)_documentLoader;
 @end

@@ -32,32 +32,23 @@
 #include "Cache.h"
 #include "CachedResourceClient.h"
 #include "CachedResourceClientWalker.h"
+#include "TextResourceDecoder.h"
+#include "DeprecatedString.h"
 #include "LoaderFunctions.h"
 #include "loader.h"
 #include <wtf/Vector.h>
 
 namespace WebCore {
 
-CachedCSSStyleSheet::CachedCSSStyleSheet(DocLoader* dl, const String &url, CachePolicy cachePolicy, time_t _expireDate, const DeprecatedString& charset)
+CachedCSSStyleSheet::CachedCSSStyleSheet(DocLoader* dl, const String& url, CachePolicy cachePolicy, time_t _expireDate, const String& charset)
     : CachedResource(url, CSSStyleSheet, cachePolicy, _expireDate)
-    , m_encoding(charset.latin1())
+    , m_decoder(new TextResourceDecoder("text/css", charset))
 {
     // It's css we want.
     setAccept("text/css");
     // load the file
-    Cache::loader()->load(dl, this, false);
+    cache()->loader()->load(dl, this, false);
     m_loading = true;
-    if (!m_encoding.isValid())
-        m_encoding = TextEncoding(Latin1Encoding);
-}
-
-CachedCSSStyleSheet::CachedCSSStyleSheet(const String &url, const DeprecatedString &stylesheet_data)
-    : CachedResource(url, CSSStyleSheet, CachePolicyVerify, 0, stylesheet_data.length())
-    , m_encoding(InvalidEncoding)
-{
-    m_loading = false;
-    m_status = Persistent;
-    m_sheet = String(stylesheet_data);
 }
 
 CachedCSSStyleSheet::~CachedCSSStyleSheet()
@@ -69,24 +60,12 @@ void CachedCSSStyleSheet::ref(CachedResourceClient *c)
     CachedResource::ref(c);
 
     if (!m_loading)
-        c->setStyleSheet(m_url, m_sheet);
+        c->setCSSStyleSheet(m_url, m_decoder->encoding().name(), m_sheet);
 }
 
-void CachedCSSStyleSheet::deref(CachedResourceClient *c)
+void CachedCSSStyleSheet::setEncoding(const String& chs)
 {
-    Cache::flush();
-    CachedResource::deref(c);
-    if ( canDelete() && m_free )
-      delete this;
-}
-
-void CachedCSSStyleSheet::setCharset(const DeprecatedString& chs)
-{
-    if (!chs.isEmpty()) {
-        TextEncoding encoding = TextEncoding(chs.latin1());
-        if (encoding.isValid())
-            m_encoding = encoding;
-    }
+    m_decoder->setEncoding(chs, TextResourceDecoder::EncodingFromHTTPHeader);
 }
 
 void CachedCSSStyleSheet::data(Vector<char>& data, bool allDataReceived)
@@ -95,7 +74,8 @@ void CachedCSSStyleSheet::data(Vector<char>& data, bool allDataReceived)
         return;
 
     setSize(data.size());
-    m_sheet = String(m_encoding.toUnicode(data.data(), size()));
+    m_sheet = m_decoder->decode(data.data(), size());
+    m_sheet += m_decoder->flush();
     m_loading = false;
     checkNotify();
 }
@@ -106,14 +86,8 @@ void CachedCSSStyleSheet::checkNotify()
         return;
 
     CachedResourceClientWalker w(m_clients);
-    while (CachedResourceClient *c = w.next()) {
-#if __APPLE__
-        if (m_response && !IsResponseURLEqualToURL(m_response, m_url))
-            c->setStyleSheet(String(ResponseURL(m_response)), m_sheet);
-        else
-#endif
-            c->setStyleSheet(m_url, m_sheet);
-    }
+    while (CachedResourceClient *c = w.next())
+        c->setCSSStyleSheet(m_response.url().url(), m_decoder->encoding().name(), m_sheet);
 }
 
 void CachedCSSStyleSheet::error()

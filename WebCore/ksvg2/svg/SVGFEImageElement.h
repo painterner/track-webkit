@@ -28,10 +28,10 @@
 #include "SVGURIReference.h"
 #include "SVGLangSpace.h"
 #include "SVGExternalResourcesRequired.h"
-#include "KCanvasFilters.h"
+#include "SVGFEImage.h"
 
 namespace WebCore {
-    class SVGAnimatedPreserveAspectRatio;
+    class SVGPreserveAspectRatio;
 
     class SVGFEImageElement : public SVGFilterPrimitiveStandardAttributes,
                                   public SVGURIReference,
@@ -44,18 +44,23 @@ namespace WebCore {
         virtual ~SVGFEImageElement();
 
         // 'SVGFEImageElement' functions
-        SVGAnimatedPreserveAspectRatio *preserveAspectRatio() const;
-
         virtual void parseMappedAttribute(MappedAttribute *attr);
         virtual void notifyFinished(CachedResource *finishedObj);
 
     protected:
-        virtual KCanvasFEImage *filterEffect() const;
+        virtual SVGFEImage *filterEffect() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedPreserveAspectRatio> m_preserveAspectRatio;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGURIReference, String, Href, href)
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired)
+ 
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEImageElement, SVGPreserveAspectRatio*, RefPtr<SVGPreserveAspectRatio>, PreserveAspectRatio, preserveAspectRatio)
+
         CachedImage *m_cachedImage;
-        mutable KCanvasFEImage *m_filterEffect;
+        mutable SVGFEImage *m_filterEffect;
     };
 
 } // namespace WebCore

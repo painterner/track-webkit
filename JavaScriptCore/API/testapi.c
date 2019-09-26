@@ -497,7 +497,8 @@ int main(int argc, char* argv[])
     JSValueRef jsZero = JSValueMakeNumber(context, 0);
     JSValueRef jsOne = JSValueMakeNumber(context, 1);
     JSValueRef jsOneThird = JSValueMakeNumber(context, 1.0 / 3.0);
-    JSObjectRef jsObjectNoProto = JSObjectMakeWithPrototype(context, NULL, NULL, JSValueMakeNull(context));
+    JSObjectRef jsObjectNoProto = JSObjectMake(context, NULL, NULL);
+    JSObjectSetPrototype(context, jsObjectNoProto, JSValueMakeNull(context));
 
     // FIXME: test funny utf8 characters
     JSStringRef jsEmptyIString = JSStringCreateWithUTF8CString("");
@@ -792,7 +793,7 @@ int main(int argc, char* argv[])
     assert(count == 1); // jsCFString should not be enumerated
 
     JSClassDefinition nullDefinition = kJSClassDefinitionEmpty;
-    nullDefinition.attributes = kJSClassAttributeNoPrototype;
+    nullDefinition.attributes = kJSClassAttributeNoAutomaticPrototype;
     JSClassRef nullClass = JSClassCreate(&nullDefinition);
     JSClassRelease(nullClass);
     
@@ -846,8 +847,8 @@ static char* createStringWithContentsOfFile(const char* fileName)
 {
     char* buffer;
     
-    int buffer_size = 0;
-    int buffer_capacity = 1024;
+    size_t buffer_size = 0;
+    size_t buffer_capacity = 1024;
     buffer = (char*)malloc(buffer_capacity);
     
     FILE* f = fopen(fileName, "r");

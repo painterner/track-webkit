@@ -27,8 +27,10 @@
 
 #include "CachedImage.h"
 #include "Document.h"
+#include "FrameLoader.h"
 #include "FrameMac.h"
 #include "WebCoreFrameBridge.h"
+#include "DocumentLoader.h"
 
 namespace WebCore {
     
@@ -37,17 +39,14 @@ void finishImageLoad(Document* document, CachedImage* image, const void* imageDa
     // FIXME: This is terrible! Makes an extra copy of the image data!
     // Can't we get the NSData from NSURLConnection?
     // Why is this different from image subresources?
-    NSData* nsData = [[NSData alloc] initWithBytes:imageData length:imageDataSize];
-    image->setAllData(nsData);
-    [nsData release];
+    RefPtr<SharedBuffer> buffer = new SharedBuffer(reinterpret_cast<const char*>(imageData), imageDataSize);
 
-    WebCoreFrameBridge* bridge = Mac(document->frame())->bridge();
-    NSURLResponse* response = [bridge mainResourceURLResponse];
-    image->setResponse(response);
+    Frame* frame = document->frame();
+    const ResourceResponse& response = frame->loader()->documentLoader()->response();
 
     IntSize size = image->imageSize();
     if (size.width())
-        document->setTitle([bridge imageTitleForFilename:[response suggestedFilename] size:size]);
+        document->setTitle([Mac(frame)->bridge() imageTitleForFilename:response.suggestedFilename() size:size]);
 }
     
 }

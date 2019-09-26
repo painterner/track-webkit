@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -22,73 +22,85 @@
 
 #include "config.h"
 #ifdef SVG_SUPPORT
-#include "ksvg.h"
 #include "SVGPaint.h"
 
 namespace WebCore {
 
 SVGPaint::SVGPaint()
     : SVGColor()
+    , m_paintType(SVG_PAINTTYPE_UNKNOWN)
 {
-    m_paintType = SVG_PAINTTYPE_UNKNOWN;
 }
 
-SVGPaint::SVGPaint(StringImpl *uri)
+SVGPaint::SVGPaint(const String& uri)
     : SVGColor()
+    , m_paintType(SVG_PAINTTYPE_URI)
 {
-    m_paintType = SVG_PAINTTYPE_URI;
     setUri(uri);
 }
 
-SVGPaint::SVGPaint(unsigned short paintType)
+SVGPaint::SVGPaint(SVGPaintType paintType)
     : SVGColor()
+    , m_paintType(paintType)
 {
-    m_paintType = paintType;
 }
 
-SVGPaint::SVGPaint(unsigned short paintType, StringImpl *uri, StringImpl *rgbPaint, StringImpl *)
+SVGPaint::SVGPaint(SVGPaintType paintType, const String& uri, const String& rgbPaint, const String&)
     : SVGColor(rgbPaint)
+    , m_paintType(paintType)
 {
-    m_paintType = paintType;
     setUri(uri);
+}
+
+SVGPaint::SVGPaint(const Color& c)
+    : SVGColor(c)
+    , m_paintType(SVG_PAINTTYPE_RGBCOLOR)
+{
 }
 
 SVGPaint::~SVGPaint()
 {
 }
 
-unsigned short SVGPaint::paintType() const
+SVGPaint* SVGPaint::defaultFill()
 {
-    return m_paintType;
+    static SVGPaint* _defaultFill = new SVGPaint(SVG_PAINTTYPE_RGBCOLOR, String(), "black");
+    return _defaultFill;
 }
 
-StringImpl *SVGPaint::uri() const
+SVGPaint* SVGPaint::defaultStroke()
 {
-    return m_uri.impl();
+    static SVGPaint* _defaultStroke = new SVGPaint(SVG_PAINTTYPE_NONE);
+    return _defaultStroke;
 }
 
-void SVGPaint::setUri(StringImpl *uri)
+String SVGPaint::uri() const
+{
+    return m_uri;
+}
+
+void SVGPaint::setUri(const String& uri)
 {
     m_uri = uri;
 }
 
-void SVGPaint::setPaint(unsigned short paintType, StringImpl *uri, StringImpl *rgbPaint, StringImpl *)
+void SVGPaint::setPaint(SVGPaintType paintType, const String& uri, const String& rgbPaint, const String&, ExceptionCode&)
 {
     m_paintType = paintType;
 
-    if(m_paintType == SVG_PAINTTYPE_URI)
+    if (m_paintType == SVG_PAINTTYPE_URI)
         setUri(uri);
-    else if(m_paintType == SVG_PAINTTYPE_RGBCOLOR)
+    else if (m_paintType == SVG_PAINTTYPE_RGBCOLOR)
         setRGBColor(rgbPaint);
 }
 
 String SVGPaint::cssText() const
 {
-    if(m_paintType == SVG_PAINTTYPE_NONE)
+    if (m_paintType == SVG_PAINTTYPE_NONE)
         return "none";
-    else if(m_paintType == SVG_PAINTTYPE_CURRENTCOLOR)
+    else if (m_paintType == SVG_PAINTTYPE_CURRENTCOLOR)
         return "currentColor";
-    else if(m_paintType == SVG_PAINTTYPE_URI)
+    else if (m_paintType == SVG_PAINTTYPE_URI)
         return "url(" + m_uri + ")";
 
     return SVGColor::cssText();

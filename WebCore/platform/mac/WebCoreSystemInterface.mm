@@ -29,7 +29,10 @@
 BOOL (*wkCGContextGetShouldSmoothFonts)(CGContextRef);
 void (*wkClearGlyphVector)(void* glyphs);
 OSStatus (*wkConvertCharToGlyphs)(void* styleGroup, const UniChar*, unsigned numCharacters, void* glyphs);
+NSString* (*wkCreateURLPasteboardFlavorTypeName)(void);
+NSString* (*wkCreateURLNPasteboardFlavorTypeName)(void);
 void (*wkDrawBezeledTextFieldCell)(NSRect, BOOL enabled);
+void (*wkDrawTextFieldCellFocusRing)(NSTextFieldCell*, NSRect);
 void (*wkDrawBezeledTextArea)(NSRect, BOOL enabled);
 void (*wkDrawFocusRing)(CGContextRef, CGRect clipRect, CGColorRef, int radius);
 BOOL (*wkFontSmoothingModeIsLCD)(int mode);
@@ -45,6 +48,9 @@ int (*wkGetGlyphVectorNumGlyphs)(void* glyphVector);
 size_t (*wkGetGlyphVectorRecordSize)(void* glyphVector);
 NSString* (*wkGetMIMETypeForExtension)(NSString*);
 ATSUFontID (*wkGetNSFontATSUFontId)(NSFont*);
+NSTimeInterval (*wkGetNSURLResponseCalculatedExpiration)(NSURLResponse *response);
+NSDate *(*wkGetNSURLResponseLastModifiedDate)(NSURLResponse *response);
+BOOL (*wkGetNSURLResponseMustRevalidate)(NSURLResponse *response);
 OSStatus (*wkInitializeGlyphVector)(int count, void* glyphs);
 NSString* (*wkPathFromFont)(NSFont*);
 void (*wkPopupMenu)(NSMenu*, NSPoint location, float width, NSView*, int selectedItem, NSFont*);
@@ -65,3 +71,9 @@ CFReadStreamRef (*wkCreateCustomCFReadStream)(void *(*formCreate)(CFReadStreamRe
     void (*formSchedule)(CFReadStreamRef, CFRunLoopRef, CFStringRef, void *), 
     void (*formUnschedule)(CFReadStreamRef, CFRunLoopRef, CFStringRef, void *),
     void *context);
+void (*wkSetNSURLConnectionDefersCallbacks)(NSURLConnection *, BOOL);
+id (*wkCreateNSURLConnectionDelegateProxy)(void);
+BOOL (*wkSupportsMultipartXMixedReplace)(NSMutableURLRequest *);
+Class (*wkNSURLProtocolClassForReqest)(NSURLRequest *);
+float (*wkSecondsSinceLastInputEvent)(void);
+

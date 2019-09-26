@@ -18,6 +18,7 @@
  * the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+
 #include "config.h"
 #include "InlineFlowBox.h"
 
@@ -26,11 +27,15 @@
 #include "EllipsisBox.h"
 #include "GraphicsContext.h"
 #include "InlineTextBox.h"
+#include "HitTestResult.h"
 #include "RootInlineBox.h"
 #include "RenderBlock.h"
 #include "RenderFlow.h"
 #include "RenderListMarker.h"
 #include "RenderTableCell.h"
+#include "RootInlineBox.h"
+
+#include <math.h>
 
 using namespace std;
 
@@ -257,15 +262,19 @@ int InlineFlowBox::placeBoxesHorizontally(int x, int& leftPosition, int& rightPo
                 needsWordSpacing = !DeprecatedChar(rt->text()[text->end()]).isSpace();
             }
             text->setXPos(x);
-            int shadowLeft = 0;
-            int shadowRight = 0;
+            
+            // FIXME: Setting this as layout overflow is bad.  We need to have a separate concept of
+            // visual overflow.
+            int strokeOverflow = static_cast<int>(ceilf(rt->style()->textStrokeWidth() / 2.0));
+            int visualOverflowLeft = -strokeOverflow;
+            int visualOverflowRight = strokeOverflow;
             for (ShadowData* shadow = rt->style()->textShadow(); shadow; shadow = shadow->next) {
-                shadowLeft = min(shadowLeft, shadow->x - shadow->blur);
-                shadowRight = max(shadowRight, shadow->x + shadow->blur);
+                visualOverflowLeft = min(visualOverflowLeft, shadow->x - shadow->blur - strokeOverflow);
+                visualOverflowRight = max(visualOverflowRight, shadow->x + shadow->blur + strokeOverflow);
             }
-            leftPosition = min(x + shadowLeft, leftPosition);
-            rightPosition = max(x + text->width() + shadowRight, rightPosition);
-            m_maxHorizontalShadow = max(max(shadowRight, -shadowLeft), m_maxHorizontalShadow);
+            leftPosition = min(x + visualOverflowLeft, leftPosition);
+            rightPosition = max(x + text->width() + visualOverflowRight, rightPosition);
+            m_maxHorizontalVisualOverflow = max(max(visualOverflowRight, -visualOverflowLeft), m_maxHorizontalVisualOverflow);
             x += text->width();
         } else {
             if (curr->object()->isPositioned()) {
@@ -520,12 +529,12 @@ void InlineFlowBox::shrinkBoxesWithNoTextChildren(int topPos, int bottomPos)
     }
 }
 
-bool InlineFlowBox::nodeAtPoint(RenderObject::NodeInfo& i, int x, int y, int tx, int ty)
+bool InlineFlowBox::nodeAtPoint(const HitTestRequest& request, HitTestResult& result, int x, int y, int tx, int ty)
 {
     // Check children first.
     for (InlineBox* curr = lastChild(); curr; curr = curr->prevOnLine()) {
-        if (!curr->object()->layer() && curr->nodeAtPoint(i, x, y, tx, ty)) {
-            object()->setInnerNode(i);
+        if (!curr->object()->layer() && curr->nodeAtPoint(request, result, x, y, tx, ty)) {
+            object()->setInnerNode(result);
             return true;
         }
     }
@@ -533,41 +542,40 @@ bool InlineFlowBox::nodeAtPoint(RenderObject::NodeInfo& i, int x, int y, int tx,
     // Now check ourselves.
     IntRect rect(tx + m_x, ty + m_y, m_width, m_height);
     if (object()->style()->visibility() == VISIBLE && rect.contains(x, y)) {
-        object()->setInnerNode(i);
+        object()->setInnerNode(result);
         return true;
     }
     
     return false;
 }
 
-void InlineFlowBox::paint(RenderObject::PaintInfo& i, int tx, int ty)
+void InlineFlowBox::paint(RenderObject::PaintInfo& paintInfo, int tx, int ty)
 {
-    int xPos = tx + m_x - object()->maximalOutlineSize(i.phase);
-    int w = width() + 2 * object()->maximalOutlineSize(i.phase);
-    bool intersectsDamageRect = xPos < i.r.right() && xPos + w > i.r.x();
-    
-    if (intersectsDamageRect && i.phase != PaintPhaseChildOutlines) {
-        if (i.phase == PaintPhaseOutline || i.phase == PaintPhaseSelfOutline) {
+    int xPos = tx + m_x - object()->maximalOutlineSize(paintInfo.phase);
+    int w = width() + 2 * object()->maximalOutlineSize(paintInfo.phase);
+    bool intersectsDamageRect = xPos < paintInfo.rect.right() && xPos + w > paintInfo.rect.x();
+
+    if (intersectsDamageRect && paintInfo.phase != PaintPhaseChildOutlines) {
+        if (paintInfo.phase == PaintPhaseOutline || paintInfo.phase == PaintPhaseSelfOutline) {
             // Add ourselves to the paint info struct's list of inlines that need to paint their
             // outlines.
-            if (object()->style()->visibility() == VISIBLE && object()->style()->outlineWidth() > 0 &&
-                !object()->isInlineContinuation() && !isRootInlineBox()) {
-                i.outlineObjects->add(flowObject());
-            }
-        }
-        else {
-            // 1. Paint our background and border.
-            paintBackgroundAndBorder(i, tx, ty);
-            
+            if (object()->style()->visibility() == VISIBLE && object()->hasOutline() &&
+                    !object()->isInlineContinuation() && !isRootInlineBox())
+                paintInfo.outlineObjects->add(flowObject());
+        } else {
+            // 1. Paint our background, border and box-shadow.
+            paintBoxDecorations(paintInfo, tx, ty);
+
             // 2. Paint our underline and overline.
-            paintDecorations(i, tx, ty, false);
+            paintTextDecorations(paintInfo, tx, ty, false);
         }
     }
 
-    PaintPhase paintPhase = i.phase == PaintPhaseChildOutlines ? PaintPhaseOutline : i.phase;
-    RenderObject::PaintInfo childInfo(i);
+    PaintPhase paintPhase = paintInfo.phase == PaintPhaseChildOutlines ? PaintPhaseOutline : paintInfo.phase;
+    RenderObject::PaintInfo childInfo(paintInfo);
     childInfo.phase = paintPhase;
-
+    childInfo.paintingRoot = object()->paintingRootForChildren(paintInfo);
+    
     // 3. Paint our children.
     if (paintPhase != PaintPhaseSelfOutline) {
         for (InlineBox* curr = firstChild(); curr; curr = curr->nextOnLine()) {
@@ -577,8 +585,8 @@ void InlineFlowBox::paint(RenderObject::PaintInfo& i, int tx, int ty)
     }
 
     // 4. Paint our strike-through
-    if (intersectsDamageRect && (i.phase == PaintPhaseForeground || i.phase == PaintPhaseSelection))
-        paintDecorations(i, tx, ty, true);
+    if (intersectsDamageRect && (paintInfo.phase == PaintPhaseForeground || paintInfo.phase == PaintPhaseSelection))
+        paintTextDecorations(paintInfo, tx, ty, true);
 }
 
 void InlineFlowBox::paintBackgrounds(GraphicsContext* p, const Color& c, const BackgroundLayer* bgLayer,
@@ -590,14 +598,13 @@ void InlineFlowBox::paintBackgrounds(GraphicsContext* p, const Color& c, const B
     paintBackground(p, c, bgLayer, my, mh, _tx, _ty, w, h);
 }
 
-void InlineFlowBox::paintBackground(GraphicsContext* p, const Color& c, const BackgroundLayer* bgLayer,
-                                    int my, int mh, int _tx, int _ty, int w, int h)
+void InlineFlowBox::paintBackground(GraphicsContext* context, const Color& c, const BackgroundLayer* bgLayer,
+                                    int my, int mh, int tx, int ty, int w, int h)
 {
     CachedImage* bg = bgLayer->backgroundImage();
     bool hasBackgroundImage = bg && bg->canRender();
-    if (!hasBackgroundImage || (!prevLineBox() && !nextLineBox()) || !parent())
-        object()->paintBackgroundExtended(p, c, bgLayer, my, mh, _tx, _ty, w, h, 
-                                          borderLeft(), borderRight(), paddingLeft(), paddingRight());
+    if ((!hasBackgroundImage && !object()->style()->hasBorderRadius()) || (!prevLineBox() && !nextLineBox()) || !parent())
+        object()->paintBackgroundExtended(context, c, bgLayer, my, mh, tx, ty, w, h);
     else {
         // We have a background image that spans multiple lines.
         // We need to adjust _tx and _ty by the width of all previous lines.
@@ -610,47 +617,60 @@ void InlineFlowBox::paintBackground(GraphicsContext* p, const Color& c, const Ba
         int xOffsetOnLine = 0;
         for (InlineRunBox* curr = prevLineBox(); curr; curr = curr->prevLineBox())
             xOffsetOnLine += curr->width();
-        int startX = _tx - xOffsetOnLine;
+        int startX = tx - xOffsetOnLine;
         int totalWidth = xOffsetOnLine;
         for (InlineRunBox* curr = this; curr; curr = curr->nextLineBox())
             totalWidth += curr->width();
-        p->save();
-        p->addClip(IntRect(_tx, _ty, width(), height()));
-        object()->paintBackgroundExtended(p, c, bgLayer, my, mh, startX, _ty,
-                                          totalWidth, h, borderLeft(), borderRight(), paddingLeft(), paddingRight());
-        p->restore();
+        context->save();
+        context->clip(IntRect(tx, ty, width(), height()));
+        object()->paintBackgroundExtended(context, c, bgLayer, my, mh, startX, ty,
+                                          totalWidth, h, includeLeftEdge(), includeRightEdge());
+        context->restore();
     }
 }
 
-void InlineFlowBox::paintBackgroundAndBorder(RenderObject::PaintInfo& i, int _tx, int _ty)
+void InlineFlowBox::paintBoxShadow(GraphicsContext* context, RenderStyle* s, int tx, int ty, int w, int h)
 {
-    if (!object()->shouldPaintWithinRoot(i) || object()->style()->visibility() != VISIBLE ||
-        i.phase != PaintPhaseForeground)
+    if ((!prevLineBox() && !nextLineBox()) || !parent())
+        object()->paintBoxShadow(context, tx, ty, w, h, s);
+    else {
+        // FIXME: We can do better here in the multi-line case. We want to push a clip so that the shadow doesn't
+        // protrude incorrectly at the edges, and we want to possibly include shadows cast from the previous/following lines
+        object()->paintBoxShadow(context, tx, ty, w, h, s, includeLeftEdge(), includeRightEdge());
+    }
+}
+
+void InlineFlowBox::paintBoxDecorations(RenderObject::PaintInfo& paintInfo, int tx, int ty)
+{
+    if (!object()->shouldPaintWithinRoot(paintInfo) || object()->style()->visibility() != VISIBLE || paintInfo.phase != PaintPhaseForeground)
         return;
 
     // Move x/y to our coordinates.
-    _tx += m_x;
-    _ty += m_y;
+    tx += m_x;
+    ty += m_y;
     
     int w = width();
     int h = height();
 
-    int my = max(_ty, i.r.y());
+    int my = max(ty, paintInfo.rect.y());
     int mh;
-    if (_ty < i.r.y())
-        mh = max(0, h - (i.r.y() - _ty));
+    if (ty < paintInfo.rect.y())
+        mh = max(0, h - (paintInfo.rect.y() - ty));
     else
-        mh = min(i.r.height(), h);
+        mh = min(paintInfo.rect.height(), h);
 
-    GraphicsContext* p = i.p;
+    GraphicsContext* context = paintInfo.context;
     
     // You can use p::first-line to specify a background. If so, the root line boxes for
     // a line may actually have to paint a background.
     RenderStyle* styleToUse = object()->style(m_firstLine);
-    if ((!parent() && m_firstLine && styleToUse != object()->style()) || 
-        (parent() && object()->shouldPaintBackgroundOrBorder())) {
+    if ((!parent() && m_firstLine && styleToUse != object()->style()) || (parent() && object()->hasBoxDecorations())) {
+        // Shadow comes first and is behind the background and border.
+        if (styleToUse->boxShadow())
+            paintBoxShadow(context, styleToUse, tx, ty, w, h);
+
         Color c = styleToUse->backgroundColor();
-        paintBackgrounds(p, c, styleToUse->backgroundLayers(), my, mh, _tx, _ty, w, h);
+        paintBackgrounds(context, c, styleToUse->backgroundLayers(), my, mh, tx, ty, w, h);
 
         // :first-line cannot be used to put borders on a line. Always paint borders with our
         // non-first-line style.
@@ -659,11 +679,11 @@ void InlineFlowBox::paintBackgroundAndBorder(RenderObject::PaintInfo& i, int _tx
             bool hasBorderImage = borderImage && borderImage->canRender();
             if (hasBorderImage && !borderImage->isLoaded())
                 return; // Don't paint anything while we wait for the image to load.
-            
+
             // The simple case is where we either have no border image or we are the only box for this object.  In those
             // cases only a single call to draw is required.
             if (!hasBorderImage || (!prevLineBox() && !nextLineBox()))
-                object()->paintBorder(p, _tx, _ty, w, h, object()->style(), includeLeftEdge(), includeRightEdge());
+                object()->paintBorder(context, tx, ty, w, h, object()->style(), includeLeftEdge(), includeRightEdge());
             else {
                 // We have a border image that spans multiple lines.
                 // We need to adjust _tx and _ty by the width of all previous lines.
@@ -676,20 +696,20 @@ void InlineFlowBox::paintBackgroundAndBorder(RenderObject::PaintInfo& i, int _tx
                 int xOffsetOnLine = 0;
                 for (InlineRunBox* curr = prevLineBox(); curr; curr = curr->prevLineBox())
                     xOffsetOnLine += curr->width();
-                int startX = _tx - xOffsetOnLine;
+                int startX = tx - xOffsetOnLine;
                 int totalWidth = xOffsetOnLine;
                 for (InlineRunBox* curr = this; curr; curr = curr->nextLineBox())
                     totalWidth += curr->width();
-                p->save();
-                p->addClip(IntRect(_tx, _ty, width(), height()));
-                object()->paintBorder(p, startX, _ty, totalWidth, h, object()->style());
-                p->restore();
+                context->save();
+                context->clip(IntRect(tx, ty, width(), height()));
+                object()->paintBorder(context, startX, ty, totalWidth, h, object()->style());
+                context->restore();
             }
         }
     }
 }
 
-static bool shouldDrawDecoration(RenderObject* obj)
+static bool shouldDrawTextDecoration(RenderObject* obj)
 {
     for (RenderObject* curr = obj->firstChild(); curr; curr = curr->nextSibling()) {
         if (curr->isInlineFlow())
@@ -709,26 +729,26 @@ static bool shouldDrawDecoration(RenderObject* obj)
     return false;
 }
 
-void InlineFlowBox::paintDecorations(RenderObject::PaintInfo& i, int _tx, int _ty, bool paintedChildren)
+void InlineFlowBox::paintTextDecorations(RenderObject::PaintInfo& paintInfo, int tx, int ty, bool paintedChildren)
 {
     // Paint text decorations like underlines/overlines. We only do this if we aren't in quirks mode (i.e., in
     // almost-strict mode or strict mode).
-    if (object()->style()->htmlHacks() || !object()->shouldPaintWithinRoot(i) ||
+    if (object()->style()->htmlHacks() || !object()->shouldPaintWithinRoot(paintInfo) ||
         object()->style()->visibility() != VISIBLE)
         return;
     
     // We don't want underlines or other decorations when we're trying to draw nothing but the selection as white text.
-    if (i.phase == PaintPhaseSelection && i.forceWhiteText)
+    if (paintInfo.phase == PaintPhaseSelection && paintInfo.forceWhiteText)
         return;
 
-    GraphicsContext* p = i.p;
-    _tx += m_x;
-    _ty += m_y;
+    GraphicsContext* context = paintInfo.context;
+    tx += m_x;
+    ty += m_y;
     RenderStyle* styleToUse = object()->style(m_firstLine);
     int deco = parent() ? styleToUse->textDecoration() : styleToUse->textDecorationsInEffect();
     if (deco != TDNONE && 
         ((!paintedChildren && ((deco & UNDERLINE) || (deco & OVERLINE))) || (paintedChildren && (deco & LINE_THROUGH))) &&
-        shouldDrawDecoration(object())) {
+        shouldDrawTextDecoration(object())) {
         int x = m_x + borderLeft() + paddingLeft();
         int w = m_width - (borderLeft() + paddingLeft() + borderRight() + paddingRight());
         RootInlineBox* rootLine = root();
@@ -740,51 +760,51 @@ void InlineFlowBox::paintDecorations(RenderObject::PaintInfo& i, int _tx, int _t
             if (rootLine == this) {
                 if (x + w >= ellipsisX + ellipsisWidth)
                     w -= (x + w - ellipsisX - ellipsisWidth);
-            }
-            else {
+            } else {
                 if (x >= ellipsisX)
                     return;
                 if (x + w >= ellipsisX)
                     w -= (x + w - ellipsisX);
             }
         }
-            
+
         // Set up the appropriate text-shadow effect for the decoration.
         // FIXME: Support multiple shadow effects.  Need more from the CG API before we can do this.
         bool setShadow = false;
         if (styleToUse->textShadow()) {
-            p->setShadow(IntSize(styleToUse->textShadow()->x, styleToUse->textShadow()->y),
-                         styleToUse->textShadow()->blur, styleToUse->textShadow()->color);
+            context->setShadow(IntSize(styleToUse->textShadow()->x, styleToUse->textShadow()->y),
+                               styleToUse->textShadow()->blur, styleToUse->textShadow()->color);
             setShadow = true;
         }
-        
+
         // We must have child boxes and have decorations defined.
-        _tx += borderLeft() + paddingLeft();
-        
+        tx += borderLeft() + paddingLeft();
+
         Color underline, overline, linethrough;
         underline = overline = linethrough = styleToUse->color();
         if (!parent())
             object()->getTextDecorationColors(deco, underline, overline, linethrough);
 
-        if (styleToUse->font() != p->font())
-            p->setFont(styleToUse->font());
+        if (styleToUse->font() != context->font())
+            context->setFont(styleToUse->font());
 
         bool isPrinting = object()->document()->printing();
+        context->setStrokeThickness(1.0f); // FIXME: We should improve this rule and not always just assume 1.
         if (deco & UNDERLINE && !paintedChildren) {
-            p->setPen(underline);
-            p->drawLineForText(IntPoint(_tx, _ty), m_baseline, w, isPrinting);
+            context->setStrokeColor(underline);
+            context->drawLineForText(IntPoint(tx, ty), m_baseline, w, isPrinting);
         }
         if (deco & OVERLINE && !paintedChildren) {
-            p->setPen(overline);
-            p->drawLineForText(IntPoint(_tx, _ty), 0, w, isPrinting);
+            context->setStrokeColor(overline);
+            context->drawLineForText(IntPoint(tx, ty), 0, w, isPrinting);
         }
         if (deco & LINE_THROUGH && paintedChildren) {
-            p->setPen(linethrough);
-            p->drawLineForText(IntPoint(_tx, _ty), 2*m_baseline/3, w, isPrinting);
+            context->setStrokeColor(linethrough);
+            context->drawLineForText(IntPoint(tx, ty), 2 * m_baseline / 3, w, isPrinting);
         }
 
         if (setShadow)
-            p->clearShadow();
+            context->clearShadow();
     }
 }
 
@@ -849,4 +869,4 @@ void InlineFlowBox::clearTruncation()
         box->clearTruncation();
 }
 
-} // namespace
+} // namespace WebCore

@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,30 +20,51 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGPathSegImpl_H
-#define KSVG_SVGPathSegImpl_H
+#ifndef SVGPathSeg_H
+#define SVGPathSeg_H
+
 #ifdef SVG_SUPPORT
 
 #include "PlatformString.h"
-
-#include "ksvg.h"
+#include "Shared.h"
 
 namespace WebCore
 {
     class SVGPathElement;
     class SVGStyledElement;
+
     class SVGPathSeg : public Shared<SVGPathSeg>
     {
     public:
-        SVGPathSeg(const SVGStyledElement *context = 0);
-        virtual ~SVGPathSeg();
+        SVGPathSeg() { }
+        virtual ~SVGPathSeg() { }
+
+        enum SVGPathSegType {
+            PATHSEG_UNKNOWN                         = 0,
+            PATHSEG_CLOSEPATH                       = 1,
+            PATHSEG_MOVETO_ABS                      = 2,
+            PATHSEG_MOVETO_REL                      = 3,
+            PATHSEG_LINETO_ABS                      = 4,
+            PATHSEG_LINETO_REL                      = 5,
+            PATHSEG_CURVETO_CUBIC_ABS               = 6,
+            PATHSEG_CURVETO_CUBIC_REL               = 7,
+            PATHSEG_CURVETO_QUADRATIC_ABS           = 8,
+            PATHSEG_CURVETO_QUADRATIC_REL           = 9,
+            PATHSEG_ARC_ABS                         = 10,
+            PATHSEG_ARC_REL                         = 11,
+            PATHSEG_LINETO_HORIZONTAL_ABS           = 12,
+            PATHSEG_LINETO_HORIZONTAL_REL           = 13,
+            PATHSEG_LINETO_VERTICAL_ABS             = 14,
+            PATHSEG_LINETO_VERTICAL_REL             = 15,
+            PATHSEG_CURVETO_CUBIC_SMOOTH_ABS        = 16,
+            PATHSEG_CURVETO_CUBIC_SMOOTH_REL        = 17,
+            PATHSEG_CURVETO_QUADRATIC_SMOOTH_ABS    = 18,
+            PATHSEG_CURVETO_QUADRATIC_SMOOTH_REL    = 19
+        };
 
         virtual unsigned short pathSegType() const { return PATHSEG_UNKNOWN; }
         virtual String pathSegTypeAsLetter() const { return ""; }
         virtual String toString() const { return ""; }
-
-    protected:
-        const SVGStyledElement *m_context;
     };
 
 } // namespace WebCore

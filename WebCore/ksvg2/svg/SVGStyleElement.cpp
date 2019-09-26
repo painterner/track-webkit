@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
     Copyright (C) 2006 Apple Computer, Inc.
 
     This file is part of the KDE project
@@ -26,27 +26,23 @@
 #include "SVGStyleElement.h"
 
 #include "CSSStyleSheet.h"
-#include "DeprecatedString.h"
 #include "Document.h"
 #include "ExceptionCode.h"
-#include "MediaList.h"
-#include "MediaQueryEvaluator.h"
-#include "PlatformString.h"
+#include "HTMLNames.h"
 
 namespace WebCore {
 
-SVGStyleElement::SVGStyleElement(const QualifiedName& tagName, Document *doc) : SVGElement(tagName, doc)
+using namespace HTMLNames;
+
+SVGStyleElement::SVGStyleElement(const QualifiedName& tagName, Document* doc)
+     : SVGElement(tagName, doc)
 {
-    m_loading = false;
 }
 
-SVGStyleElement::~SVGStyleElement()
+const AtomicString& SVGStyleElement::xmlspace() const
 {
-}
-
-AtomicString SVGStyleElement::xmlspace() const
-{
-    return tryGetAttribute("xml:space");
+    static const AtomicString defaultValue("xml:space");
+    return getAttribute(defaultValue);
 }
 
 void SVGStyleElement::setXmlspace(const AtomicString&, ExceptionCode& ec)
@@ -54,9 +50,11 @@ void SVGStyleElement::setXmlspace(const AtomicString&, ExceptionCode& ec)
     ec = NO_MODIFICATION_ALLOWED_ERR;
 }
 
-AtomicString SVGStyleElement::type() const
+const AtomicString& SVGStyleElement::type() const
 {
-    return tryGetAttribute("type", "text/css");
+    static const AtomicString defaultValue("text/css");
+    const AtomicString& n = getAttribute(typeAttr);
+    return n.isNull() ? defaultValue : n;
 }
 
 void SVGStyleElement::setType(const AtomicString&, ExceptionCode& ec)
@@ -64,9 +62,11 @@ void SVGStyleElement::setType(const AtomicString&, ExceptionCode& ec)
     ec = NO_MODIFICATION_ALLOWED_ERR;
 }
 
-AtomicString SVGStyleElement::media() const
+const AtomicString& SVGStyleElement::media() const
 {
-    return tryGetAttribute("media", "all");
+    static const AtomicString defaultValue("all");
+    const AtomicString& n = getAttribute(mediaAttr);
+    return n.isNull() ? defaultValue : n;
 }
 
 void SVGStyleElement::setMedia(const AtomicString&, ExceptionCode& ec)
@@ -74,51 +74,34 @@ void SVGStyleElement::setMedia(const AtomicString&, ExceptionCode& ec)
     ec = NO_MODIFICATION_ALLOWED_ERR;
 }
 
-AtomicString SVGStyleElement::title() const
-{
-    return tryGetAttribute("title");
-}
-
 void SVGStyleElement::setTitle(const AtomicString&, ExceptionCode& ec)
 {
     ec = NO_MODIFICATION_ALLOWED_ERR;
 }
 
-CSSStyleSheet *SVGStyleElement::sheet()
+void SVGStyleElement::parseMappedAttribute(MappedAttribute *attr)
 {
-    return m_sheet.get();
+    if (attr->name() == titleAttr && m_sheet)
+        m_sheet->setTitle(attr->value());
+    else
+        SVGElement::parseMappedAttribute(attr);
+}
+
+void SVGStyleElement::insertedIntoDocument()
+{
+    SVGElement::insertedIntoDocument();
+    StyleElement::insertedIntoDocument(document());
+}
+
+void SVGStyleElement::removedFromDocument()
+{
+    SVGElement::removedFromDocument();
+    StyleElement::removedFromDocument(document());
 }
 
 void SVGStyleElement::childrenChanged()
 {
-    SVGElement::childrenChanged();
-
-    if(m_sheet)
-        m_sheet = 0;
-
-    m_loading = false;
-    MediaQueryEvaluator screenEval("screen", true);
-    MediaQueryEvaluator printEval("print", true);   
-    RefPtr<MediaList> mediaList = new MediaList((CSSStyleSheet*)0, media());
-    if ((type().isEmpty() || type() == "text/css") && (screenEval.eval(mediaList.get()) || printEval.eval(mediaList.get()))) {
-        ownerDocument()->addPendingSheet();
-
-        m_loading = true;
- 
-        m_sheet = new CSSStyleSheet(this);
-        m_sheet->parseString(textContent()); // SVG css is always parsed in strict mode
-        
-        m_sheet->setMedia(mediaList.get());
-        m_loading = false;
-    }
-
-    if(!isLoading() && m_sheet)
-        document()->stylesheetLoaded();
-}
-
-bool SVGStyleElement::isLoading() const
-{
-    return false;
+    StyleElement::childrenChanged(this);
 }
 
 }

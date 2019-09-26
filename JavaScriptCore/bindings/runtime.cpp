@@ -29,30 +29,18 @@
 #include "JSLock.h"
 #include "NP_jsobject.h"
 #include "c_instance.h"
+#if HAVE(JNI)
 #include "jni_instance.h"
+#endif
+#if PLATFORM(MAC)
 #include "objc_instance.h"
+#endif
+#if PLATFORM(QT)
+#include "qt_instance.h"
+#endif
 #include "runtime_object.h"
 
 namespace KJS { namespace Bindings {
-
-void deleteMethodList(CFAllocatorRef, const void* value)
-{
-    const MethodList* methodList = static_cast<const MethodList*>(value);
-    int end = methodList->length();
-    for (int i = 0; i < end; i++)
-        delete methodList->methodAt(i);    
-    delete methodList;
-}
-
-void deleteMethod(CFAllocatorRef, const void* value)
-{
-    delete static_cast<const Method*>(value);
-}
-
-void deleteField(CFAllocatorRef, const void* value)
-{
-    delete static_cast<const Field*>(value);
-}
 
 void MethodList::addMethod(Method *aMethod)
 {
@@ -106,8 +94,8 @@ MethodList &MethodList::operator=(const MethodList &other)
 
 
 Instance::Instance()
-: _executionContext(0)
-, _refCount(0)
+    : _rootObject(0)
+    , _refCount(0)
 {
 }
 
@@ -126,69 +114,49 @@ void Instance::setValueOfField(ExecState *exec, const Field *aField, JSValue *aV
     aField->setValueToInstance(exec, this, aValue);
 }
 
-Instance *Instance::createBindingForLanguageInstance(BindingLanguage language, void *nativeInstance, const RootObject *executionContext)
+Instance* Instance::createBindingForLanguageInstance(BindingLanguage language, void* nativeInstance, const RootObject* rootObject)
 {
     Instance *newInstance = 0;
     
     switch (language) {
+#if HAVE(JNI)
         case Instance::JavaLanguage: {
-            newInstance = new Bindings::JavaInstance((jobject)nativeInstance, executionContext);
+            newInstance = new Bindings::JavaInstance((jobject)nativeInstance, rootObject);
             break;
         }
+#endif
+#if PLATFORM(MAC)
         case Instance::ObjectiveCLanguage: {
             newInstance = new Bindings::ObjcInstance((ObjectStructPtr)nativeInstance);
             break;
         }
+#endif
         case Instance::CLanguage: {
             newInstance = new Bindings::CInstance((NPObject *)nativeInstance);
             break;
         }
+#if PLATFORM(QT)
+        case Instance::QtLanguage: {
+            newInstance = new Bindings::QtInstance((QObject *)nativeInstance);
+            break;
+        }
+#endif
         default:
             break;
     }
 
     if (newInstance)
-        newInstance->setExecutionContext(executionContext);
+        newInstance->setRootObject(rootObject);
         
     return newInstance;
 }
 
-JSObject *Instance::createRuntimeObject(BindingLanguage language, void *nativeInstance, const RootObject *executionContext)
+JSObject* Instance::createRuntimeObject(BindingLanguage language, void* nativeInstance, const RootObject* rootObject)
 {
-    Instance *interfaceObject = Instance::createBindingForLanguageInstance(language, nativeInstance, executionContext);
+    Instance* interfaceObject = Instance::createBindingForLanguageInstance(language, nativeInstance, rootObject);
     
     JSLock lock;
     return new RuntimeObjectImp(interfaceObject);
-}
-
-void *Instance::createLanguageInstanceForValue(ExecState*, BindingLanguage language, JSObject* value, const RootObject* origin, const RootObject* current)
-{
-    void *result = 0;
-    
-    if (!value->isObject())
-        return 0;
-
-    JSObject *imp = static_cast<JSObject*>(value);
-    
-    switch (language) {
-        case Instance::ObjectiveCLanguage: {
-            result = createObjcInstanceForValue(value, origin, current);
-            break;
-        }
-        case Instance::CLanguage: {
-            result = _NPN_CreateScriptObject(0, imp, origin, current);
-            break;
-        }
-        case Instance::JavaLanguage: {
-            // FIXME:  factor creation of jni_jsobjects, also remove unnecessary thread
-            // invocation code.
-            break;
-        }
-        default:
-            break;
-    }
-    
-    return result;
 }
 
 } } // namespace KJS::Bindings

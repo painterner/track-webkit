@@ -26,13 +26,17 @@
 #include "RenderPartObject.h"
 
 #include "Document.h"
+#include "EventHandler.h"
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "FrameTree.h"
-#include "HTMLNames.h"
+#include "FrameView.h"
 #include "HTMLEmbedElement.h"
 #include "HTMLIFrameElement.h"
+#include "HTMLNames.h"
 #include "HTMLObjectElement.h"
 #include "HTMLParamElement.h"
+#include "KURL.h"
 #include "Page.h"
 #include "Text.h"
 
@@ -40,7 +44,7 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
-RenderPartObject::RenderPartObject(HTMLElement* element)
+RenderPartObject::RenderPartObject(HTMLFrameOwnerElement* element)
     : RenderPart(element)
 {
     // init RenderObject attributes
@@ -60,7 +64,7 @@ static bool isURLAllowed(Document *doc, const String &url)
     // But we don't allow more than one.
     bool foundSelfReference = false;
     for (Frame *frame = doc->frame(); frame; frame = frame->tree()->parent()) {
-        KURL frameURL = frame->url();
+        KURL frameURL = frame->loader()->url();
         frameURL.setRef(DeprecatedString::null);
         if (frameURL == newURL) {
             if (foundSelfReference)
@@ -134,17 +138,17 @@ void RenderPartObject::updateWidget()
           if (!attribute.isEmpty())
               o->setAttribute(heightAttr, attribute);
           url = embed->url;
-          serviceType = embed->serviceType;
+          serviceType = embed->m_serviceType;
       } else
           embedOrObject = (HTMLElement *)o;
       
       // If there was no URL or type defined in EMBED, try the OBJECT tag.
       if (url.isEmpty())
-          url = o->url;
+          url = o->m_url;
       if (serviceType.isEmpty())
-          serviceType = o->serviceType;
+          serviceType = o->m_serviceType;
       
-      HashSet<StringImpl*, CaseInsensitiveHash> uniqueParamNames;
+      HashSet<StringImpl*, CaseInsensitiveHash<StringImpl*> > uniqueParamNames;
       
       // Scan the PARAM children.
       // Get the URL and type from the params if we don't already have them.
@@ -196,8 +200,8 @@ void RenderPartObject::updateWidget()
       }
       
       // If we still don't have a type, try to map from a specific CLASSID to a type.
-      if (serviceType.isEmpty() && !o->classId.isEmpty())
-          mapClassIdToServiceType(o->classId, serviceType);
+      if (serviceType.isEmpty() && !o->m_classId.isEmpty())
+          mapClassIdToServiceType(o->m_classId, serviceType);
       
       // If no URL and type, abort.
       if (url.isEmpty() && serviceType.isEmpty())
@@ -212,13 +216,13 @@ void RenderPartObject::updateWidget()
               (child->isTextNode() && !static_cast<Text*>(child)->containsOnlyWhitespace()))
               m_hasFallbackContent = true;
       }
-      bool success = frame->requestObject(this, url, AtomicString(o->name()), serviceType, paramNames, paramValues);
+      bool success = frame->loader()->requestObject(this, url, AtomicString(o->name()), serviceType, paramNames, paramValues);
       if (!success && m_hasFallbackContent)
           o->renderFallbackContent();
   } else if (element()->hasTagName(embedTag)) {
       HTMLEmbedElement *o = static_cast<HTMLEmbedElement*>(element());
       url = o->url;
-      serviceType = o->serviceType;
+      serviceType = o->m_serviceType;
 
       if (url.isEmpty() && serviceType.isEmpty())
           return;
@@ -234,7 +238,7 @@ void RenderPartObject::updateWidget()
               paramValues.append(it->value().domString());
           }
       }
-      frame->requestObject(this, url, o->getAttribute(nameAttr), serviceType, paramNames, paramValues);
+      frame->loader()->requestObject(this, url, o->getAttribute(nameAttr), serviceType, paramNames, paramValues);
   }
 }
 
@@ -260,13 +264,13 @@ void RenderPartObject::viewCleared()
         int marginh = -1;
         if (element()->hasTagName(iframeTag)) {
             HTMLIFrameElement* frame = static_cast<HTMLIFrameElement*>(element());
-            hasBorder = frame->m_frameBorder;
-            marginw = frame->m_marginWidth;
-            marginh = frame->m_marginHeight;
+            hasBorder = frame->hasFrameBorder();
+            marginw = frame->getMarginWidth();
+            marginh = frame->getMarginHeight();
         }
 
         view->setHasBorder(hasBorder);
-        view->setIgnoreWheelEvents(element()->hasTagName(iframeTag));
+        view->frame()->eventHandler()->setIgnoreWheelEvents(element()->hasTagName(iframeTag));
         if (marginw != -1)
             view->setMarginWidth(marginw);
         if (marginh != -1)

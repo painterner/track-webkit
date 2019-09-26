@@ -130,7 +130,7 @@ static String keyIdentifierForWindowsKeyCode(short keyCode)
         case VK_DELETE:
             return "U+00007F";
         default:
-            return String::sprintf("U+%06X", toupper(keyCode));
+            return String::format("U+%06X", toupper(keyCode));
     }
 }
 
@@ -141,11 +141,11 @@ PlatformKeyboardEvent::PlatformKeyboardEvent(HWND hWnd, WPARAM wParam, LPARAM lP
     , m_unmodifiedText(singleCharacterString(wParam))
     , m_keyIdentifier(keyIdentifierForWindowsKeyCode(wParam))
     , m_isKeyUp((lParam & NEW_RELEASE_STATE_MASK))
-    , m_autoRepeat(lParam & REPEAT_COUNT_MASK)
+    , m_autoRepeat((lParam & REPEAT_COUNT_MASK) > 1)
     , m_WindowsKeyCode(wParam)
     , m_isKeypad(false) // FIXME
-    , m_shiftKey(GetAsyncKeyState(VK_SHIFT) & HIGH_BIT_MASK_SHORT)
-    , m_ctrlKey(GetAsyncKeyState(VK_CONTROL) & HIGH_BIT_MASK_SHORT)
+    , m_shiftKey(GetKeyState(VK_SHIFT) & HIGH_BIT_MASK_SHORT)
+    , m_ctrlKey(GetKeyState(VK_CONTROL) & HIGH_BIT_MASK_SHORT)
     , m_altKey(lParam & ALT_KEY_DOWN_MASK)
     , m_metaKey(lParam & ALT_KEY_DOWN_MASK) // FIXME: Is this right?
 {

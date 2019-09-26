@@ -18,15 +18,15 @@
  */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGFEPointLightElement.h"
-
-#include "SVGAnimatedNumber.h"
+#include "SVGPointLightSource.h"
 
 namespace WebCore {
 
-SVGFEPointLightElement::SVGFEPointLightElement(const QualifiedName& tagName, Document *doc) : 
-SVGFELightElement(tagName, doc)
+SVGFEPointLightElement::SVGFEPointLightElement(const QualifiedName& tagName, Document* doc)
+    : SVGFELightElement(tagName, doc)
 {
 }
 
@@ -34,12 +34,14 @@ SVGFEPointLightElement::~SVGFEPointLightElement()
 {
 }
 
-KCLightSource *SVGFEPointLightElement::lightSource() const
+SVGLightSource* SVGFEPointLightElement::lightSource() const
 {
-    KCanvasPoint3F pos(x()->baseVal(), y()->baseVal(), z()->baseVal());
-    return new KCPointLightSource(pos);
+    FloatPoint3D pos(x(), y(), z());
+    return new SVGPointLightSource(pos);
 }
 
 }
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

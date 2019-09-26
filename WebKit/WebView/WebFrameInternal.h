@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2005, 2006 Apple Computer, Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,48 +28,146 @@
 
 // This header contains WebFrame declarations that can be used anywhere in WebKit, but are neither SPI nor API.
 
-#import <WebKit/WebFramePrivate.h>
+#import "WebFramePrivate.h"
+#import "WebPreferencesPrivate.h"
 
+#ifdef __cplusplus
+#import <WebCore/FrameLoaderTypes.h>
+#import <WebCore/Settings.h>
+#endif
+
+@class DOMCSSStyleDeclaration;
+@class DOMElement;
+@class DOMNode;
+@class DOMRange;
 @class WebInspector;
-@class WebFrameLoader;
+@class WebFrameView;
+@class WebFrameBridge;
+@class WebHistoryItem;
+@class WebScriptDebugger;
+
+#ifdef __cplusplus
+
+namespace WebCore {
+    class CSSStyleDeclaration;
+    class Document;
+    class DocumentLoader;
+    class Element;
+    class Frame;
+    class FrameMac;
+    class FrameLoader;
+    class HistoryItem;
+    class HTMLElement;
+    class Node;
+    class Page;
+    class Range;
+}
+
+typedef WebCore::HistoryItem WebCoreHistoryItem;
+
+WebCore::CSSStyleDeclaration* core(DOMCSSStyleDeclaration *);
+DOMCSSStyleDeclaration *kit(WebCore::CSSStyleDeclaration*);
+
+WebCore::FrameMac* core(WebFrame *);
+WebFrame *kit(WebCore::Frame *);
+
+WebCore::Element* core(DOMElement *);
+DOMElement *kit(WebCore::Element*);
+
+WebCore::Node* core(DOMNode *);
+DOMNode *kit(WebCore::Node*);
+
+WebCore::Document* core(DOMDocument *);
+DOMDocument *kit(WebCore::Document*);
+
+WebCore::HTMLElement* core(DOMHTMLElement *);
+DOMHTMLElement *kit(WebCore::HTMLElement*);
+
+WebCore::Range* core(DOMRange *);
+DOMRange *kit(WebCore::Range*);
+
+WebCore::Page* core(WebView *);
+WebView *kit(WebCore::Page*);
+
+WebCore::EditableLinkBehavior core(WebKitEditableLinkBehavior);
+WebKitEditableLinkBehavior kit(WebCore::EditableLinkBehavior);
+
+WebView *getWebView(WebFrame *webFrame);
+
+@interface WebFramePrivate : NSObject
+{
+@public
+    WebFrameView *webFrameView;
+
+    WebFrameBridge *bridge;
+
+    WebScriptDebugger *scriptDebugger;
+    id internalLoadDelegate;
+    
+    NSMutableSet *inspectors;
+}
+@end
+
+#else
+struct WebCoreHistoryItem;
+#endif
 
 @interface WebFrame (WebInternal)
 
-- (void)_updateDrawsBackground;
+- (void)_updateBackground;
 - (void)_setInternalLoadDelegate:(id)internalLoadDelegate;
 - (id)_internalLoadDelegate;
+#if !BUILDING_ON_TIGER
+- (void)_unmarkAllBadGrammar;
+#endif
 - (void)_unmarkAllMisspellings;
-- (void)_didFirstLayout;
 // Note that callers should not perform any ops on these views that could change the set of frames
 - (NSArray *)_documentViews;
-
-- (NSURLRequest *)_requestFromDelegateForRequest:(NSURLRequest *)request identifier:(id *)identifier error:(NSError **)error;
-- (void)_sendRemainingDelegateMessagesWithIdentifier:(id)identifier response:(NSURLResponse *)response length:(unsigned)length error:(NSError *)error;
-- (void)_safeLoadURL:(NSURL *)URL;
 
 - (BOOL)_hasSelection;
 - (void)_clearSelection;
 - (WebFrame *)_findFrameWithSelection;
 - (void)_clearSelectionInOtherFrames;
-- (BOOL)_subframeIsLoading;
+#ifdef __cplusplus
 - (id)_initWithWebFrameView:(WebFrameView *)fv webView:(WebView *)v bridge:(WebFrameBridge *)bridge;
+#endif
 
-- (void)_addPlugInView:(NSView *)plugInView;
-- (void)_removeAllPlugInViews;
-
-// This should be called when leaving a page or closing the WebView
-- (void)_willCloseURL;
-
-- (void)_addExtraFieldsToRequest:(NSMutableURLRequest *)request mainResource:(BOOL)mainResource alwaysFromRequest:(BOOL)f;
 - (BOOL)_isMainFrame;
 
 - (void)_addInspector:(WebInspector *)inspector;
 - (void)_removeInspector:(WebInspector *)inspector;
 
-- (WebFrameLoader *)_frameLoader;
-- (void)_provisionalLoadStarted;
-- (void)_prepareForDataSourceReplacement;
-- (void)_frameLoadCompleted;
+#ifdef __cplusplus
+
+- (WebCore::FrameLoader*)_frameLoader;
+- (WebDataSource *)_dataSourceForDocumentLoader:(WebCore::DocumentLoader*)loader;
+
+- (void)_addDocumentLoader:(WebCore::DocumentLoader*)loader toUnarchiveState:(WebArchive *)archive;
+
+#endif
+
+- (NSURLRequest *)_webDataRequestForData:(NSData *)data MIMEType:(NSString *)MIMEType textEncodingName:(NSString *)encodingName baseURL:(NSURL *)URL unreachableURL:(NSURL *)unreachableURL;
+
+- (WebFrameBridge *)_bridge;
+
+- (void)_loadURL:(NSURL *)URL referrer:(NSString *)referrer intoChild:(WebFrame *)childFrame;
+
+- (void)_viewWillMoveToHostWindow:(NSWindow *)hostWindow;
+- (void)_viewDidMoveToHostWindow;
+
+- (void)_addChild:(WebFrame *)child;
+
++ (CFAbsoluteTime)_timeOfLastCompletedLoad;
+- (BOOL)_canCachePage;
+
+- (int)_numPendingOrLoadingRequests:(BOOL)recurse;
+
+- (void)_reloadForPluginChanges;
+
+- (void)_attachScriptDebugger;
+- (void)_detachScriptDebugger;
+
+- (void)_recursive_pauseNullEventsForAllNetscapePlugins;
 
 @end
 

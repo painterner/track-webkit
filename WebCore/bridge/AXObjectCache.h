@@ -63,7 +63,7 @@ namespace WebCore {
         
         void childrenChanged(RenderObject*);
         void postNotification(RenderObject*, const String& message);
-        void postNotificationToTopWebArea(RenderObject*, const String& message);
+        void postNotificationToElement(RenderObject*, const String& message);
         void handleFocusedUIElementChanged();
         
         static void enableAccessibility() { gAccessibilityEnabled = true; }
@@ -78,14 +78,14 @@ namespace WebCore {
         HashSet<AXID, IntHash<AXID>, AXIDHashTraits> m_idsInUse;
     };
 
-#ifndef __APPLE__
+#if !PLATFORM(MAC)
     inline AXObjectCache::~AXObjectCache() { }
     inline WebCoreAXObject* AXObjectCache::get(RenderObject*) { return 0; }
     inline void AXObjectCache::remove(RenderObject*) { }
     inline void AXObjectCache::removeAXID(WebCoreAXObject*) { }
     inline void AXObjectCache::childrenChanged(RenderObject*) { }
     inline void AXObjectCache::postNotification(RenderObject*, const String&) { }
-    inline void AXObjectCache::postNotificationToTopWebArea(RenderObject*, const String&) { }
+    inline void AXObjectCache::postNotificationToElement(RenderObject*, const String&) { }
     inline void AXObjectCache::handleFocusedUIElementChanged() { }
 #endif
 

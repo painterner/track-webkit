@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -29,9 +29,6 @@
 namespace WebCore {
 
     class MappedAttribute;
-    class StringImpl;
-    class SVGAnimatedLength;
-    class SVGAnimatedString;
 
     class SVGLangSpace {
     public:
@@ -45,7 +42,7 @@ namespace WebCore {
         const AtomicString& xmlspace() const;
         void setXmlspace(const AtomicString& xmlSpace);
 
-        bool parseMappedAttribute(MappedAttribute *attr);
+        bool parseMappedAttribute(MappedAttribute*);
 
     private:
         AtomicString m_lang;

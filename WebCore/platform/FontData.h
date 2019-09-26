@@ -1,6 +1,5 @@
 /*
- * This file is part of the internal font implementation.  It should not be included by anyone other than
- * FontMac.cpp, FontWin.cpp and Font.cpp.
+ * This file is part of the internal font implementation.
  *
  * Copyright (C) 2006 Apple Computer, Inc.
  *
@@ -29,8 +28,11 @@
 #include "GlyphWidthMap.h"
 #include <wtf/Noncopyable.h>
 
-// FIXME: Temporary. Only needed to support API that's going to move.
-#include <unicode/umachine.h>
+#include <wtf/unicode/Unicode.h>
+
+#if PLATFORM(MAC)
+typedef struct OpaqueATSUStyle* ATSUStyle;
+#endif
 
 namespace WebCore {
 
@@ -68,7 +70,7 @@ public:
     GlyphData glyphDataForCharacter(UChar32 c) const { return m_characterToGlyphMap.glyphDataForCharacter(c, this); }
     void setGlyphDataForCharacter(UChar32 c, Glyph glyph, const FontData* fontData) const { m_characterToGlyphMap.setGlyphDataForCharacter(c, glyph, fontData); }
 
-#if __APPLE__
+#if PLATFORM(MAC)
     NSFont* getNSFont() const { return m_font.font; }
 #endif
 
@@ -103,9 +105,12 @@ public:
 
     mutable FontData* m_smallCapsFontData;
 
-#if __APPLE__
-    void* m_styleGroup;
+#if PLATFORM(CG)
     float m_syntheticBoldOffset;
+#endif
+
+#if PLATFORM(MAC)
+    void* m_styleGroup;
     mutable ATSUStyle m_ATSUStyle;
     mutable bool m_ATSUStyleInitialized;
     mutable bool m_ATSUMirrors;

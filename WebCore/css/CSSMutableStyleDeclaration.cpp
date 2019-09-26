@@ -297,14 +297,23 @@ bool CSSMutableStyleDeclaration::setProperty(int propertyID, const String &value
 {
     ec = 0;
 
-    removeProperty(propertyID);
+    // Setting the value to an empty string just removes the property in both IE and Gecko.
+    // Setting it to null seems to produce less consistent results, but we treat it just the same.
+    if (value.isEmpty()) {
+        removeProperty(propertyID, notifyChanged, ec);
+        return ec == 0;
+    }
 
+    // When replacing an existing property value, this moves the property to the end of the list.
+    // Firefox preserves the position, and MSIE moves the property to the beginning.
     CSSParser parser(useStrictParsing());
     bool success = parser.parseValue(this, propertyID, value, important);
     if (!success) {
-        ec = SYNTAX_ERR;
+        // CSS DOM requires raising SYNTAX_ERR here, but this is too dangerous for compatibility,
+        // see <http://bugs.webkit.org/show_bug.cgi?id=7296>.
     } else if (notifyChanged)
         setChanged();
+    ASSERT(!ec);
     return success;
 }
 
@@ -407,38 +416,20 @@ void CSSMutableStyleDeclaration::merge(CSSMutableStyleDeclaration *other, bool a
     // a notifyChanged argument to this function to follow the model of other functions in this class.
 }
 
-// This is the list of properties we want to copy in the copyInheritableProperties() function.
-// It is the intersection of the list of inherited CSS properties and the
-// properties for which we have a computed implementation in this file.
-const int inheritableProperties[] = {
-    CSS_PROP_BORDER_COLLAPSE,
-    CSS_PROP_BORDER_SPACING,
-    CSS_PROP_COLOR,
-    CSS_PROP_FONT_FAMILY,
-    CSS_PROP_FONT_SIZE,
-    CSS_PROP_FONT_STYLE,
-    CSS_PROP_FONT_VARIANT,
-    CSS_PROP_FONT_WEIGHT,
-    CSS_PROP_LETTER_SPACING,
-    CSS_PROP_LINE_HEIGHT,
-    CSS_PROP_TEXT_ALIGN,
-    CSS_PROP__WEBKIT_TEXT_DECORATIONS_IN_EFFECT,
-    CSS_PROP_TEXT_INDENT,
-    CSS_PROP__WEBKIT_TEXT_SIZE_ADJUST,
-    CSS_PROP_TEXT_TRANSFORM,
-    CSS_PROP_ORPHANS,
-    CSS_PROP_WHITE_SPACE,
-    CSS_PROP_WIDOWS,
-    CSS_PROP_WORD_SPACING,
-};
-
-const unsigned numInheritableProperties = sizeof(inheritableProperties) / sizeof(inheritableProperties[0]);
-
 // This is the list of properties we want to copy in the copyBlockProperties() function.
 // It is the list of CSS properties that apply specially to block-level elements.
 static const int blockProperties[] = {
     CSS_PROP_ORPHANS,
     CSS_PROP_OVERFLOW, // This can be also be applied to replaced elements
+    CSS_PROP__WEBKIT_COLUMN_COUNT,
+    CSS_PROP__WEBKIT_COLUMN_GAP,
+    CSS_PROP__WEBKIT_COLUMN_RULE_COLOR,
+    CSS_PROP__WEBKIT_COLUMN_RULE_STYLE,
+    CSS_PROP__WEBKIT_COLUMN_RULE_WIDTH,
+    CSS_PROP__WEBKIT_COLUMN_BREAK_BEFORE,
+    CSS_PROP__WEBKIT_COLUMN_BREAK_AFTER,
+    CSS_PROP__WEBKIT_COLUMN_BREAK_INSIDE,
+    CSS_PROP__WEBKIT_COLUMN_WIDTH,
     CSS_PROP_PAGE_BREAK_AFTER,
     CSS_PROP_PAGE_BREAK_BEFORE,
     CSS_PROP_PAGE_BREAK_INSIDE,
@@ -457,11 +448,6 @@ PassRefPtr<CSSMutableStyleDeclaration> CSSMutableStyleDeclaration::copyBlockProp
 void CSSMutableStyleDeclaration::removeBlockProperties()
 {
     removePropertiesInSet(blockProperties, numBlockProperties);
-}
-
-void CSSMutableStyleDeclaration::removeInheritableProperties()
-{
-    removePropertiesInSet(inheritableProperties, numInheritableProperties);
 }
 
 void CSSMutableStyleDeclaration::removePropertiesInSet(const int *set, unsigned length)

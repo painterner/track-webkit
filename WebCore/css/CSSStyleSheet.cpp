@@ -32,27 +32,30 @@
 
 namespace WebCore {
 
-CSSStyleSheet::CSSStyleSheet(CSSStyleSheet* parentSheet, String href)
+CSSStyleSheet::CSSStyleSheet(CSSStyleSheet* parentSheet, const String& href, const String& charset)
     : StyleSheet(parentSheet, href)
     , m_doc(parentSheet ? parentSheet->doc() : 0)
-    , m_implicit(false)
     , m_namespaces(0)
+    , m_charset(charset)
+    , m_loadCompleted(false)
 {
 }
 
-CSSStyleSheet::CSSStyleSheet(Node *parentNode, String href, bool _implicit)
+CSSStyleSheet::CSSStyleSheet(Node *parentNode, const String& href, const String& charset)
     : StyleSheet(parentNode, href)
     , m_doc(parentNode->document())
-    , m_implicit(_implicit) 
     , m_namespaces(0)
+    , m_charset(charset)
+    , m_loadCompleted(false)
 {
 }
 
-CSSStyleSheet::CSSStyleSheet(CSSRule *ownerRule, String href)
+CSSStyleSheet::CSSStyleSheet(CSSRule *ownerRule, const String& href, const String& charset)
     : StyleSheet(ownerRule, href)
     , m_doc(0)
-    , m_implicit(false)
     , m_namespaces(0)
+    , m_charset(charset)
+    , m_loadCompleted(false)
 {
 }
 
@@ -98,9 +101,9 @@ unsigned CSSStyleSheet::addRule(const String &selector, const String &style, int
     return insertRule(selector + " { " + style + " }", index, ec);
 }
 
-CSSRuleList *CSSStyleSheet::cssRules()
+CSSRuleList *CSSStyleSheet::cssRules(bool omitCharsetRules)
 {
-    return new CSSRuleList(this);
+    return new CSSRuleList(this, omitCharsetRules);
 }
 
 void CSSStyleSheet::deleteRule(unsigned index, ExceptionCode& ec)
@@ -167,8 +170,7 @@ void CSSStyleSheet::checkLoaded()
         return;
     if (parent())
         parent()->checkLoaded();
-    if (m_parentNode)
-        m_parentNode->sheetLoaded();
+    m_loadCompleted = m_parentNode ? m_parentNode->sheetLoaded() : true;
 }
 
 DocLoader *CSSStyleSheet::docLoader()

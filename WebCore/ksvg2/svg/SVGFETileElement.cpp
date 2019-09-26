@@ -21,25 +21,20 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "DeprecatedStringList.h"
+#include "SVGFETileElement.h"
 
 #include "Attr.h"
-
-#include <kcanvas/KCanvasFilters.h>
-#include <kcanvas/device/KRenderingDevice.h>
-
-#include "SVGHelper.h"
 #include "SVGRenderStyle.h"
-#include "SVGFETileElement.h"
-#include "SVGAnimatedString.h"
+#include "SVGResourceFilter.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGFETileElement::SVGFETileElement(const QualifiedName& tagName, Document *doc) : 
-SVGFilterPrimitiveStandardAttributes(tagName, doc)
+SVGFETileElement::SVGFETileElement(const QualifiedName& tagName, Document* doc)
+    : SVGFilterPrimitiveStandardAttributes(tagName, doc)
+    , m_filterEffect(0)
 {
-    m_filterEffect = 0;
 }
 
 SVGFETileElement::~SVGFETileElement()
@@ -47,32 +42,30 @@ SVGFETileElement::~SVGFETileElement()
     delete m_filterEffect;
 }
 
-SVGAnimatedString *SVGFETileElement::in1() const
-{
-    SVGStyledElement *dummy = 0;
-    return lazy_create<SVGAnimatedString>(m_in1, dummy);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGFETileElement, String, String, string, In1, in1, SVGNames::inAttr.localName(), m_in1)
 
-void SVGFETileElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGFETileElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::inAttr)
-        in1()->setBaseVal(value.impl());
+        setIn1BaseValue(value);
     else
         SVGFilterPrimitiveStandardAttributes::parseMappedAttribute(attr);
 }
 
-KCanvasFETile *SVGFETileElement::filterEffect() const
+SVGFETile* SVGFETileElement::filterEffect() const
 {
     if (!m_filterEffect)
-        m_filterEffect = static_cast<KCanvasFETile *>(renderingDevice()->createFilterEffect(FE_TILE));
+        m_filterEffect = static_cast<SVGFETile*>(SVGResourceFilter::createFilterEffect(FE_TILE));
     if (!m_filterEffect)
         return 0;
-    m_filterEffect->setIn(String(in1()->baseVal()).deprecatedString());
+    m_filterEffect->setIn(in1());
     setStandardAttributes(m_filterEffect);
     return m_filterEffect;
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

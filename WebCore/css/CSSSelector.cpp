@@ -74,6 +74,7 @@ void CSSSelector::extractPseudoType() const
     static AtomicString autofill("-webkit-autofill");
     static AtomicString before("before");
     static AtomicString checked("checked");
+    static AtomicString fileUploadButton("-webkit-file-upload-button");
     static AtomicString disabled("disabled");
     static AtomicString drag("-webkit-drag");
     static AtomicString empty("empty");
@@ -93,7 +94,12 @@ void CSSSelector::extractPseudoType() const
     static AtomicString onlyChild("only-child");
     static AtomicString onlyOfType("only-of-type");
     static AtomicString root("root");
+    static AtomicString searchCancelButton("-webkit-search-cancel-button");
+    static AtomicString searchDecoration("-webkit-search-decoration");
+    static AtomicString searchResultsDecoration("-webkit-search-results-decoration");
+    static AtomicString searchResultsButton("-webkit-search-results-button");
     static AtomicString selection("selection");
+    static AtomicString sliderThumb("-webkit-slider-thumb");
     static AtomicString target("target");
     static AtomicString visited("visited");
     bool element = false;       // pseudo-element
@@ -114,7 +120,10 @@ void CSSSelector::extractPseudoType() const
         element = compat = true;
     } else if (value == checked)
         _pseudoType = PseudoChecked;
-    else if (value == disabled)
+    else if (value == fileUploadButton) {
+        _pseudoType = PseudoFileUploadButton;
+        element = true;
+    } else if (value == disabled)
         _pseudoType = PseudoDisabled;
     else if (value == drag)
         _pseudoType = PseudoDrag;
@@ -154,8 +163,23 @@ void CSSSelector::extractPseudoType() const
         _pseudoType = PseudoOnlyOfType;
     else if (value == root)
         _pseudoType = PseudoRoot;
-    else if (value == selection) {
+    else if (value == searchCancelButton) {
+        _pseudoType = PseudoSearchCancelButton;
+        element = true;
+    } else if (value == searchDecoration) {
+        _pseudoType = PseudoSearchDecoration;
+        element = true;
+    } else if (value == searchResultsDecoration) {
+        _pseudoType = PseudoSearchResultsDecoration;
+        element = true;
+    } else if (value == searchResultsButton) {
+        _pseudoType = PseudoSearchResultsButton;
+        element = true;
+    }  else if (value == selection) {
         _pseudoType = PseudoSelection;
+        element = true;
+    } else if (value == sliderThumb) {
+        _pseudoType = PseudoSliderThumb;
         element = true;
     } else if (value == target)
         _pseudoType = PseudoTarget;

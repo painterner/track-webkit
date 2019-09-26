@@ -29,6 +29,7 @@
 #import <WebKit/WebHTMLView.h>
 
 @class DOMDocumentFragment;
+@class DOMNode;
 @class DOMRange;
 @class WebArchive;
 @class WebFrameBridge;
@@ -69,7 +70,7 @@
 
 - (NSImage *)_dragImageForLinkElement:(NSDictionary *)element;
 - (BOOL)_startDraggingImage:(NSImage *)dragImage at:(NSPoint)dragLoc operation:(NSDragOperation)op event:(NSEvent *)event sourceIsDHTML:(BOOL)flag DHTMLWroteData:(BOOL)dhtmlWroteData;
-- (void)_handleAutoscrollForMouseDragged:(NSEvent *)event;
+- (void)_handleAutoscrollForMouseDragged:(NSEvent *)event; 
 - (BOOL)_mayStartDragAtEventLocation:(NSPoint)location;
 
 - (WebPluginController *)_pluginController;
@@ -81,19 +82,12 @@
 - (void)_startAutoscrollTimer:(NSEvent *)event;
 - (void)_stopAutoscrollTimer;
 
-- (BOOL)_canCopy;
-- (BOOL)_canCut;
-- (BOOL)_canDelete;
-- (BOOL)_canPaste;
 - (BOOL)_canEdit;
 - (BOOL)_canEditRichly;
 - (BOOL)_canAlterCurrentSelection;
 - (BOOL)_hasSelection;
 - (BOOL)_hasSelectionOrInsertionPoint;
 - (BOOL)_isEditable;
-
-- (BOOL)_isSelectionMisspelled;
-- (NSArray *)_guessesForMisspelledSelection;
 
 - (BOOL)_transparentBackground;
 - (void)_setTransparentBackground:(BOOL)f;
@@ -117,7 +111,7 @@
 // These methods might end up moving into a protocol, so different document types can specify
 // whether or not they implement the protocol.
 // These methods are still in flux; don't rely on them yet.
-- (unsigned)markAllMatchesForText:(NSString *)string caseSensitive:(BOOL)caseFlag;
+- (unsigned)markAllMatchesForText:(NSString *)string caseSensitive:(BOOL)caseFlag limit:(unsigned)limit;
 - (void)unmarkAllTextMatches;
 - (void)setMarkedTextMatchesAreHighlighted:(BOOL)newValue;
 - (BOOL)markedTextMatchesAreHighlighted;

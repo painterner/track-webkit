@@ -28,13 +28,14 @@
 
 #import <WebKit/WebNSViewExtras.h>
 
-#import <WebCore/DOMExtensions.h>
+#import <WebKit/DOMExtensions.h>
 #import <WebKit/WebDataSource.h>
 #import <WebKit/WebFramePrivate.h>
 #import <WebKit/WebFrameViewInternal.h>
 #import <WebKit/WebNSImageExtras.h>
 #import <WebKit/WebNSPasteboardExtras.h>
 #import <WebKit/WebNSURLExtras.h>
+#import <WebKit/WebView.h>
 #import <WebKitSystemInterface.h>
 
 #define WebDragStartHysteresisX                 5.0f
@@ -73,6 +74,12 @@
 - (WebFrameView *)_web_parentWebFrameView
 {
     return (WebFrameView *)[self _web_superviewOfClass:[WebFrameView class]];
+}
+
+// FIXME: Mail is the only client of _webView, remove this method once no versions of Mail need it.
+- (WebView *)_webView
+{
+    return (WebView *)[self _web_superviewOfClass:[WebView class]];
 }
 
 /* Determine whether a mouse down should turn into a drag; started as copy of NSTableView code */
@@ -154,10 +161,11 @@
         ![[self window] attachedSheet] &&
         [sender draggingSource] != self &&
         [[sender draggingPasteboard] _web_bestURL]) {
+
         return NSDragOperationCopy;
-    } else {
-        return NSDragOperationNone;
     }
+    
+    return NSDragOperationNone;
 }
 
 - (void)_web_DragImageForElement:(DOMElement *)element

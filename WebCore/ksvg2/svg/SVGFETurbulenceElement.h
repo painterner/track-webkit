@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,18 +20,20 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGFETurbulenceElementImpl_H
-#define KSVG_SVGFETurbulenceElementImpl_H
+#ifndef SVGFETurbulenceElement_H
+#define SVGFETurbulenceElement_H
 #ifdef SVG_SUPPORT
 
+#include "SVGFETurbulence.h"
 #include "SVGFilterPrimitiveStandardAttributes.h"
-#include "KCanvasFilters.h"
 
 namespace WebCore
 {
-    class SVGAnimatedInteger;
-    class SVGAnimatedNumber;
-    class SVGAnimatedEnumeration;
+    enum SVGStitchOptions {
+        SVG_STITCHTYPE_UNKNOWN  = 0,
+        SVG_STITCHTYPE_STITCH   = 1,
+        SVG_STITCHTYPE_NOSTITCH = 2
+    };
 
     class SVGFETurbulenceElement : public SVGFilterPrimitiveStandardAttributes
     {
@@ -40,26 +42,22 @@ namespace WebCore
         virtual ~SVGFETurbulenceElement();
 
         // 'SVGFETurbulenceElement' functions
-        SVGAnimatedNumber *baseFrequencyX() const;
-        SVGAnimatedNumber *baseFrequencyY() const;
-        SVGAnimatedInteger *numOctaves() const;
-        SVGAnimatedNumber *seed() const;
-        SVGAnimatedEnumeration *stitchTiles() const;
-        SVGAnimatedEnumeration *type() const;
-
         // Derived from: 'Element'
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute* attr);
 
-        virtual KCanvasFETurbulence *filterEffect() const;
+        virtual SVGFETurbulence* filterEffect() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedNumber> m_baseFrequencyX;
-        mutable RefPtr<SVGAnimatedNumber> m_baseFrequencyY;
-        mutable RefPtr<SVGAnimatedInteger> m_numOctaves;
-        mutable RefPtr<SVGAnimatedNumber> m_seed;
-        mutable RefPtr<SVGAnimatedEnumeration> m_stitchTiles;
-        mutable RefPtr<SVGAnimatedEnumeration> m_type;
-        mutable KCanvasFETurbulence *m_filterEffect;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFETurbulenceElement, double, double, BaseFrequencyX, baseFrequencyX)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFETurbulenceElement, double, double, BaseFrequencyY, baseFrequencyY)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFETurbulenceElement, long, long, NumOctaves, numOctaves)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFETurbulenceElement, double, double, Seed, seed)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFETurbulenceElement, int, int, StitchTiles, stitchTiles)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFETurbulenceElement, int, int, Type, type)
+        mutable SVGFETurbulence* m_filterEffect;
     };
 
 } // namespace WebCore

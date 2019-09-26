@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,20 +21,23 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "Attr.h"
-
-#include "SVGNames.h"
-#include "SVGHelper.h"
 #include "SVGCircleElement.h"
-#include "SVGAnimatedLength.h"
 
-#include <kcanvas/KCanvasCreator.h>
+#include "FloatPoint.h"
+#include "SVGNames.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGCircleElement::SVGCircleElement(const QualifiedName& tagName, Document *doc)
-: SVGStyledTransformableElement(tagName, doc), SVGTests(), SVGLangSpace(), SVGExternalResourcesRequired()
+SVGCircleElement::SVGCircleElement(const QualifiedName& tagName, Document* doc)
+    : SVGStyledTransformableElement(tagName, doc)
+    , SVGTests()
+    , SVGLangSpace()
+    , SVGExternalResourcesRequired()
+    , m_cx(SVGLength(this, LengthModeWidth))
+    , m_cy(SVGLength(this, LengthModeHeight))
+    , m_r(SVGLength(this, LengthModeOther))
 {
 }
 
@@ -42,60 +45,50 @@ SVGCircleElement::~SVGCircleElement()
 {
 }
 
-SVGAnimatedLength *SVGCircleElement::cx() const
-{
-    return lazy_create<SVGAnimatedLength>(m_cx, this, LM_WIDTH, viewportElement());
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGCircleElement, SVGLength, Length, length, Cx, cx, SVGNames::cxAttr.localName(), m_cx)
+ANIMATED_PROPERTY_DEFINITIONS(SVGCircleElement, SVGLength, Length, length, Cy, cy, SVGNames::cyAttr.localName(), m_cy)
+ANIMATED_PROPERTY_DEFINITIONS(SVGCircleElement, SVGLength, Length, length, R, r, SVGNames::rAttr.localName(), m_r)
 
-SVGAnimatedLength *SVGCircleElement::cy() const
-{
-    return lazy_create<SVGAnimatedLength>(m_cy, this, LM_HEIGHT, viewportElement());
-}
-
-SVGAnimatedLength *SVGCircleElement::r() const
-{
-    return lazy_create<SVGAnimatedLength>(m_r, this, LM_OTHER, viewportElement());
-}
-
-void SVGCircleElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGCircleElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const AtomicString& value = attr->value();
     if (attr->name() == SVGNames::cxAttr)
-        cx()->baseVal()->setValueAsString(value.impl());
+        setCxBaseValue(SVGLength(this, LengthModeWidth, value));       
     else if (attr->name() == SVGNames::cyAttr)
-        cy()->baseVal()->setValueAsString(value.impl());
-    else if (attr->name() == SVGNames::rAttr)
-        r()->baseVal()->setValueAsString(value.impl());
-    else
-    {
-        if(SVGTests::parseMappedAttribute(attr)) return;
-        if(SVGLangSpace::parseMappedAttribute(attr)) return;
-        if(SVGExternalResourcesRequired::parseMappedAttribute(attr)) return;
+        setCyBaseValue(SVGLength(this, LengthModeHeight, value));
+    else if (attr->name() == SVGNames::rAttr) {
+        setRBaseValue(SVGLength(this, LengthModeOther, value));
+        if (r().value() < 0.0)
+            document()->accessSVGExtensions()->reportError("A negative value for circle <r> is not allowed");
+    } else {
+        if (SVGTests::parseMappedAttribute(attr))
+            return;
+        if (SVGLangSpace::parseMappedAttribute(attr))
+            return;
+        if (SVGExternalResourcesRequired::parseMappedAttribute(attr))
+            return;
         SVGStyledTransformableElement::parseMappedAttribute(attr);
     }
 }
 
-KCanvasPath* SVGCircleElement::toPathData() const
+void SVGCircleElement::notifyAttributeChange() const
 {
-    float _cx = cx()->baseVal()->value(), _cy = cy()->baseVal()->value();
-    float _r = r()->baseVal()->value();
-
-    return KCanvasCreator::self()->createCircle(_cx, _cy, _r);
+    if (!ownerDocument()->parsing())
+        rebuildRenderer();
 }
 
-const SVGStyledElement *SVGCircleElement::pushAttributeContext(const SVGStyledElement *context)
+Path SVGCircleElement::toPathData() const
 {
-    // All attribute's contexts are equal (so just take the one from 'cx').
-    const SVGStyledElement *restore = cx()->baseVal()->context();
-
-    cx()->baseVal()->setContext(context);
-    cy()->baseVal()->setContext(context);
-    r()->baseVal()->setContext(context);
-    
-    SVGStyledElement::pushAttributeContext(context);
-    return restore;
+    return Path::createCircle(FloatPoint(cx().value(), cy().value()), r().value());
 }
 
-// vim:ts=4:noet
+bool SVGCircleElement::hasRelativeValues() const
+{
+    return (cx().isRelative() || cy().isRelative() || r().isRelative());
+}
+ 
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,8 +20,9 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGPathSegCurvetoQuadraticSmoothImpl_H
-#define KSVG_SVGPathSegCurvetoQuadraticSmoothImpl_H
+#ifndef SVGPathSegCurvetoQuadraticSmooth_H
+#define SVGPathSegCurvetoQuadraticSmooth_H
+
 #ifdef SVG_SUPPORT
 
 #include "SVGPathSeg.h"
@@ -31,12 +32,12 @@ namespace WebCore
     class SVGPathSegCurvetoQuadraticSmoothAbs : public SVGPathSeg
     { 
     public:
-        SVGPathSegCurvetoQuadraticSmoothAbs(const SVGStyledElement *context = 0);
+        SVGPathSegCurvetoQuadraticSmoothAbs(double x, double y);
         virtual ~SVGPathSegCurvetoQuadraticSmoothAbs();
 
         virtual unsigned short pathSegType() const { return PATHSEG_CURVETO_QUADRATIC_SMOOTH_ABS; }
         virtual String pathSegTypeAsLetter() const { return "T"; }
-        virtual String toString() const { return String::sprintf("T %.6lg %.6lg", m_x, m_y); }
+        virtual String toString() const { return String::format("T %.6lg %.6lg", m_x, m_y); }
 
         void setX(double);
         double x() const;
@@ -52,12 +53,12 @@ namespace WebCore
     class SVGPathSegCurvetoQuadraticSmoothRel : public SVGPathSeg 
     { 
     public:
-        SVGPathSegCurvetoQuadraticSmoothRel(const SVGStyledElement *context = 0);
+        SVGPathSegCurvetoQuadraticSmoothRel(double x, double y);
         virtual ~SVGPathSegCurvetoQuadraticSmoothRel();
 
         virtual unsigned short pathSegType() const { return PATHSEG_CURVETO_QUADRATIC_SMOOTH_REL; }
         virtual String pathSegTypeAsLetter() const { return "t"; }
-        virtual String toString() const { return String::sprintf("t %.6lg %.6lg", m_x, m_y); }
+        virtual String toString() const { return String::format("t %.6lg %.6lg", m_x, m_y); }
 
         void setX(double);
         double x() const;

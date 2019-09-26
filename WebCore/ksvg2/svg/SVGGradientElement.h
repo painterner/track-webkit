@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,50 +20,60 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGGradientElementImpl_H
-#define KSVG_SVGGradientElementImpl_H
+#ifndef SVGGradientElement_H
+#define SVGGradientElement_H
+
 #ifdef SVG_SUPPORT
 
-#include "SVGURIReference.h"
-#include "SVGStyledElement.h"
+#include "SVGPaintServerGradient.h"
 #include "SVGExternalResourcesRequired.h"
-
-#include "KRenderingPaintServerGradient.h"
+#include "SVGStyledElement.h"
+#include "SVGURIReference.h"
 
 namespace WebCore {
     class SVGGradientElement;
-    class SVGAnimatedEnumeration;
-    class SVGAnimatedTransformList;
+    class SVGTransformList;
     class SVGGradientElement : public SVGStyledElement,
-                                   public SVGURIReference,
-                                   public SVGExternalResourcesRequired,
-                                   public KCanvasResourceListener
+                               public SVGURIReference,
+                               public SVGExternalResourcesRequired
     {
     public:
+        enum SVGGradientType {
+            SVG_SPREADMETHOD_UNKNOWN = 0,
+            SVG_SPREADMETHOD_PAD     = 1,
+            SVG_SPREADMETHOD_REFLECT = 2,
+            SVG_SPREADMETHOD_REPEAT  = 3
+        };
+
         SVGGradientElement(const QualifiedName&, Document*);
         virtual ~SVGGradientElement();
 
         // 'SVGGradientElement' functions
-        SVGAnimatedEnumeration *gradientUnits() const;
-        SVGAnimatedTransformList *gradientTransform() const;
-        SVGAnimatedEnumeration *spreadMethod() const;
-
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute*);
         virtual void notifyAttributeChange() const;
-        
-        virtual KRenderingPaintServerGradient *canvasResource();
-        virtual void resourceNotification() const;
+
+        virtual SVGResource* canvasResource();
+
+        virtual void insertedIntoDocument();
 
     protected:
-        virtual void buildGradient(KRenderingPaintServerGradient *grad) const = 0;
-        virtual KCPaintServerType gradientType() const = 0;
-        void rebuildStops() const;
+        friend class SVGPaintServerGradient;
+        friend class SVGLinearGradientElement;
+        friend class SVGRadialGradientElement;
 
+        virtual void buildGradient() const = 0;
+        virtual SVGPaintServerType gradientType() const = 0;
+
+        Vector<SVGGradientStop> buildStops() const;
+        mutable RefPtr<SVGPaintServerGradient> m_resource;
+ 
     protected:
-        mutable RefPtr<SVGAnimatedEnumeration> m_spreadMethod;
-        mutable RefPtr<SVGAnimatedEnumeration> m_gradientUnits;
-        mutable RefPtr<SVGAnimatedTransformList> m_gradientTransform;
-        mutable KRenderingPaintServerGradient *m_resource;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGURIReference, String, Href, href)
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired)
+ 
+        ANIMATED_PROPERTY_DECLARATIONS(SVGGradientElement, int, int, SpreadMethod, spreadMethod)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGGradientElement, int, int, GradientUnits, gradientUnits)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGGradientElement, SVGTransformList*, RefPtr<SVGTransformList>, GradientTransform, gradientTransform)
     };
 
 } // namespace WebCore

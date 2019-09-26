@@ -27,23 +27,27 @@
 #include "config.h"
 #include "HTMLFormElement.h"
 
+#include "CString.h"
+#include "Event.h"
 #include "EventNames.h"
+#include "FormData.h"
 #include "FormDataList.h"
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "HTMLDocument.h"
 #include "HTMLFormCollection.h"
 #include "HTMLImageElement.h"
 #include "HTMLInputElement.h"
 #include "HTMLNames.h"
 #include "csshelper.h"
-#include "RenderLineEdit.h"
+#include "RenderTextControl.h"
 
 namespace WebCore {
 
 using namespace EventNames;
 using namespace HTMLNames;
 
-HTMLFormElement::HTMLFormElement(Document *doc)
+HTMLFormElement::HTMLFormElement(Document* doc)
     : HTMLElement(formTag, doc)
 {
     collectionInfo = 0;
@@ -64,7 +68,7 @@ HTMLFormElement::~HTMLFormElement()
     delete collectionInfo;
     
     for (unsigned i = 0; i < formElements.size(); ++i)
-        formElements[i]->m_form = 0;
+        formElements[i]->formDestroyed();
     for (unsigned i = 0; i < imgElements.size(); ++i)
         imgElements[i]->m_form = 0;
 }
@@ -122,7 +126,7 @@ Node* HTMLFormElement::item(unsigned index)
     return elements()->item(index);
 }
 
-void HTMLFormElement::submitClick()
+void HTMLFormElement::submitClick(Event* event)
 {
     bool submitFound = false;
     for (unsigned i = 0; i < formElements.size(); ++i) {
@@ -130,46 +134,41 @@ void HTMLFormElement::submitClick()
             HTMLInputElement *element = static_cast<HTMLInputElement *>(formElements[i]);
             if (element->isSuccessfulSubmitButton() && element->renderer()) {
                 submitFound = true;
-                element->click(false);
+                element->dispatchSimulatedClick(event);
                 break;
             }
         }
     }
     if (!submitFound) // submit the form without a submit or image input
-        prepareSubmit();
+        prepareSubmit(event);
 }
 
-static DeprecatedCString encodeCString(const DeprecatedCString& e)
+static DeprecatedCString encodeCString(const CString& cstr)
 {
+    DeprecatedCString e = cstr.deprecatedCString();
+
     // http://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1
-    // safe characters like NS handles them for compatibility
+    // same safe characters as Netscape for compatibility
     static const char *safe = "-._*";
     int elen = e.length();
-    DeprecatedCString encoded(( elen+e.contains( '\n' ) )*3+1);
+    DeprecatedCString encoded((elen + e.contains('\n')) * 3 + 1);
     int enclen = 0;
 
-    for(int pos = 0; pos < elen; pos++) {
+    for (int pos = 0; pos < elen; pos++) {
         unsigned char c = e[pos];
 
-        if ( (( c >= 'A') && ( c <= 'Z')) ||
-             (( c >= 'a') && ( c <= 'z')) ||
-             (( c >= '0') && ( c <= '9')) ||
-             (strchr(safe, c))
-            )
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || strchr(safe, c))
             encoded[enclen++] = c;
-        else if ( c == ' ' )
+        else if (c == ' ')
             encoded[enclen++] = '+';
-        else if ( c == '\n' || ( c == '\r' && e[pos+1] != '\n' ) )
-        {
+        else if (c == '\n' || (c == '\r' && e[pos + 1] != '\n')) {
             encoded[enclen++] = '%';
             encoded[enclen++] = '0';
             encoded[enclen++] = 'D';
             encoded[enclen++] = '%';
             encoded[enclen++] = '0';
             encoded[enclen++] = 'A';
-        }
-        else if ( c != '\r' )
-        {
+        } else if (c != '\r') {
             encoded[enclen++] = '%';
             unsigned int h = c / 16;
             h += (h > 9) ? ('A' - 10) : '0';
@@ -186,48 +185,50 @@ static DeprecatedCString encodeCString(const DeprecatedCString& e)
     return encoded;
 }
 
-bool HTMLFormElement::formData(FormData &form_data) const
+PassRefPtr<FormData> HTMLFormElement::formData() const
 {
     DeprecatedCString enc_string = ""; // used for non-multipart data
 
-    DeprecatedString str = m_acceptcharset.deprecatedString();
+    String str = m_acceptcharset;
     str.replace(',', ' ');
-    DeprecatedStringList charsets = DeprecatedStringList::split(' ', str);
-    TextEncoding encoding(InvalidEncoding);
-    Frame *frame = document()->frame();
-    for (DeprecatedStringList::Iterator it = charsets.begin(); it != charsets.end(); ++it) {
-        if ((encoding = TextEncoding((*it).latin1())).isValid())
+    Vector<String> charsets = str.split(' ');
+    TextEncoding encoding;
+    Frame* frame = document()->frame();
+    Vector<String>::const_iterator end = charsets.end();
+    for (Vector<String>::const_iterator it = charsets.begin(); it != end; ++it)
+        if ((encoding = TextEncoding(*it)).isValid())
             break;
-    }
-
     if (!encoding.isValid()) {
         if (frame)
-            encoding = TextEncoding(frame->encoding().latin1());
+            encoding = frame->loader()->encoding();
         else
-            encoding = TextEncoding(Latin1Encoding);
+            encoding = Latin1Encoding();
     }
 
+    RefPtr<FormData> result = new FormData;
+    
     for (unsigned i = 0; i < formElements.size(); ++i) {
         HTMLGenericFormElement* current = formElements[i];
         FormDataList lst(encoding);
 
         if (!current->disabled() && current->appendFormData(lst, m_multipart)) {
-            for (DeprecatedValueListConstIterator<FormDataListItem> it = lst.begin(); it != lst.end(); ++it) {
+            size_t ln = lst.list().size();
+            for (size_t j = 0; j < ln; ++j) {
+                const FormDataListItem& item = lst.list()[j];
                 if (!m_multipart) {
                     // handle ISINDEX / <input name=isindex> special
                     // but only if its the first entry
-                    if ( enc_string.isEmpty() && (*it).m_data == "isindex" ) {
-                        ++it;
-                        enc_string += encodeCString( (*it).m_data );
-                    }
-                    else {
-                        if(!enc_string.isEmpty())
+                    if (enc_string.isEmpty() && item.m_data == "isindex") {
+                        enc_string += encodeCString(lst.list()[j + 1].m_data);
+                        ++j;
+                    } else {
+                        if (!enc_string.isEmpty())
                             enc_string += '&';
 
-                        enc_string += encodeCString((*it).m_data);
+                        enc_string += encodeCString(item.m_data);
                         enc_string += "=";
-                        ++it;
-                        enc_string += encodeCString((*it).m_data);
+                        enc_string += encodeCString(lst.list()[j + 1].m_data);
+                        ++j;
                     }
                 }
                 else
@@ -236,21 +237,23 @@ bool HTMLFormElement::formData(FormData &form_data) const
                     hstr += m_boundary.deprecatedString().latin1();
                     hstr += "\r\n";
                     hstr += "Content-Disposition: form-data; name=\"";
-                    hstr += (*it).m_data.data();
+                    hstr += item.m_data.data();
                     hstr += "\"";
 
                     // if the current type is FILE, then we also need to
                     // include the filename
                     if (current->hasLocalName(inputTag) &&
                         static_cast<HTMLInputElement*>(current)->inputType() == HTMLInputElement::FILE) {
-                        DeprecatedString path = static_cast<HTMLInputElement*>(current)->value().deprecatedString();
+                        String path = static_cast<HTMLInputElement*>(current)->value();
 
                         // FIXME: This won't work if the filename includes a " mark,
                         // or control characters like CR or LF. This also does strange
                         // things if the filename includes characters you can't encode
                         // in the website's character set.
                         hstr += "; filename=\"";
-                        hstr += encoding.fromUnicode(path.mid(path.findRev('/') + 1), true);
+                        int start = path.reverseFind('/') + 1;
+                        int length = path.length() - start;
+                        hstr += encoding.encode(reinterpret_cast<const UChar*>(path.characters() + start), length, true);
                         hstr += "\"";
 
                         if (!static_cast<HTMLInputElement*>(current)->value().isEmpty()) {
@@ -263,17 +266,17 @@ bool HTMLFormElement::formData(FormData &form_data) const
                     }
 
                     hstr += "\r\n\r\n";
-                    ++it;
 
                     // append body
-                    form_data.appendData(hstr.data(), hstr.length());
-                    const FormDataListItem &item = *it;
-                    size_t dataSize = item.m_data.size();
-                    if (dataSize != 0)
-                        form_data.appendData(item.m_data, dataSize - 1);
+                    result->appendData(hstr.data(), hstr.length());
+                    const FormDataListItem& item = lst.list()[j + 1];
+                    if (size_t dataSize = item.m_data.length())
+                        result->appendData(item.m_data, dataSize);
                     else if (!item.m_path.isEmpty())
-                        form_data.appendFile(item.m_path);
-                    form_data.appendData("\r\n", 2);
+                        result->appendFile(item.m_path);
+                    result->appendData("\r\n", 2);
+
+                    ++j;
                 }
             }
         }
@@ -283,8 +286,8 @@ bool HTMLFormElement::formData(FormData &form_data) const
     if (m_multipart)
         enc_string = ("--" + m_boundary.deprecatedString() + "--\r\n").ascii();
 
-    form_data.appendData(enc_string.data(), enc_string.length());
-    return true;
+    result->appendData(enc_string.data(), enc_string.length());
+    return result;
 }
 
 void HTMLFormElement::parseEnctype(const String& type)
@@ -306,9 +309,9 @@ void HTMLFormElement::setBoundary( const String& bound )
     m_boundary = bound;
 }
 
-bool HTMLFormElement::prepareSubmit()
+bool HTMLFormElement::prepareSubmit(Event* event)
 {
-    Frame *frame = document()->frame();
+    Frame* frame = document()->frame();
     if (m_insubmit || !frame)
         return m_insubmit;
 
@@ -321,19 +324,24 @@ bool HTMLFormElement::prepareSubmit()
     m_insubmit = false;
 
     if (m_doingsubmit)
-        submit(true);
+        submit(event, true);
 
     return m_doingsubmit;
 }
 
-void HTMLFormElement::submit( bool activateSubmitButton )
+void HTMLFormElement::submit()
+{
+    submit(0, false);
+}
+
+void HTMLFormElement::submit(Event* event, bool activateSubmitButton)
 {
     FrameView *view = document()->view();
     Frame *frame = document()->frame();
     if (!view || !frame)
         return;
 
-    if ( m_insubmit ) {
+    if (m_insubmit) {
         m_doingsubmit = true;
         return;
     }
@@ -343,20 +351,17 @@ void HTMLFormElement::submit( bool activateSubmitButton )
     HTMLGenericFormElement* firstSuccessfulSubmitButton = 0;
     bool needButtonActivation = activateSubmitButton; // do we need to activate a submit button?
     
-    frame->clearRecordedFormValues();
+    frame->loader()->clearRecordedFormValues();
     for (unsigned i = 0; i < formElements.size(); ++i) {
         HTMLGenericFormElement* current = formElements[i];
-        // Our app needs to get form values for password fields for doing password autocomplete,
-        // so we are more lenient in pushing values, and let the app decide what to save when.
         if (current->hasLocalName(inputTag)) {
-            HTMLInputElement *input = static_cast<HTMLInputElement*>(current);
+            HTMLInputElement* input = static_cast<HTMLInputElement*>(current);
             if (input->isTextField()) {
-                frame->recordFormValue(input->name().deprecatedString(), input->value().deprecatedString(), this);
-                if (input->renderer() && input->inputType() == HTMLInputElement::SEARCH)
-                    static_cast<RenderLineEdit*>(input->renderer())->addSearchResult();
+                frame->loader()->recordFormValue(input->name(), input->value(), this);
+                if (input->isSearchField())
+                    input->addSearchResult();
             }
         }
-
         if (needButtonActivation) {
             if (current->isActivatedSubmit())
                 needButtonActivation = false;
@@ -371,13 +376,10 @@ void HTMLFormElement::submit( bool activateSubmitButton )
     if (!m_post)
         m_multipart = false;
     
-    FormData form_data;
-    if (formData(form_data)) {
-        if(m_post)
-            frame->submitForm("post", m_url, form_data, m_target, enctype(), boundary());
-        else
-            frame->submitForm("get", m_url, form_data, m_target);
-    }
+    if (m_post)
+        frame->loader()->submitForm("POST", m_url, formData(), m_target, enctype(), boundary(), event);
+    else
+        frame->loader()->submitForm("GET", m_url, formData(), m_target, String(), String(), event);
 
     if (needButtonActivation && firstSuccessfulSubmitButton)
         firstSuccessfulSubmitButton->setActivatedSubmit(false);
@@ -493,6 +495,7 @@ void HTMLFormElement::registerFormElement(HTMLGenericFormElement* e)
             doc->radioButtonChecked(static_cast<HTMLInputElement*>(e), this);
     }
     formElements.insert(formElementIndex(e), e);
+    doc->incDOMTreeVersion();
 }
 
 void HTMLFormElement::removeFormElement(HTMLGenericFormElement* e)
@@ -503,6 +506,7 @@ void HTMLFormElement::removeFormElement(HTMLGenericFormElement* e)
             document()->removeRadioButtonGroup(e->name().impl(), this);
     }
     removeFromVector(formElements, e);
+    document()->incDOMTreeVersion();
 }
 
 bool HTMLFormElement::isURLAttribute(Attribute *attr) const

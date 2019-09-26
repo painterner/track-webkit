@@ -29,6 +29,7 @@
 #include "HTMLNames.h"
 #include "RenderApplet.h"
 #include "RenderInline.h"
+#include "Settings.h"
 
 namespace WebCore {
 
@@ -42,7 +43,7 @@ HTMLAppletElement::HTMLAppletElement(Document *doc)
 
 HTMLAppletElement::~HTMLAppletElement()
 {
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
     // m_instance should have been cleaned up in detach().
     assert(!m_instance);
 #endif
@@ -110,7 +111,7 @@ RenderObject *HTMLAppletElement::createRenderer(RenderArena *arena, RenderStyle 
 {
     Frame *frame = document()->frame();
 
-    if (frame && frame->javaEnabled()) {
+    if (frame && frame->settings()->isJavaEnabled()) {
         HashMap<String, String> args;
 
         args.set("code", getAttribute(codeAttr));
@@ -138,11 +139,11 @@ RenderObject *HTMLAppletElement::createRenderer(RenderArena *arena, RenderStyle 
     return new (document()->renderArena()) RenderInline(this);
 }
 
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
 KJS::Bindings::Instance *HTMLAppletElement::getInstance() const
 {
     Frame *frame = document()->frame();
-    if (!frame || !frame->javaEnabled())
+    if (!frame || !frame->settings()->isJavaEnabled())
         return 0;
 
     if (m_instance)
@@ -171,7 +172,7 @@ void HTMLAppletElement::closeRenderer()
 
 void HTMLAppletElement::detach()
 {
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
     m_instance = 0;
 #endif
     HTMLPlugInElement::detach();

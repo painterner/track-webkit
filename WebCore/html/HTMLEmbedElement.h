@@ -27,18 +27,15 @@
 
 #include "HTMLPlugInElement.h"
 
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
 #include <JavaScriptCore/runtime.h>
-#else
-namespace KJS { namespace Bindings { class Instance; } }
 #endif
 
 namespace WebCore {
 
 class SVGDocument;
 
-class HTMLEmbedElement : public HTMLPlugInElement
-{
+class HTMLEmbedElement : public HTMLPlugInElement {
 public:
     HTMLEmbedElement(Document*);
     ~HTMLEmbedElement();
@@ -57,7 +54,7 @@ public:
     
     virtual bool isURLAttribute(Attribute*) const;
 
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
     virtual KJS::Bindings::Instance* getInstance() const;
 #endif
 
@@ -68,13 +65,12 @@ public:
     void setType(const String&);
     
 #ifdef SVG_SUPPORT
-    Document* contentDocument() const;
     SVGDocument* getSVGDocument(ExceptionCode&) const;
 #endif
 
     DeprecatedString url;
-    DeprecatedString pluginPage;
-    DeprecatedString serviceType;
+    String m_pluginPage;
+    String m_serviceType;
 };
 
 }

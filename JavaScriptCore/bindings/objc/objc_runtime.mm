@@ -34,7 +34,17 @@
 using namespace KJS;
 using namespace KJS::Bindings;
 
-ClassStructPtr<WebScriptObject> KJS::Bindings::webScriptObjectClass = 0;
+extern ClassStructPtr KJS::Bindings::webScriptObjectClass()
+{
+    static ClassStructPtr<WebScriptObject> webScriptObjectClass = NSClassFromString(@"WebScriptObject");
+    return webScriptObjectClass;
+}
+
+extern ClassStructPtr KJS::Bindings::webUndefinedClass()
+{
+    static ClassStructPtr<WebScriptObject> webUndefinedClass = NSClassFromString(@"WebUndefined");
+    return webUndefinedClass;
+}
 
 // ---------------------- ObjcMethod ----------------------
 
@@ -129,17 +139,14 @@ JSValue* ObjcField::valueFromInstance(ExecState* exec, const Instance* instance)
     return jsUndefined();
 }
 
-static id convertValueToObjcObject (ExecState* exec, JSValue* value)
+static id convertValueToObjcObject(ExecState* exec, JSValue* value)
 {
-    const Bindings::RootObject* root = rootForInterpreter(exec->dynamicInterpreter());
-    if (!root) {
-        Bindings::RootObject* newRoot = new Bindings::RootObject(0);
-        newRoot->setInterpreter(exec->dynamicInterpreter());
-        root = newRoot;
+    const RootObject* rootObject = rootObjectForInterpreter(exec->dynamicInterpreter());
+    if (!rootObject) {
+        RootObject* newRootObject = new RootObject(0, exec->dynamicInterpreter());
+        rootObject = newRootObject;
     }
-    if (!webScriptObjectClass)
-        webScriptObjectClass = NSClassFromString(@"WebScriptObject");
-    return [webScriptObjectClass _convertValueToObjcValue:value originExecutionContext:root executionContext:root ];
+    return [webScriptObjectClass() _convertValueToObjcValue:value originRootObject:rootObject rootObject:rootObject ];
 }
 
 void ObjcField::setValueToInstance(ExecState* exec, const Instance* instance, JSValue* aValue) const
@@ -285,7 +292,7 @@ JSValue* ObjcFallbackObjectImp::callAsFunction(ExecState* exec, JSObject* thisOb
         if ([targetObject respondsToSelector:@selector(invokeUndefinedMethodFromWebScript:withArguments:)]){
             MethodList methodList;
             ObjcClass* objcClass = static_cast<ObjcClass*>(instance->getClass());
-            ObjcMethod* fallbackMethod = new ObjcMethod (objcClass->isa(), (const char*)@selector(invokeUndefinedMethodFromWebScript:withArguments:));
+            ObjcMethod* fallbackMethod = new ObjcMethod (objcClass->isa(), sel_getName(@selector(invokeUndefinedMethodFromWebScript:withArguments:)));
             fallbackMethod->setJavaScriptName((CFStringRef)[NSString stringWithCString:_item.ascii() encoding:NSASCIIStringEncoding]);
             methodList.addMethod ((Method*)fallbackMethod);
             result = instance->invokeMethod(exec, methodList, args);

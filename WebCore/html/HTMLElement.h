@@ -54,7 +54,6 @@ public:
     
     String id() const;
     void setId(const String&);
-    String title() const;
     void setTitle(const String&);
     String lang() const;
     void setLang(const String&);
@@ -65,8 +64,6 @@ public:
 
     String innerHTML() const;
     String outerHTML() const;
-    String innerText() const;
-    String outerText() const;
     PassRefPtr<DocumentFragment> createContextualFragment(const String&);
     void setInnerHTML(const String&, ExceptionCode&);
     void setOuterHTML(const String&, ExceptionCode&);
@@ -80,7 +77,8 @@ public:
     virtual void setContentEditable(MappedAttribute*);
     virtual void setContentEditable(const String&);
 
-    virtual void click(bool sendMouseEvents = false, bool showPressedLook = true);
+    void click();
+
     virtual void accessKeyAction(bool sendToAnyElement);
 
     virtual bool isGenericFormElement() const { return false; }

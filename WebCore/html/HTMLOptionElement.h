@@ -32,11 +32,9 @@ namespace WebCore {
 class HTMLSelectElement;
 class HTMLFormElement;
 class MappedAttribute;
-class DeprecatedRenderSelect;
 
 class HTMLOptionElement : public HTMLGenericFormElement
 {
-    friend class DeprecatedRenderSelect;
     friend class HTMLSelectElement;
     friend class RenderMenuList;
 
@@ -79,6 +77,8 @@ public:
     void setLabel(const String&);
     
     String optionText();
+    
+    virtual bool disabled() const;
 
 private:
     String m_value;

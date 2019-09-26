@@ -39,9 +39,9 @@ typedef int ExceptionCode;
 class CSSStyleSheet : public StyleSheet
 {
 public:
-    CSSStyleSheet(Node* parentNode, String href = String(), bool _implicit = false);
-    CSSStyleSheet(CSSStyleSheet* parentSheet, String href = String());
-    CSSStyleSheet(CSSRule* ownerRule, String href = String());
+    CSSStyleSheet(Node* parentNode, const String& href = String(), const String& charset = String());
+    CSSStyleSheet(CSSStyleSheet* parentSheet, const String& href = String(), const String& charset = String());
+    CSSStyleSheet(CSSRule* ownerRule, const String& href = String(), const String& charset = String());
     
     ~CSSStyleSheet();
     
@@ -50,7 +50,7 @@ public:
     virtual String type() const { return "text/css"; }
 
     CSSRule* ownerRule() const;
-    CSSRuleList* cssRules();
+    CSSRuleList* cssRules(bool omitCharsetRules = false);
     unsigned insertRule(const String& rule, unsigned index, ExceptionCode&);
     void deleteRule(unsigned index, ExceptionCode&);
     unsigned addRule(const String& selector, const String& style, int index, ExceptionCode&);
@@ -68,12 +68,15 @@ public:
     virtual void checkLoaded();
     DocLoader* docLoader();
     Document* doc() { return m_doc; }
-    bool implicit() { return m_implicit; }
+    const String& charset() const { return m_charset; }
+
+    bool loadCompleted() const { return m_loadCompleted; }
 
 protected:
     Document* m_doc;
-    bool m_implicit;
     CSSNamespace* m_namespaces;
+    String m_charset;
+    bool m_loadCompleted;
 };
 
 } // namespace

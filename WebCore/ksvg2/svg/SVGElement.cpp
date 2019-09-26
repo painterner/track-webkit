@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,12 +21,12 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGElement.h"
 
-#include "Attr.h"
-#include "Document.h"
 #include "DOMImplementation.h"
+#include "Document.h"
 #include "Event.h"
 #include "EventListener.h"
 #include "EventNames.h"
@@ -36,7 +36,6 @@
 #include "SVGNames.h"
 #include "SVGSVGElement.h"
 #include "XMLNames.h"
-#include "ksvg.h"
 
 namespace WebCore {
 
@@ -65,7 +64,7 @@ String SVGElement::id() const
     return getAttribute(idAttr);
 }
 
-void SVGElement::setId(const String& value)
+void SVGElement::setId(const String& value, ExceptionCode&)
 {
     setAttribute(idAttr, value);
 }
@@ -75,15 +74,15 @@ String SVGElement::xmlbase() const
     return getAttribute(XMLNames::baseAttr);
 }
 
-void SVGElement::setXmlbase(const String& value)
+void SVGElement::setXmlbase(const String& value, ExceptionCode&)
 {
     setAttribute(XMLNames::baseAttr, value);
 }
 
 SVGSVGElement* SVGElement::ownerSVGElement() const
 {
-    Node *n = parentNode();
-    while(n) {
+    Node* n = parentNode();
+    while (n) {
         if (n->nodeType() == ELEMENT_NODE && n->hasTagName(SVGNames::svgTag))
             return static_cast<SVGSVGElement*>(n);
 
@@ -95,7 +94,7 @@ SVGSVGElement* SVGElement::ownerSVGElement() const
 
 SVGElement* SVGElement::viewportElement() const
 {
-    Node *n = parentNode();
+    Node* n = parentNode();
     while (n) {
         if (n->isElementNode() &&
             (n->hasTagName(SVGNames::svgTag) || n->hasTagName(SVGNames::imageTag) || n->hasTagName(SVGNames::symbolTag)))
@@ -107,29 +106,13 @@ SVGElement* SVGElement::viewportElement() const
     return 0;
 }
 
-AtomicString SVGElement::tryGetAttribute(const String& name, AtomicString defaultVal) const
-{
-    if (hasAttribute(name))
-        return getAttribute(name);
-
-    return defaultVal;
-}
-
-AtomicString SVGElement::tryGetAttributeNS(const String& namespaceURI, const String& localName, AtomicString defaultVal) const
-{
-    if (hasAttributeNS(namespaceURI, localName))
-        return getAttributeNS(namespaceURI, localName);
-
-    return defaultVal;
-}
-
 void SVGElement::addSVGEventListener(const AtomicString& eventType, const Attribute* attr)
 {
     Element::setHTMLEventListener(eventType, document()->accessSVGExtensions()->
         createSVGEventListener(attr->localName().domString(), attr->value(), this));
 }
 
-void SVGElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGElement::parseMappedAttribute(MappedAttribute* attr)
 {
     // standard events
     if (attr->name() == onloadAttr)
@@ -173,9 +156,9 @@ void SVGElement::sendSVGLoadEventIfPossible(bool sendParentLoadEvents)
         if (sendParentLoadEvents)
             parent = currentTarget->parentNode(); // save the next parent to dispatch too incase dispatching the event changes the tree
         
-        // FIXME: This malloc could be avoided by walking the tree first to check if any listeners are present: http://bugzilla.opendarwin.org/show_bug.cgi?id=10264
+        // FIXME: This malloc could be avoided by walking the tree first to check if any listeners are present: http://bugs.webkit.org/show_bug.cgi?id=10264
         RefPtr<Event> event = new Event(loadEvent, false, false);
-        event->setTarget(currentTarget.get());
+        event->setTarget(currentTarget);
         ExceptionCode ignored = 0;
         dispatchGenericEvent(event.release(), ignored, false);
         currentTarget = (parent && parent->isSVGElement()) ? static_pointer_cast<SVGElement>(parent) : 0;
@@ -189,7 +172,7 @@ void SVGElement::closeRenderer()
     sendSVGLoadEventIfPossible();
 }
 
-bool SVGElement::childShouldCreateRenderer(Node *child) const
+bool SVGElement::childShouldCreateRenderer(Node* child) const
 {
     if (child->isSVGElement())
         return static_cast<SVGElement*>(child)->isValid();

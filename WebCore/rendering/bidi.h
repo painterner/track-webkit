@@ -24,7 +24,7 @@
 #ifndef BIDI_H
 #define BIDI_H
 
-#include <unicode/uchar.h>
+#include <wtf/unicode/Unicode.h>
 
 namespace WebCore {
 
@@ -34,28 +34,31 @@ namespace WebCore {
     class InlineBox;
 
     struct BidiStatus {
-        BidiStatus() : eor(U_OTHER_NEUTRAL), lastStrong(U_OTHER_NEUTRAL), last(U_OTHER_NEUTRAL) {}
-        
-        UCharDirection eor;
-        UCharDirection lastStrong;
-        UCharDirection last;
+        BidiStatus()
+            : eor(WTF::Unicode::OtherNeutral)
+            , lastStrong(WTF::Unicode::OtherNeutral)
+            , last(WTF::Unicode::OtherNeutral)
+        {
+        }
+
+        WTF::Unicode::Direction eor;
+        WTF::Unicode::Direction lastStrong;
+        WTF::Unicode::Direction last;
     };
-        
+
     class BidiContext {
     public:
-        BidiContext(unsigned char level, UCharDirection embedding, BidiContext* parent = 0, bool override = false);
+        BidiContext(unsigned char level, WTF::Unicode::Direction embedding, BidiContext* parent = 0, bool override = false);
         ~BidiContext();
 
         void ref() const;
         void deref() const;
 
-        UCharDirection dir() const { return static_cast<UCharDirection>(m_dir); }
-        UCharDirection basicDir() const { return static_cast<UCharDirection>(m_basicDir); }
+        WTF::Unicode::Direction dir() const { return static_cast<WTF::Unicode::Direction>(m_dir); }
 
         unsigned char level;
         bool override : 1;
-        unsigned m_dir : 5; // UCharDirection
-        unsigned m_basicDir : 5; // UCharDirection
+        unsigned m_dir : 5; // WTF::Unicode::Direction
 
         BidiContext* parent;
 
@@ -64,22 +67,27 @@ namespace WebCore {
     };
 
     struct BidiRun {
-        BidiRun(int start_, int stop_, RenderObject* o, BidiContext* context, UCharDirection dir)
-            :  start(start_), stop(stop_), obj(o), box(0), override(context->override), nextRun(0)
+        BidiRun(int start_, int stop_, RenderObject* o, BidiContext* context, WTF::Unicode::Direction dir)
+            : start(start_)
+            , stop(stop_)
+            , obj(o)
+            , box(0)
+            , override(context->override)
+            , nextRun(0)
         {
-            if (dir == U_OTHER_NEUTRAL) 
+            if (dir == WTF::Unicode::OtherNeutral)
                 dir = context->dir();
 
             level = context->level;
 
             // add level of run (cases I1 & I2)
             if (level % 2) {
-                if(dir == U_LEFT_TO_RIGHT || dir == U_ARABIC_NUMBER || dir == U_EUROPEAN_NUMBER)
+                if(dir == WTF::Unicode::LeftToRight || dir == WTF::Unicode::ArabicNumber || dir == WTF::Unicode::EuropeanNumber)
                     level++;
             } else {
-                if (dir == U_RIGHT_TO_LEFT)
+                if (dir == WTF::Unicode::RightToLeft)
                     level++;
-                else if (dir == U_ARABIC_NUMBER || dir == U_EUROPEAN_NUMBER)
+                else if (dir == WTF::Unicode::ArabicNumber || dir == WTF::Unicode::EuropeanNumber)
                     level += 2;
             }
         }
@@ -100,14 +108,14 @@ namespace WebCore {
         int start;
         int stop;
 
-        RenderObject *obj;
+        RenderObject* obj;
         InlineBox* box;
-        
+
         // explicit + implicit levels here
         unsigned char level;
         bool override : 1;
         bool compact : 1;
-        
+
         BidiRun* nextRun;
     };
 

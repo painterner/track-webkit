@@ -25,18 +25,22 @@
 #ifndef HTMLPlugInElement_H
 #define HTMLPlugInElement_H
 
-#include "HTMLElement.h"
-#if PLATFORM(MAC)
+#include "HTMLFrameOwnerElement.h"
+
+#if USE(JAVASCRIPTCORE_BINDINGS)
 #include <JavaScriptCore/runtime.h>
+#endif
+
+#if USE(NPOBJECT)
 #include <JavaScriptCore/npruntime.h>
 #endif
 
 namespace WebCore {
 
-class HTMLPlugInElement : public HTMLElement {
+class HTMLPlugInElement : public HTMLFrameOwnerElement {
 public:
     HTMLPlugInElement(const QualifiedName& tagName, Document*);
-    ~HTMLPlugInElement();
+    virtual ~HTMLPlugInElement();
 
     virtual bool mapToEntry(const QualifiedName& attrName, MappedAttributeEntry& result) const;
     virtual void parseMappedAttribute(MappedAttribute*);
@@ -57,24 +61,31 @@ public:
     
     String width() const;
     void setWidth(const String&);
-    
-#if PLATFORM(MAC)
+
+#if USE(JAVASCRIPTCORE_BINDINGS)
     virtual KJS::Bindings::Instance* getInstance() const = 0;
+#endif
+#if USE(NPOBJECT)
     virtual NPObject* getNPObject();
 #endif
 
     void setFrameName(const AtomicString& frameName) { m_frameName = frameName; }
+
+    virtual void defaultEventHandler(Event*);
 private:
-#if PLATFORM(MAC)
+#if USE(NPOBJECT)
     NPObject* createNPObject();
 #endif
 
 protected:
     String oldNameAttr;
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
     mutable RefPtr<KJS::Bindings::Instance> m_instance;
+#endif
+#if USE(NPOBJECT)
     NPObject* m_NPObject;
 #endif
+
 private:
     AtomicString m_frameName;
 };

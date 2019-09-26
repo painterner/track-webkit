@@ -29,12 +29,26 @@
 #import <WebKit/WebView.h>
 #import <WebKit/WebFramePrivate.h>
 
+#if MAC_OS_X_VERSION_MAX_ALLOWED <= MAC_OS_X_VERSION_10_4
+#define WebNSInteger int
+#else
+#define WebNSInteger NSInteger
+#endif
+
 @class NSError;
 @class WebFrame;
 @class WebPreferences;
-@class WebCoreSettings;
 
 @protocol WebFormDelegate;
+
+typedef void (*WebDidCancelAuthenticationChallengeFunc)(id, SEL, WebView *, id, NSURLAuthenticationChallenge *, WebDataSource *);
+typedef void (*WebDidReceiveAuthenticationChallengeFunc)(id, SEL, WebView *, id, NSURLAuthenticationChallenge *, WebDataSource *);
+typedef id (*WebIdentifierForRequestFunc)(id, SEL, WebView *, NSURLRequest *, WebDataSource *);
+typedef NSURLRequest *(*WebWillSendRequestFunc)(id, SEL, WebView *, id, NSURLRequest *, NSURLResponse *, WebDataSource *);
+typedef void (*WebDidReceiveResponseFunc)(id, SEL, WebView *, id, NSURLResponse *, WebDataSource *);
+typedef void (*WebDidReceiveContentLengthFunc)(id, SEL, WebView *, id, WebNSInteger, WebDataSource *);
+typedef void (*WebDidFinishLoadingFromDataSourceFunc)(id, SEL, WebView *, id, WebDataSource *);
+typedef void (*WebDidLoadResourceFromMemoryCacheFunc)(id, SEL, WebView *, NSURLRequest *, NSURLResponse *, WebNSInteger, WebDataSource *);
 
 typedef struct _WebResourceDelegateImplementationCache {
     uint delegateImplementsDidCancelAuthenticationChallenge:1;
@@ -44,6 +58,16 @@ typedef struct _WebResourceDelegateImplementationCache {
     uint delegateImplementsDidFinishLoadingFromDataSource:1;
     uint delegateImplementsWillSendRequest:1;
     uint delegateImplementsIdentifierForRequest:1;
+    uint delegateImplementsDidLoadResourceFromMemoryCache:1;
+
+    WebDidCancelAuthenticationChallengeFunc didCancelAuthenticationChallengeFunc;
+    WebDidReceiveAuthenticationChallengeFunc didReceiveAuthenticationChallengeFunc;
+    WebIdentifierForRequestFunc identifierForRequestFunc;
+    WebWillSendRequestFunc willSendRequestFunc;
+    WebDidReceiveResponseFunc didReceiveResponseFunc;
+    WebDidReceiveContentLengthFunc didReceiveContentLengthFunc;
+    WebDidFinishLoadingFromDataSourceFunc didFinishLoadingFromDataSourceFunc;
+    WebDidLoadResourceFromMemoryCacheFunc didLoadResourceFromMemoryCacheFunc;
 } WebResourceDelegateImplementationCache;
 
 extern NSString *_WebCanGoBackKey;
@@ -55,13 +79,20 @@ extern NSString *_WebMainFrameTitleKey;
 extern NSString *_WebMainFrameURLKey;
 extern NSString *_WebMainFrameDocumentKey;
 
-extern NSString *WebElementTitleKey;   // NSString of the title of the element (pending public, used by Safari)
+// pending public WebElementDictionary keys
+extern NSString *WebElementTitleKey;             // NSString of the title of the element (used by Safari)
+extern NSString *WebElementSpellingToolTipKey;   // NSString of a tooltip representing misspelling or bad grammar (used internally)
+extern NSString *WebElementIsContentEditableKey; // NSNumber indicating whether the inner non-shared node is content editable (used internally)
+
+// other WebElementDictionary keys
+extern NSString *WebElementLinkIsLiveKey;        // NSNumber of BOOL indictating whether the link is live or not
 
 typedef enum {
     WebDashboardBehaviorAlwaysSendMouseEventsToAllWindows,
     WebDashboardBehaviorAlwaysSendActiveNullEventsToPlugIns,
     WebDashboardBehaviorAlwaysAcceptsFirstMouse,
-    WebDashboardBehaviorAllowWheelScrolling
+    WebDashboardBehaviorAllowWheelScrolling,
+    WebDashboardBehaviorUseBackwardCompatibilityMode
 } WebDashboardBehavior;
 
 @interface WebController : NSTreeController {
@@ -71,12 +102,26 @@ typedef enum {
 - (void)setWebView:(WebView *)newWebView;
 @end
 
+@interface WebView (WebViewEditingActionsPendingPublic)
+
+- (void)outdent:(id)sender;
+
+@end
+
 @interface WebView (WebPendingPublic)
 
 - (void)setMainFrameDocumentReady:(BOOL)mainFrameDocumentReady;
 
 - (void)setTabKeyCyclesThroughElements:(BOOL)cyclesElements;
 - (BOOL)tabKeyCyclesThroughElements;
+
+- (void)scrollDOMRangeToVisible:(DOMRange *)range;
+
+// setHoverFeedbackSuspended: can be called by clients that want to temporarily prevent the webView
+// from displaying feedback about mouse position. Each WebDocumentView class that displays feedback
+// about mouse position should honor this setting.
+- (void)setHoverFeedbackSuspended:(BOOL)newValue;
+- (BOOL)isHoverFeedbackSuspended;
 
 /*!
 @method setScriptDebugDelegate:
@@ -105,7 +150,7 @@ typedef enum {
 // These methods might end up moving into a protocol, so different document types can specify
 // whether or not they implement the protocol. For now we'll just deal with HTML.
 // These methods are still in flux; don't rely on them yet.
-- (unsigned)markAllMatchesForText:(NSString *)string caseSensitive:(BOOL)caseFlag highlight:(BOOL)highlight;
+- (unsigned)markAllMatchesForText:(NSString *)string caseSensitive:(BOOL)caseFlag highlight:(BOOL)highlight limit:(unsigned)limit;
 - (void)unmarkAllTextMatches;
 - (NSArray *)rectsForTextMatches;
 
@@ -115,6 +160,23 @@ typedef enum {
 
 + (BOOL)_developerExtrasEnabled;
 + (BOOL)_scriptDebuggerEnabled;
+
+/*!
+    @method setBackgroundColor:
+    @param backgroundColor Color to use as the default background.
+    @abstract Sets what color the receiver draws under transparent page background colors and images.
+    This color is also used when no page is loaded. A color with alpha should only be used when the receiver is
+    in a non-opaque window, since the color is drawn using NSCompositeCopy.
+*/
+- (void)setBackgroundColor:(NSColor *)backgroundColor;
+
+/*!
+    @method backgroundColor
+    @result Returns the background color drawn under transparent page background colors and images.
+    This color is also used when no page is loaded. A color with alpha should only be used when the receiver is
+    in a non-opaque window, since the color is drawn using NSCompositeCopy.
+*/
+- (NSColor *)backgroundColor;
 
 /*!
 Could be worth adding to the API.
@@ -140,7 +202,6 @@ Could be worth adding to the API.
     @result The extension based on the MIME type
 */
 + (NSString *)suggestedFileExtensionForMIMEType: (NSString *)MIMEType;
-
 
 // May well become public
 - (void)_setFormDelegate:(id<WebFormDelegate>)delegate;
@@ -256,6 +317,9 @@ Could be worth adding to the API.
  */
 - (void)_detachScriptDebuggerFromAllFrames;
 
+- (BOOL)defersCallbacks; // called by QuickTime plug-in
+- (void)setDefersCallbacks:(BOOL)defer; // called by QuickTime plug-in
+
 @end
 
 @interface WebView (WebViewPrintingPrivate)
@@ -280,6 +344,18 @@ Could be worth adding to the API.
 - (void)_drawHeaderAndFooter;
 @end
 
+@interface WebView (WebViewGrammarChecking)
+
+// FIXME: These two methods should be merged into WebViewEditing when we're not in API freeze
+- (BOOL)isGrammarCheckingEnabled;
+#if !BUILDING_ON_TIGER
+- (void)setGrammarCheckingEnabled:(BOOL)flag;
+
+// FIXME: This method should be merged into WebIBActions when we're not in API freeze
+- (void)toggleGrammarChecking:(id)sender;
+#endif
+@end
+
 @interface WebView (WebViewEditingInMail)
 - (void)_insertNewlineInQuotedContent;
 - (BOOL)_selectWordBeforeMenuEvent;
@@ -302,3 +378,5 @@ Could be worth adding to the API.
 // Addresses 4192534.  Private API for now.
 - (void)webView:(WebView *)sender didHandleOnloadEventsForFrame:(WebFrame *)frame;
 @end
+
+#undef WebNSInteger

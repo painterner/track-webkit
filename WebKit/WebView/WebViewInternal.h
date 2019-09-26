@@ -31,15 +31,26 @@
 #import "WebViewPrivate.h"
 #import "WebTypesInternal.h"
 
-@class WebPageBridge;
+#ifdef __cplusplus
+namespace WebCore {
+    class Page;
+}
+typedef WebCore::Page WebCorePage;
+#else
+@class WebCorePage;
+#endif
+
 @class WebBasePluginPackage;
+
+#ifdef __cplusplus
+namespace WebCore {
+    class String;
+}
+#endif
 
 @interface WebView (WebViewEditingExtras)
 - (BOOL)_interceptEditingKeyEvent:(NSEvent *)event;
 - (BOOL)_shouldChangeSelectedDOMRange:(DOMRange *)currentRange toDOMRange:(DOMRange *)proposedRange affinity:(NSSelectionAffinity)selectionAffinity stillSelecting:(BOOL)flag;
-- (BOOL)_shouldBeginEditingInDOMRange:(DOMRange *)range;
-- (BOOL)_shouldEndEditingInDOMRange:(DOMRange *)range;
-- (BOOL)_canPaste;
 @end
 
 @interface WebView (AllWebViews)
@@ -48,27 +59,29 @@
 - (void)_addToAllWebViewsSet;
 @end
 
-@interface WebView (WebViewBridge)
-- (WebPageBridge *)_pageBridge;
+@interface WebView (WebViewInternal)
+#ifdef __cplusplus
+- (WebCore::String&)_userAgent;
+#endif
 @end
 
+id WebViewGetResourceLoadDelegate(WebView *webView);
+WebResourceDelegateImplementationCache WebViewGetResourceLoadDelegateImplementations(WebView *webView);
+
 @interface WebView (WebViewMiscInternal)
-- (BOOL)defersCallbacks;
-- (void)setDefersCallbacks:(BOOL)defers;
+- (WebCorePage*)page;
 - (NSMenu *)_menuForElement:(NSDictionary *)element defaultItems:(NSArray *)items;
 - (void)_setInitiatedDrag:(BOOL)initiatedDrag;
 - (id)_UIDelegateForwarder;
 - (id)_resourceLoadDelegateForwarder;
-- (WebResourceDelegateImplementationCache)_resourceLoadDelegateImplementations;
 - (id)_frameLoadDelegateForwarder;
 - (id)_editingDelegateForwarder;
 - (id)_policyDelegateForwarder;
 - (id)_scriptDebugDelegateForwarder;
-- (WebCoreSettings *)_settings;
 - (void)_pushPerformingProgrammaticFocus;
 - (void)_popPerformingProgrammaticFocus;
 - (void)_incrementProgressForIdentifier:(id)identifier response:(NSURLResponse *)response;
-- (void)_incrementProgressForIdentifier:(id)identifier data:(NSData *)dataSource;
+- (void)_incrementProgressForIdentifier:(id)identifier length:(int)length;
 - (void)_completeProgressForIdentifier:(id)identifer;
 - (void)_progressStarted:(WebFrame *)frame;
 - (void)_didStartProvisionalLoadForFrame:(WebFrame *)frame;
@@ -83,6 +96,7 @@
 - (WebView *)_openNewWindowWithRequest:(NSURLRequest *)request;
 - (void)_writeImageForElement:(NSDictionary *)element withPasteboardTypes:(NSArray *)types toPasteboard:(NSPasteboard *)pasteboard;
 - (void)_writeLinkElement:(NSDictionary *)element withPasteboardTypes:(NSArray *)types toPasteboard:(NSPasteboard *)pasteboard;
+- (void)_searchWithSpotlightFromMenu:(id)sender;
 - (void)_progressCompleted:(WebFrame *)frame;
 - (void)_didCommitLoadForFrame:(WebFrame *)frame;
 - (void)_didFinishLoadForFrame:(WebFrame *)frame;

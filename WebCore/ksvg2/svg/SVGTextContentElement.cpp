@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -22,19 +22,22 @@
 
 #include "config.h"
 #ifdef SVG_SUPPORT
-#include "Attr.h"
-
-#include "SVGNames.h"
-#include "SVGHelper.h"
-//#include "SVGDocument.h"
 #include "SVGTextContentElement.h"
-#include "SVGAnimatedLength.h"
-#include "SVGAnimatedEnumeration.h"
 
-using namespace WebCore;
+#include "FloatPoint.h"
+#include "FloatRect.h"
+#include "SVGLength.h"
+#include "SVGNames.h"
 
-SVGTextContentElement::SVGTextContentElement(const QualifiedName& tagName, Document *doc)
-: SVGStyledElement(tagName, doc), SVGTests(), SVGLangSpace(), SVGExternalResourcesRequired()
+namespace WebCore {
+
+SVGTextContentElement::SVGTextContentElement(const QualifiedName& tagName, Document* doc)
+    : SVGStyledElement(tagName, doc)
+    , SVGTests()
+    , SVGLangSpace()
+    , SVGExternalResourcesRequired()
+    , m_textLength(this, LengthModeWidth)
+    , m_lengthAdjust(0)
 {
 }
 
@@ -42,15 +45,8 @@ SVGTextContentElement::~SVGTextContentElement()
 {
 }
 
-SVGAnimatedLength *SVGTextContentElement::textLength() const
-{
-    return lazy_create<SVGAnimatedLength>(m_textLength, this, LM_WIDTH);
-}
-
-SVGAnimatedEnumeration *SVGTextContentElement::lengthAdjust() const
-{
-    return lazy_create<SVGAnimatedEnumeration>(m_lengthAdjust, this);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGTextContentElement, SVGLength, Length, length, TextLength, textLength, SVGNames::textLengthAttr.localName(), m_textLength)
+ANIMATED_PROPERTY_DEFINITIONS(SVGTextContentElement, int, Enumeration, enumeration, LengthAdjust, lengthAdjust, SVGNames::lengthAdjustAttr.localName(), m_lengthAdjust)
 
 long SVGTextContentElement::getNumberOfChars() const
 {
@@ -62,27 +58,27 @@ float SVGTextContentElement::getComputedTextLength() const
     return 0.;
 }
 
-float SVGTextContentElement::getSubStringLength(unsigned long charnum, unsigned long nchars) const
+float SVGTextContentElement::getSubStringLength(unsigned long charnum, unsigned long nchars, ExceptionCode&) const
 {
     return 0.;
 }
 
-FloatPoint SVGTextContentElement::getStartPositionOfChar(unsigned long charnum) const
+FloatPoint SVGTextContentElement::getStartPositionOfChar(unsigned long charnum, ExceptionCode&) const
 {
     return FloatPoint();
 }
 
-FloatPoint SVGTextContentElement::getEndPositionOfChar(unsigned long charnum) const
+FloatPoint SVGTextContentElement::getEndPositionOfChar(unsigned long charnum, ExceptionCode&) const
 {
     return FloatPoint();
 }
 
-FloatRect SVGTextContentElement::getExtentOfChar(unsigned long charnum) const
+FloatRect SVGTextContentElement::getExtentOfChar(unsigned long charnum, ExceptionCode&) const
 {
     return FloatRect();
 }
 
-float SVGTextContentElement::getRotationOfChar(unsigned long charnum) const
+float SVGTextContentElement::getRotationOfChar(unsigned long charnum, ExceptionCode&) const
 {
     return 0.;
 }
@@ -92,16 +88,21 @@ long SVGTextContentElement::getCharNumAtPosition(const FloatPoint& point) const
     return 0;
 }
 
-void SVGTextContentElement::selectSubString(unsigned long charnum, unsigned long nchars) const
+void SVGTextContentElement::selectSubString(unsigned long charnum, unsigned long nchars, ExceptionCode&) const
 {
 }
 
-void SVGTextContentElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGTextContentElement::parseMappedAttribute(MappedAttribute* attr)
 {
+    const AtomicString& value = attr->value();
     //if (attr->name() == SVGNames::lengthAdjustAttr)
-    //    x()->baseVal()->setValueAsString(value.impl());
+    //    setXBaseValue(SVGLength(this, LengthModeWidth, value));
     //else
-    {
+    if (attr->name() == SVGNames::textLengthAttr) {
+        setTextLengthBaseValue(SVGLength(this, LengthModeOther, value));
+        if (textLength().value() < 0.0)
+            document()->accessSVGExtensions()->reportError("A negative value for text attribute <textLength> is not allowed");
+    } else {
         if (SVGTests::parseMappedAttribute(attr))
             return;
         if (SVGLangSpace::parseMappedAttribute(attr))
@@ -111,6 +112,8 @@ void SVGTextContentElement::parseMappedAttribute(MappedAttribute *attr)
 
         SVGStyledElement::parseMappedAttribute(attr);
     }
+}
+
 }
 
 // vim:ts=4:noet

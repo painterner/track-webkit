@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -22,14 +22,14 @@
 
 #include "config.h"
 #ifdef SVG_SUPPORT
-#include "DeprecatedStringList.h"
-
 #include "SVGStringList.h"
 
-using namespace WebCore;
+#include "SVGParserUtilities.h"
 
-SVGStringList::SVGStringList(const SVGStyledElement *context)
-: SVGList<StringImpl>(context)
+namespace WebCore {
+
+SVGStringList::SVGStringList()
+    : SVGList<String>()
 {
 }
 
@@ -37,20 +37,36 @@ SVGStringList::~SVGStringList()
 {
 }
 
-void SVGStringList::reset(const DeprecatedString &str)
+void SVGStringList::reset(const String& str)
 {
-    DeprecatedStringList list = DeprecatedStringList::split(' ', str);
-    if (list.count() == 0) {
-        StringImpl *item = new StringImpl(str);
-        item->ref();
-        appendItem(item);
-    } else for(DeprecatedStringList::Iterator it = list.begin(); it != list.end(); ++it) {
-        StringImpl *item = new StringImpl((*it));
-        item->ref();
-        appendItem(item);
+    ExceptionCode ec = 0;
+
+    parse(str, ' ');
+    if (numberOfItems() == 0)
+        appendItem(String(""), ec); // Create empty string...
+}
+
+void SVGStringList::parse(const String& data, UChar delimiter)
+{
+    // TODO : more error checking/reporting
+    ExceptionCode ec = 0;
+    clear(ec);
+
+    const UChar* ptr = data.characters();
+    const UChar* end = ptr + data.length();
+    while (ptr < end) {
+        const UChar* start = ptr;
+        while (ptr < end && *ptr != delimiter && !isWhitespace(*ptr))
+            ptr++;
+        if (ptr == start)
+            break;
+        appendItem(String(start, ptr - start), ec);
+        skipOptionalSpacesOrDelimiter(ptr, end, delimiter);
     }
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

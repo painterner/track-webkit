@@ -42,7 +42,7 @@ public:
 
     virtual bool supportsFocus() const;
     virtual bool isMouseFocusable() const;
-    virtual bool isKeyboardFocusable() const;
+    virtual bool isKeyboardFocusable(KeyboardEvent*) const;
     virtual bool isFocusable() const;
     virtual void parseMappedAttribute(MappedAttribute*);
     virtual void defaultEventHandler(Event*);
@@ -77,10 +77,9 @@ public:
     String shape() const;
     void setShape(const String&);
 
-    int tabIndex() const;
     void setTabIndex(int);
 
-    String target() const;
+    virtual String target() const;
     void setTarget(const String&);
 
     String type() const;
@@ -94,6 +93,12 @@ public:
     String protocol() const;
     String search() const;
     String text() const;
+    
+    bool isLiveLink() const;
+    
+private:
+    Element *m_rootEditableElementForSelectionOnMouseDown;
+    bool m_wasShiftKeyDownOnMouseDown;
 };
 
 } //namespace

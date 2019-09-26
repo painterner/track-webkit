@@ -28,6 +28,7 @@
 #include "DocLoader.h"
 #include "Document.h"
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "FrameTree.h"
 #include "HTMLNames.h"
 #include "MediaList.h"
@@ -113,18 +114,21 @@ void HTMLLinkElement::parseMappedAttribute(MappedAttribute *attr)
         m_type = attr->value();
         process();
     } else if (attr->name() == mediaAttr) {
-        m_media = attr->value().deprecatedString().lower();
+        m_media = attr->value().domString().lower();
         process();
     } else if (attr->name() == disabledAttr) {
         setDisabledState(!attr->isNull());
-    } else
+    } else {
+        if (attr->name() == titleAttr && m_sheet)
+            m_sheet->setTitle(attr->value());
         HTMLElement::parseMappedAttribute(attr);
+    }
 }
 
 void HTMLLinkElement::tokenizeRelAttribute(const AtomicString& relStr)
 {
     m_isStyleSheet = m_isIcon = m_alternate = false;
-    DeprecatedString rel = relStr.deprecatedString().lower();
+    String rel = relStr.domString().lower();
     if (rel == "stylesheet")
         m_isStyleSheet = true;
     else if (rel == "icon" || rel == "shortcut icon")
@@ -134,13 +138,14 @@ void HTMLLinkElement::tokenizeRelAttribute(const AtomicString& relStr)
     else {
         // Tokenize the rel attribute and set bits based on specific keywords that we find.
         rel.replace('\n', ' ');
-        DeprecatedStringList list = DeprecatedStringList::split(' ', rel);        
-        for (DeprecatedStringList::Iterator i = list.begin(); i != list.end(); ++i) {
-            if (*i == "stylesheet")
+        Vector<String> list = rel.split(' ');
+        Vector<String>::const_iterator end = list.end();
+        for (Vector<String>::const_iterator it = list.begin(); it != end; ++it) {
+            if (*it == "stylesheet")
                 m_isStyleSheet = true;
-            else if (*i == "alternate")
+            else if (*it == "alternate")
                 m_alternate = true;
-            else if (*i == "icon")
+            else if (*it == "icon")
                 m_isIcon = true;
         }
     }
@@ -152,16 +157,11 @@ void HTMLLinkElement::process()
         return;
 
     String type = m_type.lower();
-    
-    Frame* frame = document()->frame();
 
     // IE extension: location of small icon for locationbar / bookmarks
-    if (frame && m_isIcon && !m_url.isEmpty() && !frame->tree()->parent()) {
-        if (!type.isEmpty()) // Mozilla extension to IE extension: icon specified with type
-            frame->browserExtension()->setTypedIconURL(KURL(m_url.deprecatedString()), type);
-        else 
-            frame->browserExtension()->setIconURL(KURL(m_url.deprecatedString()));
-    }
+    // We'll record this URL per document, even if we later only use it in top level frames
+    if (m_isIcon && !m_url.isEmpty())
+        document()->setIconURL(m_url, type);
 
     // Stylesheet
     // This was buggy and would incorrectly match <link rel="alternate">, which has a different specified meaning. -dwh
@@ -180,7 +180,10 @@ void HTMLLinkElement::process()
             if (!isAlternate())
                 document()->addPendingSheet();
             
-            DeprecatedString chset = getAttribute(charsetAttr).deprecatedString();
+            String chset = getAttribute(charsetAttr);
+            if (chset.isEmpty() && document()->frame())
+                chset = document()->frame()->loader()->encoding();
+            
             if (m_cachedSheet) {
                 if (m_loading) {
                     document()->stylesheetLoaded();
@@ -188,7 +191,7 @@ void HTMLLinkElement::process()
                 m_cachedSheet->deref(this);
             }
             m_loading = true;
-            m_cachedSheet = document()->docLoader()->requestStyleSheet(m_url, chset);
+            m_cachedSheet = document()->docLoader()->requestCSSStyleSheet(m_url, chset);
             if (m_cachedSheet)
                 m_cachedSheet->ref(this);
         }
@@ -211,10 +214,11 @@ void HTMLLinkElement::removedFromDocument()
     process();
 }
 
-void HTMLLinkElement::setStyleSheet(const String& url, const String& sheetStr)
+void HTMLLinkElement::setCSSStyleSheet(const String& url, const String& charset, const String& sheetStr)
 {
-    m_sheet = new CSSStyleSheet(this, url);
+    m_sheet = new CSSStyleSheet(this, url, charset);
     m_sheet->parseString(sheetStr, !document()->inCompatMode());
+    m_sheet->setTitle(title());
 
     RefPtr<MediaList> media = new MediaList((CSSStyleSheet*)0, m_media, true);
     m_sheet->setMedia(media.get());
@@ -235,10 +239,13 @@ bool HTMLLinkElement::isLoading() const
     return static_cast<CSSStyleSheet *>(m_sheet.get())->isLoading();
 }
 
-void HTMLLinkElement::sheetLoaded()
+bool HTMLLinkElement::sheetLoaded()
 {
-    if (!isLoading() && !isDisabled() && !isAlternate())
+    if (!isLoading() && !isDisabled() && !isAlternate()) {
         document()->stylesheetLoaded();
+        return true;
+    }
+    return false;
 }
 
 bool HTMLLinkElement::isURLAttribute(Attribute *attr) const

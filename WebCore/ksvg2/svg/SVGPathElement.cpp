@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,35 +21,33 @@
 */
 
 #include "config.h"
-#ifdef SVG_SUPPORT
-#include "Attr.h"
 
-#include "ksvg.h"
-#include "SVGNames.h"
-#include "SVGHelper.h"
-#include "SVGRect.h"
-#include "SVGSVGElement.h"
-#include "SVGPathSegArc.h"
-#include "SVGPathSegList.h"
+#ifdef SVG_SUPPORT
 #include "SVGPathElement.h"
-#include "SVGPathSegLineto.h"
-#include "SVGPathSegMoveto.h"
-#include "SVGAnimatedNumber.h"
+
+#include "SVGNames.h"
+#include "SVGPathSegArc.h"
 #include "SVGPathSegClosePath.h"
 #include "SVGPathSegCurvetoCubic.h"
-#include "SVGPathSegLinetoVertical.h"
-#include "SVGPathSegLinetoHorizontal.h"
-#include "SVGPathSegCurvetoQuadratic.h"
 #include "SVGPathSegCurvetoCubicSmooth.h"
+#include "SVGPathSegCurvetoQuadratic.h"
 #include "SVGPathSegCurvetoQuadraticSmooth.h"
-
-#include <kcanvas/KCanvasCreator.h>
-#include <kcanvas/device/KRenderingDevice.h>
+#include "SVGPathSegLineto.h"
+#include "SVGPathSegLinetoHorizontal.h"
+#include "SVGPathSegLinetoVertical.h"
+#include "SVGPathSegList.h"
+#include "SVGPathSegMoveto.h"
+#include "SVGSVGElement.h"
 
 namespace WebCore {
 
-SVGPathElement::SVGPathElement(const QualifiedName& tagName, Document *doc)
-: SVGStyledTransformableElement(tagName, doc), SVGTests(), SVGLangSpace(), SVGExternalResourcesRequired(), SVGPathParser()
+SVGPathElement::SVGPathElement(const QualifiedName& tagName, Document* doc)
+    : SVGStyledTransformableElement(tagName, doc)
+    , SVGTests()
+    , SVGLangSpace()
+    , SVGExternalResourcesRequired()
+    , SVGPathParser()
+    , m_pathLength(0.0)
 {
 }
 
@@ -57,373 +55,279 @@ SVGPathElement::~SVGPathElement()
 {
 }
 
-SVGAnimatedNumber *SVGPathElement::pathLength() const
-{
-    if(!m_pathLength)
-    {
-        lazy_create<SVGAnimatedNumber>(m_pathLength, this);
-        m_pathLength->setBaseVal(0);
-    }
-    
-    return m_pathLength.get();
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGPathElement, double, Number, number, PathLength, pathLength, SVGNames::pathLengthAttr.localName(), m_pathLength)
 
 double SVGPathElement::getTotalLength()
 {
-    return 0;
+    // FIXME: this may wish to use the pathSegList instead of the pathdata if that's cheaper to build (or cached)
+    return toPathData().length();
 }
 
-FloatPoint SVGPathElement::getPointAtLength(double /*distance*/)
+FloatPoint SVGPathElement::getPointAtLength(double length)
 {
-    /*
-    double totalDistance = getTotalLength();
-    T2P::BezierPath *path = ownerDoc()->view()->toBezierPath(m_item);
-    if (path) {
-        T2P::Point p;
-        path->pointTangentNormalAt(distance / totalDistance, &p);
-        ret->setX(p.x());
-        ret->setY(p.y());
-    }
-    */
-
-    return FloatPoint();
+    // FIXME: this may wish to use the pathSegList instead of the pathdata if that's cheaper to build (or cached)
+    bool ok = false;
+    return toPathData().pointAtLength(length, ok);
 }
 
-unsigned long SVGPathElement::getPathSegAtLength(double)
+unsigned long SVGPathElement::getPathSegAtLength(double length)
 {
-    return 0;
+    return pathSegList()->getPathSegAtLength(length);
 }
 
-SVGPathSegClosePath *SVGPathElement::createSVGPathSegClosePath()
+SVGPathSegClosePath* SVGPathElement::createSVGPathSegClosePath()
 {
     return new SVGPathSegClosePath();
 }
 
-SVGPathSegMovetoAbs *SVGPathElement::createSVGPathSegMovetoAbs(double x, double y, const SVGStyledElement *context)
+SVGPathSegMovetoAbs* SVGPathElement::createSVGPathSegMovetoAbs(double x, double y)
 {
-    SVGPathSegMovetoAbs *temp = new SVGPathSegMovetoAbs(context);
-    temp->setX(x);
-    temp->setY(y);
-    return temp;
+    return new SVGPathSegMovetoAbs(x, y);
 }
 
-SVGPathSegMovetoRel *SVGPathElement::createSVGPathSegMovetoRel(double x, double y, const SVGStyledElement *context)
+SVGPathSegMovetoRel* SVGPathElement::createSVGPathSegMovetoRel(double x, double y)
 {
-    SVGPathSegMovetoRel *temp = new SVGPathSegMovetoRel(context);
-    temp->setX(x);
-    temp->setY(y);
-    return temp;
+    return new SVGPathSegMovetoRel(x, y);
 }
 
-SVGPathSegLinetoAbs *SVGPathElement::createSVGPathSegLinetoAbs(double x, double y, const SVGStyledElement *context)
+SVGPathSegLinetoAbs* SVGPathElement::createSVGPathSegLinetoAbs(double x, double y)
 {
-    SVGPathSegLinetoAbs *temp = new SVGPathSegLinetoAbs(context);
-    temp->setX(x);
-    temp->setY(y);
-    return temp;
+    return new SVGPathSegLinetoAbs(x, y);
 }
 
-SVGPathSegLinetoRel *SVGPathElement::createSVGPathSegLinetoRel(double x, double y, const SVGStyledElement *context)
+SVGPathSegLinetoRel* SVGPathElement::createSVGPathSegLinetoRel(double x, double y)
 {
-    SVGPathSegLinetoRel *temp = new SVGPathSegLinetoRel(context);
-    temp->setX(x);
-    temp->setY(y);
-    return temp;
+    return new SVGPathSegLinetoRel(x, y);
 }
 
-SVGPathSegCurvetoCubicAbs *SVGPathElement::createSVGPathSegCurvetoCubicAbs(double x, double y, double x1, double y1, double x2, double y2, const SVGStyledElement *context)
+SVGPathSegCurvetoCubicAbs* SVGPathElement::createSVGPathSegCurvetoCubicAbs(double x, double y, double x1, double y1, double x2, double y2)
 {
-    SVGPathSegCurvetoCubicAbs *temp = new SVGPathSegCurvetoCubicAbs(context);
-    temp->setX(x);
-    temp->setY(y);
-    temp->setX1(x1);
-    temp->setY1(y1);
-    temp->setX2(x2);
-    temp->setY2(y2);
-    return temp;
+    return new SVGPathSegCurvetoCubicAbs(x, y, x1, y1, x2, y2);
 }
 
-SVGPathSegCurvetoCubicRel *SVGPathElement::createSVGPathSegCurvetoCubicRel(double x, double y, double x1, double y1, double x2, double y2, const SVGStyledElement *context)
+SVGPathSegCurvetoCubicRel* SVGPathElement::createSVGPathSegCurvetoCubicRel(double x, double y, double x1, double y1, double x2, double y2)
 {
-    SVGPathSegCurvetoCubicRel *temp = new SVGPathSegCurvetoCubicRel(context);
-    temp->setX(x);
-    temp->setY(y);
-    temp->setX1(x1);
-    temp->setY1(y1);
-    temp->setX2(x2);
-    temp->setY2(y2);
-    return temp;
+    return new SVGPathSegCurvetoCubicRel(x, y, x1, y1, x2, y2);
 }
 
-SVGPathSegCurvetoQuadraticAbs *SVGPathElement::createSVGPathSegCurvetoQuadraticAbs(double x, double y, double x1, double y1, const SVGStyledElement *context)
+SVGPathSegCurvetoQuadraticAbs* SVGPathElement::createSVGPathSegCurvetoQuadraticAbs(double x, double y, double x1, double y1)
 {
-    SVGPathSegCurvetoQuadraticAbs *temp = new SVGPathSegCurvetoQuadraticAbs(context);
-    temp->setX(x);
-    temp->setY(y);
-    temp->setX1(x1);
-    temp->setY1(y1);
-    return temp;
+    return new SVGPathSegCurvetoQuadraticAbs(x, y, x1, y1);
 }
 
-SVGPathSegCurvetoQuadraticRel *SVGPathElement::createSVGPathSegCurvetoQuadraticRel(double x, double y, double x1, double y1, const SVGStyledElement *context)
+SVGPathSegCurvetoQuadraticRel* SVGPathElement::createSVGPathSegCurvetoQuadraticRel(double x, double y, double x1, double y1)
 {
-    SVGPathSegCurvetoQuadraticRel *temp = new SVGPathSegCurvetoQuadraticRel(context);
-    temp->setX(x);
-    temp->setY(y);
-    temp->setX1(x1);
-    temp->setY1(y1);
-    return temp;
+    return new SVGPathSegCurvetoQuadraticRel(x, y, x1, y1);
 }
 
-SVGPathSegArcAbs *SVGPathElement::createSVGPathSegArcAbs(double x, double y, double r1, double r2, double angle, bool largeArcFlag, bool sweepFlag, const SVGStyledElement *context)
+SVGPathSegArcAbs* SVGPathElement::createSVGPathSegArcAbs(double x, double y, double r1, double r2, double angle, bool largeArcFlag, bool sweepFlag)
 {
-    SVGPathSegArcAbs *temp = new SVGPathSegArcAbs(context);
-    temp->setX(x);
-    temp->setY(y);
-    temp->setR1(r1);
-    temp->setR2(r2);
-    temp->setAngle(angle);
-    temp->setLargeArcFlag(largeArcFlag);
-    temp->setSweepFlag(sweepFlag);
-    return temp;
+    return new SVGPathSegArcAbs(x, y, r1, r2, angle, largeArcFlag, sweepFlag);
 }
 
-SVGPathSegArcRel *SVGPathElement::createSVGPathSegArcRel(double x, double y, double r1, double r2, double angle, bool largeArcFlag, bool sweepFlag, const SVGStyledElement *context)
+SVGPathSegArcRel* SVGPathElement::createSVGPathSegArcRel(double x, double y, double r1, double r2, double angle, bool largeArcFlag, bool sweepFlag)
 {
-    SVGPathSegArcRel *temp = new SVGPathSegArcRel(context);
-    temp->setX(x);
-    temp->setY(y);
-    temp->setR1(r1);
-    temp->setR2(r2);
-    temp->setAngle(angle);
-    temp->setLargeArcFlag(largeArcFlag);
-    temp->setSweepFlag(sweepFlag);
-    return temp;
+    return new SVGPathSegArcRel(x, y, r1, r2, angle, largeArcFlag, sweepFlag);
 }
 
-SVGPathSegLinetoHorizontalAbs *SVGPathElement::createSVGPathSegLinetoHorizontalAbs(double x, const SVGStyledElement *context)
+SVGPathSegLinetoHorizontalAbs* SVGPathElement::createSVGPathSegLinetoHorizontalAbs(double x)
 {
-    SVGPathSegLinetoHorizontalAbs *temp = new SVGPathSegLinetoHorizontalAbs(context);
-    temp->setX(x);
-    return temp;
+    return new SVGPathSegLinetoHorizontalAbs(x);
 }
 
-SVGPathSegLinetoHorizontalRel *SVGPathElement::createSVGPathSegLinetoHorizontalRel(double x, const SVGStyledElement *context)
+SVGPathSegLinetoHorizontalRel* SVGPathElement::createSVGPathSegLinetoHorizontalRel(double x)
 {
-    SVGPathSegLinetoHorizontalRel *temp = new SVGPathSegLinetoHorizontalRel(context);
-    temp->setX(x);
-    return temp;
+    return new SVGPathSegLinetoHorizontalRel(x);
 }
 
-SVGPathSegLinetoVerticalAbs *SVGPathElement::createSVGPathSegLinetoVerticalAbs(double y, const SVGStyledElement *context)
+SVGPathSegLinetoVerticalAbs* SVGPathElement::createSVGPathSegLinetoVerticalAbs(double y)
 {
-    SVGPathSegLinetoVerticalAbs *temp = new SVGPathSegLinetoVerticalAbs(context);
-    temp->setY(y);
-    return temp;
+    return new SVGPathSegLinetoVerticalAbs(y);
 }
 
-SVGPathSegLinetoVerticalRel *SVGPathElement::createSVGPathSegLinetoVerticalRel(double y, const SVGStyledElement *context)
+SVGPathSegLinetoVerticalRel* SVGPathElement::createSVGPathSegLinetoVerticalRel(double y)
 {
-    SVGPathSegLinetoVerticalRel *temp = new SVGPathSegLinetoVerticalRel(context);
-    temp->setY(y);
-    return temp;
+    return new SVGPathSegLinetoVerticalRel(y);
 }
 
-SVGPathSegCurvetoCubicSmoothAbs *SVGPathElement::createSVGPathSegCurvetoCubicSmoothAbs(double x, double y, double x2, double y2, const SVGStyledElement *context)
+SVGPathSegCurvetoCubicSmoothAbs* SVGPathElement::createSVGPathSegCurvetoCubicSmoothAbs(double x, double y, double x2, double y2)
 {
-    SVGPathSegCurvetoCubicSmoothAbs *temp = new SVGPathSegCurvetoCubicSmoothAbs(context);
-    temp->setX(x);
-    temp->setY(y);
-    temp->setX2(x2);
-    temp->setY2(y2);
-    return temp;
+    return new SVGPathSegCurvetoCubicSmoothAbs(x, y, x2, y2);
 }
 
-SVGPathSegCurvetoCubicSmoothRel *SVGPathElement::createSVGPathSegCurvetoCubicSmoothRel(double x, double y, double x2, double y2, const SVGStyledElement *context)
+SVGPathSegCurvetoCubicSmoothRel* SVGPathElement::createSVGPathSegCurvetoCubicSmoothRel(double x, double y, double x2, double y2)
 {
-    SVGPathSegCurvetoCubicSmoothRel *temp = new SVGPathSegCurvetoCubicSmoothRel(context);
-    temp->setX(x);
-    temp->setY(y);
-    temp->setX2(x2);
-    temp->setY2(y2);
-    return temp;
+    return new SVGPathSegCurvetoCubicSmoothRel(x, y, x2, y2);
 }
 
-SVGPathSegCurvetoQuadraticSmoothAbs *SVGPathElement::createSVGPathSegCurvetoQuadraticSmoothAbs(double x, double y, const SVGStyledElement *context)
+SVGPathSegCurvetoQuadraticSmoothAbs* SVGPathElement::createSVGPathSegCurvetoQuadraticSmoothAbs(double x, double y)
 {
-    SVGPathSegCurvetoQuadraticSmoothAbs *temp = new SVGPathSegCurvetoQuadraticSmoothAbs(context);
-    temp->setX(x);
-    temp->setY(y);
-    return temp;
+    return new SVGPathSegCurvetoQuadraticSmoothAbs(x, y);
 }
 
-SVGPathSegCurvetoQuadraticSmoothRel *SVGPathElement::createSVGPathSegCurvetoQuadraticSmoothRel(double x, double y, const SVGStyledElement *context)
+SVGPathSegCurvetoQuadraticSmoothRel* SVGPathElement::createSVGPathSegCurvetoQuadraticSmoothRel(double x, double y)
 {
-    SVGPathSegCurvetoQuadraticSmoothRel *temp = new SVGPathSegCurvetoQuadraticSmoothRel(context);
-    temp->setX(x);
-    temp->setY(y);
-    return temp;
+    return new SVGPathSegCurvetoQuadraticSmoothRel(x, y);
 }
 
 void SVGPathElement::svgMoveTo(double x1, double y1, bool, bool abs)
 {
-    if(abs)
-        pathSegList()->appendItem(createSVGPathSegMovetoAbs(x1, y1, this));
+    ExceptionCode ec = 0;
+
+    if (abs)
+        pathSegList()->appendItem(createSVGPathSegMovetoAbs(x1, y1), ec);
     else
-        pathSegList()->appendItem(createSVGPathSegMovetoRel(x1, y1, this));
+        pathSegList()->appendItem(createSVGPathSegMovetoRel(x1, y1), ec);
 }
 
 void SVGPathElement::svgLineTo(double x1, double y1, bool abs)
 {
-    if(abs)
-        pathSegList()->appendItem(createSVGPathSegLinetoAbs(x1, y1, this));
+    ExceptionCode ec = 0;
+
+    if (abs)
+        pathSegList()->appendItem(createSVGPathSegLinetoAbs(x1, y1), ec);
     else
-        pathSegList()->appendItem(createSVGPathSegLinetoRel(x1, y1, this));
+        pathSegList()->appendItem(createSVGPathSegLinetoRel(x1, y1), ec);
 }
 
 void SVGPathElement::svgLineToHorizontal(double x, bool abs)
 {
-    if(abs)
-        pathSegList()->appendItem(createSVGPathSegLinetoHorizontalAbs(x, this));
+    ExceptionCode ec = 0;
+
+    if (abs)
+        pathSegList()->appendItem(createSVGPathSegLinetoHorizontalAbs(x), ec);
     else
-        pathSegList()->appendItem(createSVGPathSegLinetoHorizontalRel(x, this));
+        pathSegList()->appendItem(createSVGPathSegLinetoHorizontalRel(x), ec);
 }
 
 void SVGPathElement::svgLineToVertical(double y, bool abs)
 {
-    if(abs)
-        pathSegList()->appendItem(createSVGPathSegLinetoVerticalAbs(y, this));
+    ExceptionCode ec = 0;
+
+    if (abs)
+        pathSegList()->appendItem(createSVGPathSegLinetoVerticalAbs(y), ec);
     else
-        pathSegList()->appendItem(createSVGPathSegLinetoVerticalRel(y, this));
+        pathSegList()->appendItem(createSVGPathSegLinetoVerticalRel(y), ec);
 }
 
 void SVGPathElement::svgCurveToCubic(double x1, double y1, double x2, double y2, double x, double y, bool abs)
 {
-    if(abs)
-        pathSegList()->appendItem(createSVGPathSegCurvetoCubicAbs(x, y, x1, y1, x2, y2, this));
+    ExceptionCode ec = 0;
+
+    if (abs)
+        pathSegList()->appendItem(createSVGPathSegCurvetoCubicAbs(x, y, x1, y1, x2, y2), ec);
     else
-        pathSegList()->appendItem(createSVGPathSegCurvetoCubicRel(x, y, x1, y1, x2, y2, this));
+        pathSegList()->appendItem(createSVGPathSegCurvetoCubicRel(x, y, x1, y1, x2, y2), ec);
 }
 
 void SVGPathElement::svgCurveToCubicSmooth(double x, double y, double x2, double y2, bool abs)
 {
-    if(abs)
-        pathSegList()->appendItem(createSVGPathSegCurvetoCubicSmoothAbs(x2, y2, x, y, this));
+    ExceptionCode ec = 0;
+
+    if (abs)
+        pathSegList()->appendItem(createSVGPathSegCurvetoCubicSmoothAbs(x2, y2, x, y), ec);
     else
-        pathSegList()->appendItem(createSVGPathSegCurvetoCubicSmoothRel(x2, y2, x, y, this));
+        pathSegList()->appendItem(createSVGPathSegCurvetoCubicSmoothRel(x2, y2, x, y), ec);
 }
 
 void SVGPathElement::svgCurveToQuadratic(double x, double y, double x1, double y1, bool abs)
 {
-    if(abs)
-        pathSegList()->appendItem(createSVGPathSegCurvetoQuadraticAbs(x1, y1, x, y, this));
+    ExceptionCode ec = 0;
+
+    if (abs)
+        pathSegList()->appendItem(createSVGPathSegCurvetoQuadraticAbs(x1, y1, x, y), ec);
     else
-        pathSegList()->appendItem(createSVGPathSegCurvetoQuadraticRel(x1, y1, x, y, this));
+        pathSegList()->appendItem(createSVGPathSegCurvetoQuadraticRel(x1, y1, x, y), ec);
 }
 
 void SVGPathElement::svgCurveToQuadraticSmooth(double x, double y, bool abs)
 {
-    if(abs)
-        pathSegList()->appendItem(createSVGPathSegCurvetoQuadraticSmoothAbs(x, y, this));
+    ExceptionCode ec = 0;
+
+    if (abs)
+        pathSegList()->appendItem(createSVGPathSegCurvetoQuadraticSmoothAbs(x, y), ec);
     else
-        pathSegList()->appendItem(createSVGPathSegCurvetoQuadraticSmoothRel(x, y, this));
+        pathSegList()->appendItem(createSVGPathSegCurvetoQuadraticSmoothRel(x, y), ec);
 }
 
 void SVGPathElement::svgArcTo(double x, double y, double r1, double r2, double angle, bool largeArcFlag, bool sweepFlag, bool abs)
 {
-    if(abs)
-        pathSegList()->appendItem(createSVGPathSegArcAbs(x, y, r1, r2, angle, largeArcFlag, sweepFlag, this));
+    ExceptionCode ec = 0;
+
+    if (abs)
+        pathSegList()->appendItem(createSVGPathSegArcAbs(x, y, r1, r2, angle, largeArcFlag, sweepFlag), ec);
     else
-        pathSegList()->appendItem(createSVGPathSegArcRel(x, y, r1, r2, angle, largeArcFlag, sweepFlag, this));
+        pathSegList()->appendItem(createSVGPathSegArcRel(x, y, r1, r2, angle, largeArcFlag, sweepFlag), ec);
 }
 
 void SVGPathElement::svgClosePath()
 {
-    pathSegList()->appendItem(createSVGPathSegClosePath());
+    ExceptionCode ec = 0;
+    pathSegList()->appendItem(createSVGPathSegClosePath(), ec);
 }
 
-void SVGPathElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGPathElement::parseMappedAttribute(MappedAttribute* attr)
 {
+    const AtomicString& value = attr->value();
     if (attr->name() == SVGNames::dAttr) {
-        pathSegList()->clear();
-        parseSVG(attr->value().deprecatedString(), true);
+        ExceptionCode ec;
+        pathSegList()->clear(ec);
+        if (!parseSVG(value, true))
+            document()->accessSVGExtensions()->reportError("Problem parsing d=\"" + value + "\"");
+    } else if (attr->name() == SVGNames::pathLengthAttr) {
+        m_pathLength = value.toDouble();
+        if (m_pathLength < 0.0)
+            document()->accessSVGExtensions()->reportError("A negative value for path attribute <pathLength> is not allowed");
     } else {
-        if(SVGTests::parseMappedAttribute(attr)) return;
-        if(SVGLangSpace::parseMappedAttribute(attr)) return;
-        if(SVGExternalResourcesRequired::parseMappedAttribute(attr)) return;
+        if (SVGTests::parseMappedAttribute(attr))
+            return;
+        if (SVGLangSpace::parseMappedAttribute(attr))
+            return;
+        if (SVGExternalResourcesRequired::parseMappedAttribute(attr))
+            return;
         SVGStyledTransformableElement::parseMappedAttribute(attr);
     }
 }
 
-SVGPathSegList *SVGPathElement::pathSegList() const
+void SVGPathElement::notifyAttributeChange() const
 {
-    return lazy_create<SVGPathSegList>(m_pathSegList, this);
+    if (!ownerDocument()->parsing())
+        rebuildRenderer();
 }
 
-SVGPathSegList *SVGPathElement::normalizedPathSegList() const
+SVGPathSegList* SVGPathElement::pathSegList() const
 {
-    // TODO
-    return 0;
+    if (!m_pathSegList)
+        m_pathSegList = new SVGPathSegList(this);
+
+    return m_pathSegList.get();
 }
 
-SVGPathSegList *SVGPathElement::animatedPathSegList() const
-{
-    // TODO
-    return 0;
-}
-
-SVGPathSegList *SVGPathElement::animatedNormalizedPathSegList() const
+SVGPathSegList* SVGPathElement::normalizedPathSegList() const
 {
     // TODO
     return 0;
 }
 
-// FIXME: This probably belongs on SVGPathSegList instead. -- ecs 12/5/05
-KCanvasPath* SVGPathElement::toPathData() const
+SVGPathSegList* SVGPathElement::animatedPathSegList() const
 {
-    // TODO : also support non-normalized mode, at least in dom structure
-    int len = pathSegList()->numberOfItems();
-    if(len < 1)
-        return 0;
+    // TODO
+    return 0;
+}
 
-    KCanvasPath* pathData = renderingDevice()->createPath();
-    for(int i = 0; i < len; ++i)
-    {
-        SVGPathSeg *p = pathSegList()->getItem(i);
-        switch(p->pathSegType())
-        {
-            case PATHSEG_MOVETO_ABS:
-            {
-                SVGPathSegMovetoAbs *moveTo = static_cast<SVGPathSegMovetoAbs *>(p);
-                pathData->moveTo(moveTo->x(), moveTo->y());
-                break;
-            }
-            case PATHSEG_LINETO_ABS:
-            {
-                SVGPathSegLinetoAbs *lineTo = static_cast<SVGPathSegLinetoAbs *>(p);
-                pathData->lineTo(lineTo->x(), lineTo->y());
-                break;
-            }
-            case PATHSEG_CURVETO_CUBIC_ABS:
-            {
-                SVGPathSegCurvetoCubicAbs *curveTo = static_cast<SVGPathSegCurvetoCubicAbs *>(p);
-                pathData->curveTo(curveTo->x1(), curveTo->y1(),
-                                 curveTo->x2(), curveTo->y2(),
-                                 curveTo->x(), curveTo->y());
-                break;
-            }
-            case PATHSEG_CLOSEPATH:
-                pathData->closeSubpath();
-            default:
-                break;
-        }
-    }
+SVGPathSegList* SVGPathElement::animatedNormalizedPathSegList() const
+{
+    // TODO
+    return 0;
+}
 
-    return pathData;
+Path SVGPathElement::toPathData() const
+{
+    return pathSegList()->toPathData();
 }
 
 }
 
-// vim:ts=4:noet
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

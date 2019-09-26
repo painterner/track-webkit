@@ -18,80 +18,104 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef PAGE_H
-#define PAGE_H
+#ifndef Page_h
+#define Page_h
 
+#include "BackForwardList.h"
+#include "Chrome.h"
+#include "ContextMenuController.h"
+#include "FrameLoaderTypes.h"
 #include "PlatformString.h"
-#include "SelectionController.h"
 #include <wtf/HashSet.h>
+#include <wtf/OwnPtr.h>
 
-#if __APPLE__
-#ifdef __OBJC__
-@class WebCorePageBridge;
-#else
-class WebCorePageBridge;
-#endif
+#if PLATFORM(WIN)
+typedef struct HINSTANCE__* HINSTANCE;
 #endif
 
 namespace WebCore {
 
+    class Chrome;
+    class ChromeClient;
+    class ContextMenuClient;
+    class ContextMenuController;
+    class EditorClient;
+    class FocusController;
     class Frame;
-    class FrameNamespace;
-    class FloatRect;
+    class Node;
+    class SelectionController;
     class Settings;
-    class Widget;
-    
+
     class Page : Noncopyable {
     public:
+        Page(ChromeClient*, ContextMenuClient*, EditorClient*);
         ~Page();
+        
+        EditorClient* editorClient() const { return m_editorClient; }
 
         void setMainFrame(PassRefPtr<Frame>);
         Frame* mainFrame() const { return m_mainFrame.get(); }
 
-        FloatRect windowRect() const;
-        void setWindowRect(const FloatRect&);
+        BackForwardList* backForwardList();
 
+        // FIXME: The following three methods don't fall under the responsibilities of the Page object
+        // They seem to fit a hypothetical Page-controller object that would be akin to the 
+        // Frame-FrameLoader relationship.  They have to live here now, but should move somewhere that
+        // makes more sense when that class exists.
+        bool goBack();
+        bool goForward();
+        void goToItem(HistoryItem*, FrameLoadType);
+        
         void setGroupName(const String&);
         String groupName() const { return m_groupName; }
+
         const HashSet<Page*>* frameNamespace() const;
         static const HashSet<Page*>* frameNamespace(const String&);
 
         void incrementFrameCount() { ++m_frameCount; }
         void decrementFrameCount() { --m_frameCount; }
         int frameCount() const { return m_frameCount; }
-        
-        Widget* widget() const;
 
         static void setNeedsReapplyStyles();
         static void setNeedsReapplyStylesForSettingsChange(Settings*);
-        
-        // FIXME: Replace this with a function on the selection controller or change it to Selection instead?
-        void setDragCaret(const SelectionController&);
-        SelectionController& dragCaret() const; // FIXME: Change to pointer?
 
-#if PLATFORM(MAC)
-        Page(WebCorePageBridge*);
-        WebCorePageBridge* bridge() const { return m_bridge; }
-#endif
+        Chrome* chrome() { return m_chrome.get(); }
+        SelectionController* dragCaretController() { return m_dragCaretController.get(); }
+        FocusController* focusController() { return m_focusController.get(); }
+        ContextMenuController* contextMenuController() { return m_contextMenuController.get(); }
+        Settings* settings() { return m_settings.get(); }
 
-#if PLATFORM(WIN_OS)
-        Page();
+        void setDefersLoading(bool);
+        bool defersLoading() const { return m_defersLoading; }
+
+#if PLATFORM(WIN)
+        // The global DLL or application instance used for all windows.
+        static void setInstanceHandle(HINSTANCE instanceHandle) { s_instanceHandle = instanceHandle; }
+        static HINSTANCE instanceHandle() { return s_instanceHandle; }
 #endif
 
     private:
-        void init();
+        OwnPtr<Chrome> m_chrome;
+        OwnPtr<SelectionController> m_dragCaretController;
+        OwnPtr<FocusController> m_focusController;
+        OwnPtr<ContextMenuController> m_contextMenuController;
+        RefPtr<BackForwardList> m_backForwardList;
+        OwnPtr<Settings> m_settings;
 
+        EditorClient* m_editorClient;
         RefPtr<Frame> m_mainFrame;
+        RefPtr<Node> m_focusedNode;
         int m_frameCount;
-        mutable Widget* m_widget;
         String m_groupName;
-        mutable SelectionController m_dragCaret;
 
-#if __APPLE__
-        WebCorePageBridge* m_bridge;
+        bool m_defersLoading;
+
+        
+#if PLATFORM(WIN)
+        static HINSTANCE s_instanceHandle;
 #endif
     };
 
 } // namespace WebCore
     
-#endif // PAGE_H
+#endif // Page_h

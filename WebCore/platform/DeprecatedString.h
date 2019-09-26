@@ -27,18 +27,23 @@
 #define DeprecatedString_h
 
 #include <ctype.h>
-#include <unicode/uchar.h>
-#if __APPLE__
-#include <CoreFoundation/CoreFoundation.h>
-#endif
+#include <wtf/unicode/Unicode.h>
 #include "DeprecatedCString.h"
 
-#if __APPLE__
+#if PLATFORM(CF)
+typedef const struct __CFString * CFStringRef;
+#endif
+
+#if PLATFORM(MAC)
 #ifdef __OBJC__
 @class NSString;
 #else
 class NSString;
 #endif
+#endif
+
+#if PLATFORM(QT)
+class QString;
 #endif
 
 namespace KJS {
@@ -105,21 +110,33 @@ inline unsigned short DeprecatedChar::unicode() const
 
 inline bool DeprecatedChar::isSpace() const
 {
+#if USE(ICU_UNICODE)
     // Use isspace() for basic Latin-1.
     // This will include newlines, which aren't included in unicode DirWS.
     return c <= 0x7F ? isspace(c) : (u_charDirection(c) == U_WHITE_SPACE_NEUTRAL);
+#elif USE(QT4_UNICODE)
+    return QChar(c).isSpace();
+#endif
 }
 
 inline DeprecatedChar DeprecatedChar::lower() const
 {
+#if USE(ICU_UNICODE)
     // FIXME: If fast enough, we should just call u_tolower directly.
     return c <= 0x7F ? tolower(c) : u_tolower(c);
+#elif USE(QT4_UNICODE)
+    return QChar(c).toLower().unicode();
+#endif
 }
 
 inline DeprecatedChar DeprecatedChar::upper() const
 {
+#if USE(ICU_UNICODE)
     // FIXME: If fast enough, we should just call u_toupper directly.
     return c <= 0x7F ? toupper(c) : u_toupper(c);
+#elif USE(QT4_UNICODE)
+    return QChar(c).toUpper().unicode();
+#endif
 }
 
 inline char DeprecatedChar::latin1() const
@@ -210,14 +227,14 @@ struct DeprecatedStringData
     unsigned _length;
     mutable DeprecatedChar *_unicode;
     mutable char *_ascii;
+    char _internalBuffer[WEBCORE_DS_INTERNAL_BUFFER_SIZE]; // Pad out to a (((size + 1) & ~15) + 14) size
+
     unsigned _maxUnicode : 30;
     bool _isUnicodeValid : 1;
     bool _isHeapAllocated : 1; // Fragile, but the only way we can be sure the instance was created with 'new'.
     unsigned _maxAscii : 31;
     bool _isAsciiValid : 1;
     
-    char _internalBuffer[WEBCORE_DS_INTERNAL_BUFFER_SIZE]; // Pad out to a (((size + 1) & ~15) + 14) size
-
 private:
     DeprecatedStringData(const DeprecatedStringData &);
     DeprecatedStringData &operator=(const DeprecatedStringData &);
@@ -248,13 +265,24 @@ public:
     operator KJS::Identifier() const;
     operator KJS::UString() const;
 
+#if PLATFORM(QT)
+    DeprecatedString(const QString&);
+    operator QString() const;
+#endif
+
     static DeprecatedString fromLatin1(const char *);
     static DeprecatedString fromLatin1(const char *, int len);
     static DeprecatedString fromUtf8(const char *);
     static DeprecatedString fromUtf8(const char *, int len);
-#if __APPLE__
+#if PLATFORM(CF)
     static DeprecatedString fromCFString(CFStringRef);
+#endif
+#if PLATFORM(MAC)
     static DeprecatedString fromNSString(NSString*);
+#endif
+#if PLATFORM(SYMBIAN)
+    static DeprecatedString fromDes(const TDesC&);
+    static DeprecatedString fromDes(const TDesC8&);
 #endif
     DeprecatedString &operator=(char);
     DeprecatedString &operator=(DeprecatedChar);
@@ -336,7 +364,7 @@ public:
     DeprecatedString &setNum(unsigned long);
     DeprecatedString &setNum(double);
 
-    DeprecatedString &sprintf(const char *, ...) 
+    DeprecatedString& format(const char *, ...) 
 #if __GNUC__
     __attribute__ ((format (printf, 2, 3)))
 #endif
@@ -378,10 +406,25 @@ public:
     DeprecatedString &operator+=(DeprecatedChar c) { return append(c); }
     DeprecatedString &operator+=(char c) { return append(c); }
 
-#if __APPLE__
+#if PLATFORM(CF)
     CFStringRef getCFString() const;
-    NSString *getNSString() const;
     void setBufferFromCFString(CFStringRef);
+#endif
+    
+#if PLATFORM(MAC)
+    NSString *getNSString() const;
+
+#ifdef __OBJC__
+    operator NSString*() const { return getNSString(); }
+#endif
+
+#endif
+
+#if PLATFORM(SYMBIAN)
+    TPtrC des() const;
+    TPtrC8 des8() const;
+    void setBufferFromDes(const TDesC&);
+    void setBufferFromDes(const TDesC8&);
 #endif
 
 private:
@@ -449,11 +492,13 @@ inline const DeprecatedChar *DeprecatedString::unicode() const
     return dataHandle[0]->unicode();
 }
 
-#if __APPLE__
+#if PLATFORM(MAC)
+#if PLATFORM(CF)
 inline CFStringRef DeprecatedString::getCFString() const
 {
     return (CFStringRef)getNSString();
 }
+#endif
 #endif
 
 inline DeprecatedString DeprecatedString::fromLatin1(const char *chs)

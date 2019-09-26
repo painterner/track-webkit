@@ -26,15 +26,21 @@
 #include "config.h"
 #include "markup.h"
 
+#include "CDATASection.h"
 #include "CSSComputedStyleDeclaration.h"
+#include "CSSPropertyNames.h"
 #include "CSSRule.h"
 #include "CSSRuleList.h"
 #include "CSSStyleRule.h"
 #include "cssstyleselector.h"
 #include "Comment.h"
+#include "DeleteButtonController.h"
+#include "DeprecatedStringList.h"
 #include "Document.h"
 #include "DocumentFragment.h"
 #include "DocumentType.h"
+#include "Editor.h"
+#include "Frame.h"
 #include "HTMLElement.h"
 #include "HTMLNames.h"
 #include "InlineTextBox.h"
@@ -42,6 +48,7 @@
 #include "Logging.h"
 #include "ProcessingInstruction.h"
 #include "Range.h"
+#include "Selection.h"
 #include "htmlediting.h"
 #include "visible_units.h"
 #include "TextIterator.h"
@@ -54,7 +61,7 @@ using namespace HTMLNames;
 
 static inline bool shouldSelfClose(const Node *node);
 
-static DeprecatedString escapeTextForMarkup(const DeprecatedString &in)
+static DeprecatedString escapeTextForMarkup(const DeprecatedString &in, bool isAttributeValue)
 {
     DeprecatedString s = "";
 
@@ -70,6 +77,12 @@ static DeprecatedString escapeTextForMarkup(const DeprecatedString &in)
             case '>':
                 s += "&gt;";
                 break;
+            case '"':
+                if (isAttributeValue) {
+                    s += "&quot;";
+                    break;
+                }
+                // fall through
             default:
                 s += in[i];
         }
@@ -112,6 +125,34 @@ static DeprecatedString renderedText(const Node *node, const Range *range)
     return plainText(&r);
 }
 
+static PassRefPtr<CSSMutableStyleDeclaration> styleFromMatchedRulesForElement(Element* element, bool authorOnly = true)
+{
+    RefPtr<CSSMutableStyleDeclaration> style = new CSSMutableStyleDeclaration();
+    RefPtr<CSSRuleList> matchedRules = element->document()->styleSelector()->styleRulesForElement(element, authorOnly);
+    if (matchedRules) {
+        for (unsigned i = 0; i < matchedRules->length(); i++) {
+            if (matchedRules->item(i)->type() == CSSRule::STYLE_RULE) {
+                RefPtr<CSSMutableStyleDeclaration> s = static_cast<CSSStyleRule*>(matchedRules->item(i))->style();
+                style->merge(s.get(), true);
+            }
+        }
+    }
+    
+    return style.release();
+}
+
+static void removeEnclosingMailBlockquoteStyle(CSSMutableStyleDeclaration* style, Node* node)
+{
+    Node* blockquote = nearestMailBlockquote(node);
+    if (!blockquote || !blockquote->parentNode())
+        return;
+            
+    RefPtr<CSSMutableStyleDeclaration> parentStyle = Position(blockquote->parentNode(), 0).computedStyle()->copyInheritableProperties();
+    RefPtr<CSSMutableStyleDeclaration> blockquoteStyle = Position(blockquote, 0).computedStyle()->copyInheritableProperties();
+    parentStyle->diff(blockquoteStyle.get());
+    blockquoteStyle->diff(style);
+}
+
 static DeprecatedString startMarkup(const Node *node, const Range *range, EAnnotateForInterchange annotate, CSSMutableStyleDeclaration *defaultStyle)
 {
     bool documentIsHTML = node->document()->isHTMLDocument();
@@ -126,12 +167,19 @@ static DeprecatedString startMarkup(const Node *node, const Range *range, EAnnot
                         || parent->hasTagName(xmpTag))
                     return stringValueForRange(node, range).deprecatedString();
             }
-            DeprecatedString markup = annotate ? escapeTextForMarkup(renderedText(node, range)) : escapeTextForMarkup(stringValueForRange(node, range).deprecatedString());            
+            bool useRenderedText = annotate && !enclosingNodeWithTag(const_cast<Node*>(node), selectTag);
+            
+            DeprecatedString markup = useRenderedText ? escapeTextForMarkup(renderedText(node, range), false) : escapeTextForMarkup(stringValueForRange(node, range).deprecatedString(), false);
             if (defaultStyle) {
                 Node *element = node->parentNode();
                 if (element) {
                     RefPtr<CSSComputedStyleDeclaration> computedStyle = Position(element, 0).computedStyle();
                     RefPtr<CSSMutableStyleDeclaration> style = computedStyle->copyInheritableProperties();
+                    // Styles that Mail blockquotes contribute should only be placed on the Mail blockquote, to help
+                    // us differentiate those styles from ones that the user has applied.  This helps us
+                    // get the color of content pasted into blockquotes right.
+                    removeEnclosingMailBlockquoteStyle(style.get(), const_cast<Node*>(node));
+                    
                     defaultStyle->diff(style.get());
                     if (style->length() > 0) {
                         // FIXME: Handle case where style->cssText() has illegal characters in it, like "
@@ -162,18 +210,16 @@ static DeprecatedString startMarkup(const Node *node, const Range *range, EAnnot
             const Element* el = static_cast<const Element*>(node);
             markup += el->nodeNamePreservingCase().deprecatedString();
             String additionalStyle;
-            if (defaultStyle && el->isHTMLElement()) {
+            if (defaultStyle && el->isHTMLElement() && !isMailBlockquote(node)) {
                 RefPtr<CSSComputedStyleDeclaration> computedStyle = Position(const_cast<Element*>(el), 0).computedStyle();
                 RefPtr<CSSMutableStyleDeclaration> style = computedStyle->copyInheritableProperties();
-                RefPtr<CSSRuleList> matchedRules = node->document()->styleSelector()->styleRulesForElement(const_cast<Element*>(el), true);
-                if (matchedRules) {
-                    for (unsigned i = 0; i < matchedRules->length(); i++) {
-                        if (matchedRules->item(i)->type() == CSSRule::STYLE_RULE) {
-                            RefPtr<CSSMutableStyleDeclaration> s = static_cast<CSSStyleRule*>(matchedRules->item(i))->style();
-                            style->merge(s.get(), true);
-                        }
-                    }
-                }
+                style->merge(styleFromMatchedRulesForElement(const_cast<Element*>(el)).get());
+                
+                // Styles that Mail blockquotes contribute should only be placed on the Mail blockquote, to help
+                // us differentiate those styles from ones that the user has applied.  This helps us
+                // get the color of content pasted into blockquotes right.
+                removeEnclosingMailBlockquoteStyle(style.get(), const_cast<Node*>(node));
+                
                 defaultStyle->diff(style.get());
                 if (style->length() > 0) {
                     CSSMutableStyleDeclaration *inlineStyleDecl = static_cast<const HTMLElement*>(el)->inlineStyleDecl();
@@ -197,7 +243,7 @@ static DeprecatedString startMarkup(const Node *node, const Range *range, EAnnot
                     markup += " " + attr->name().localName().deprecatedString();
                 else
                     markup += " " + attr->name().toString().deprecatedString();
-                markup += "=\"" + escapeTextForMarkup(value.deprecatedString()) + "\"";
+                markup += "=\"" + escapeTextForMarkup(value.deprecatedString(), true) + "\"";
             }
             
             if (additionalStyle.length() > 0)
@@ -213,8 +259,9 @@ static DeprecatedString startMarkup(const Node *node, const Range *range, EAnnot
             
             return markup;
         }
-        case Node::ATTRIBUTE_NODE:
         case Node::CDATA_SECTION_NODE:
+            return static_cast<const CDATASection*>(node)->toString().deprecatedString();
+        case Node::ATTRIBUTE_NODE:
         case Node::ENTITY_NODE:
         case Node::ENTITY_REFERENCE_NODE:
         case Node::NOTATION_NODE:
@@ -319,13 +366,21 @@ DeprecatedString createMarkup(const Range *range, Vector<Node*>* nodes, EAnnotat
     ASSERT(ec == 0);
 
     Document *doc = commonAncestor->document();
+    // disable the delete button so it's elements are not serialized into the markup
+    doc->frame()->editor()->deleteButtonController()->disable();
     doc->updateLayoutIgnorePendingStylesheets();
 
     Node *commonAncestorBlock = 0;
-    if (commonAncestor)
-        commonAncestorBlock = commonAncestor->enclosingBlockFlowElement();
-    if (!commonAncestorBlock)
-        return "";
+    if (commonAncestor) {
+        commonAncestorBlock = enclosingBlock(commonAncestor);
+        if (commonAncestorBlock && commonAncestorBlock->hasTagName(tbodyTag)) {
+            Node* table = commonAncestorBlock->parentNode();
+            while (table && !table->hasTagName(tableTag))
+                table = table->parentNode();
+            if (table)
+                commonAncestorBlock = table;
+        }
+    }
 
     DeprecatedStringList markups;
     Node *pastEnd = range->pastEndNode();
@@ -341,9 +396,11 @@ DeprecatedString createMarkup(const Range *range, Vector<Node*>* nodes, EAnnotat
     VisiblePosition visibleStart(range->startPosition(), VP_DEFAULT_AFFINITY);
     VisiblePosition visibleEnd(range->endPosition(), VP_DEFAULT_AFFINITY);
     if (annotate && needInterchangeNewlineAfter(visibleStart)) {
-        if (visibleStart == visibleEnd.previous())
+        if (visibleStart == visibleEnd.previous()) {
+            doc->frame()->editor()->deleteButtonController()->enable();
             return interchangeNewlineString;
-            
+        }
+
         markups.append(interchangeNewlineString);
         startNode = visibleStart.next().deepEquivalent().node();
     }
@@ -351,22 +408,32 @@ DeprecatedString createMarkup(const Range *range, Vector<Node*>* nodes, EAnnotat
     Node *next;
     for (Node *n = startNode; n != pastEnd; n = next) {
         next = n->traverseNextNode();
+        bool skipDescendants = false;
+        bool addMarkupForNode = true;
+        
+        if (!n->renderer() && !enclosingNodeWithTag(n, selectTag)) {
+            skipDescendants = true;
+            addMarkupForNode = false;
+            next = n->traverseNextSibling();
+            // Don't skip over pastEnd.
+            if (pastEnd && pastEnd->isDescendantOf(n))
+                next = pastEnd;
+        }
 
-        if (n->isBlockFlow() && next == pastEnd)
-            // Don't write out an empty block.
+        if (isBlock(n) && canHaveChildrenForEditing(n) && next == pastEnd)
+            // Don't write out empty block containers that aren't fully selected.
             continue;
         
         // Add the node to the markup.
-        // FIXME: Add markup for nodes without renderers to fix <rdar://problem/4062865>. Also see the three checks below.
-        if (n->renderer()) {
+        if (addMarkupForNode) {
             markups.append(startMarkup(n, range, annotate, defaultStyle.get()));
             if (nodes)
                 nodes->append(n);
         }
         
-        if (n->firstChild() == 0) {
-            // Node has no children, add its close tag now.
-            if (n->renderer()) {
+        if (n->firstChild() == 0 || skipDescendants) {
+            // Node has no children, or we are skipping it's descendants, add its close tag now.
+            if (addMarkupForNode) {
                 markups.append(endMarkup(n));
                 lastClosed = n;
             }
@@ -377,7 +444,7 @@ DeprecatedString createMarkup(const Range *range, Vector<Node*>* nodes, EAnnotat
                     // Close up the ancestors.
                     do {
                         Node *ancestor = ancestorsToClose.last();
-                        if (next != pastEnd && next->isAncestor(ancestor))
+                        if (next != pastEnd && next->isDescendantOf(ancestor))
                             break;
                         // Not at the end of the range, close ancestors up to sibling of next node.
                         markups.append(endMarkup(ancestor));
@@ -389,13 +456,13 @@ DeprecatedString createMarkup(const Range *range, Vector<Node*>* nodes, EAnnotat
                 // Surround the currently accumulated markup with markup for ancestors we never opened as we leave the subtree(s) rooted at those ancestors.
                 Node* nextParent = next ? next->parentNode() : 0;
                 if (next != pastEnd && n != nextParent) {
-                    Node* lastAncestorClosedOrSelf = n->isAncestor(lastClosed) ? lastClosed : n;
+                    Node* lastAncestorClosedOrSelf = n->isDescendantOf(lastClosed) ? lastClosed : n;
                     for (Node *parent = lastAncestorClosedOrSelf->parent(); parent != 0 && parent != nextParent; parent = parent->parentNode()) {
                         // All ancestors that aren't in the ancestorsToClose list should either be a) unrendered:
                         if (!parent->renderer())
                             continue;
                         // or b) ancestors that we never encountered during a pre-order traversal starting at startNode:
-                        ASSERT(startNode->isAncestor(parent));
+                        ASSERT(startNode->isDescendantOf(parent));
                         markups.prepend(startMarkup(parent, range, annotate, defaultStyle.get()));
                         markups.append(endMarkup(parent));
                         if (nodes)
@@ -404,8 +471,8 @@ DeprecatedString createMarkup(const Range *range, Vector<Node*>* nodes, EAnnotat
                     }
                 }
             }
-        } else if (n->renderer())
-            // Node is an ancestor, set it to close eventually.
+        } else if (addMarkupForNode && !skipDescendants)
+            // We added markup for this node, and we're descending into it.  Set it to close eventually.
             ancestorsToClose.append(n);
     }
     
@@ -457,12 +524,33 @@ DeprecatedString createMarkup(const Range *range, Vector<Node*>* nodes, EAnnotat
         }
     }
     
+    // FIXME: Do this for all fully selected blocks, not just a body.
+    Node* root = range->startPosition().node();
+    while (root && !root->hasTagName(bodyTag))
+        root = root->parentNode();
+    if (root && *Selection::selectionFromContentsOfNode(root).toRange() == *range) {
+        CSSMutableStyleDeclaration* inlineStyleDecl = static_cast<HTMLElement*>(root)->inlineStyleDecl();
+        RefPtr<CSSMutableStyleDeclaration> style = inlineStyleDecl ? inlineStyleDecl->copy() : new CSSMutableStyleDeclaration();
+        style->merge(styleFromMatchedRulesForElement(static_cast<Element*>(root)).get());
+        
+        defaultStyle->diff(style.get());
+        
+        // Bring the background attribute over, but not as an attribute because a background attribute on a div
+        // appears to have no effect.
+        if (!style->getPropertyCSSValue(CSS_PROP_BACKGROUND_IMAGE) && static_cast<Element*>(root)->hasAttribute(backgroundAttr))
+            style->setProperty(CSS_PROP_BACKGROUND_IMAGE, "url('" + static_cast<Element*>(root)->getAttribute(backgroundAttr) + "')");
+        
+        markups.prepend("<div style='" + style->cssText().deprecatedString() + "'>");
+        markups.append("</div>");
+    }
+    
     // add in the "default style" for this markup
     // FIXME: Handle case where value has illegal characters in it, like "
     DeprecatedString openTag = DeprecatedString("<span class=\"") + AppleStyleSpanClass + "\" style=\"" + defaultStyle->cssText().deprecatedString() + "\">";
     markups.prepend(openTag);
     markups.append("</span>");
 
+    doc->frame()->editor()->deleteButtonController()->enable();
     return markups.join("");
 }
 
@@ -485,11 +573,17 @@ DeprecatedString createMarkup(const Node* node, EChildrenOnly includeChildren,
     Vector<Node*>* nodes, EAnnotateForInterchange annotate)
 {
     ASSERT(annotate == DoNotAnnotateForInterchange); // annotation not yet implemented for this code path
+    // disable the delete button so it's elements are not serialized into the markup
+    if (node->document()->frame())
+        node->document()->frame()->editor()->deleteButtonController()->disable();
     node->document()->updateLayoutIgnorePendingStylesheets();
-    return markup(const_cast<Node*>(node), includeChildren, false, nodes);
+    DeprecatedString result(markup(const_cast<Node*>(node), includeChildren, false, nodes));
+    if (node->document()->frame())
+        node->document()->frame()->editor()->deleteButtonController()->enable();
+    return result;
 }
 
-static void createParagraphContentsFromString(Element* paragraph, const DeprecatedString& string)
+static void fillContainerFromString(ContainerNode* paragraph, const DeprecatedString& string)
 {
     Document* document = paragraph->document();
 
@@ -504,6 +598,7 @@ static void createParagraphContentsFromString(Element* paragraph, const Deprecat
 
     DeprecatedStringList tabList = DeprecatedStringList::split('\t', string, true);
     DeprecatedString tabText = "";
+    bool first = true;
     while (!tabList.isEmpty()) {
         DeprecatedString s = tabList.first();
         tabList.pop_front();
@@ -515,8 +610,7 @@ static void createParagraphContentsFromString(Element* paragraph, const Deprecat
                 ASSERT(ec == 0);
                 tabText = "";
             }
-            RefPtr<Node> textNode = document->createTextNode(s);
-            rebalanceWhitespaceInTextNode(textNode.get(), 0, s.length());
+            RefPtr<Node> textNode = document->createTextNode(stringWithRebalancedWhitespace(s, first, tabList.isEmpty()));
             paragraph->appendChild(textNode.release(), ec);
             ASSERT(ec == 0);
         }
@@ -529,6 +623,8 @@ static void createParagraphContentsFromString(Element* paragraph, const Deprecat
             paragraph->appendChild(createTabSpanElement(document, tabText), ec);
             ASSERT(ec == 0);
         }
+        
+        first = false;
     }
 }
 
@@ -570,6 +666,12 @@ PassRefPtr<DocumentFragment> createFragmentFromText(Range* context, const String
         return fragment.release();
     }
 
+    // A string with no newlines gets added inline, rather than being put into a paragraph.
+    if (string.find('\n') == -1) {
+        fillContainerFromString(fragment.get(), string);
+        return fragment.release();
+    }
+
     // Break string into paragraphs. Extra line breaks turn into empty paragraphs.
     DeprecatedStringList list = DeprecatedStringList::split('\n', string, true); // true gets us empty strings in the list
     while (!list.isEmpty()) {
@@ -584,7 +686,7 @@ PassRefPtr<DocumentFragment> createFragmentFromText(Range* context, const String
             element->setAttribute(classAttr, AppleInterchangeNewline);            
         } else {
             element = createDefaultParagraphElement(document);
-            createParagraphContentsFromString(element.get(), s);
+            fillContainerFromString(element.get(), s);
         }
         fragment->appendChild(element.release(), ec);
         ASSERT(ec == 0);
@@ -596,7 +698,11 @@ PassRefPtr<DocumentFragment> createFragmentFromNodes(Document *document, const V
 {
     if (!document)
         return 0;
-    
+
+    // disable the delete button so it's elements are not serialized into the markup
+    if (document->frame())
+        document->frame()->editor()->deleteButtonController()->disable();
+
     RefPtr<DocumentFragment> fragment = document->createDocumentFragment();
 
     ExceptionCode ec = 0;
@@ -608,6 +714,9 @@ PassRefPtr<DocumentFragment> createFragmentFromNodes(Document *document, const V
         fragment->appendChild(element.release(), ec);
         ASSERT(ec == 0);
     }
+
+    if (document->frame())
+        document->frame()->editor()->deleteButtonController()->enable();
 
     return fragment.release();
 }

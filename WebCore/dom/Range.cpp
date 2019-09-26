@@ -32,6 +32,7 @@
 #include "HTMLElement.h"
 #include "HTMLNames.h"
 #include "ProcessingInstruction.h"
+#include "RangeException.h"
 #include "RenderBlock.h"
 #include "TextIterator.h"
 #include "markup.h"
@@ -55,22 +56,36 @@ Range::Range(Document* ownerDocument,
               Node* startContainer, int startOffset,
               Node* endContainer, int endOffset)
     : m_ownerDocument(ownerDocument)
-    , m_startContainer(startContainer)
-    , m_startOffset(startOffset)
-    , m_endContainer(endContainer)
-    , m_endOffset(endOffset)
+    , m_startContainer(ownerDocument)
+    , m_startOffset(0)
+    , m_endContainer(ownerDocument)
+    , m_endOffset(0)
     , m_detached(false)
 {
+    // Simply setting the containers and offsets directly would not do any of the checking
+    // that setStart and setEnd do, so we must call those functions.
+    ExceptionCode ec = 0;
+    setStart(startContainer, startOffset, ec);
+    ASSERT(ec == 0);
+    setEnd(endContainer, endOffset, ec);
+    ASSERT(ec == 0);
 }
 
 Range::Range(Document* ownerDocument, const Position& start, const Position& end)
     : m_ownerDocument(ownerDocument)
-    , m_startContainer(start.node())
-    , m_startOffset(start.offset())
-    , m_endContainer(end.node())
-    , m_endOffset(end.offset())
+    , m_startContainer(ownerDocument)
+    , m_startOffset(0)
+    , m_endContainer(ownerDocument)
+    , m_endOffset(0)
     , m_detached(false)
 {
+    // Simply setting the containers and offsets directly would not do any of the checking
+    // that setStart and setEnd do, so we must call those functions.
+    ExceptionCode ec = 0;
+    setStart(start.node(), start.offset(), ec);
+    ASSERT(ec == 0);
+    setEnd(end.node(), end.offset(), ec);
+    ASSERT(ec == 0);
 }
 
 Range::~Range()
@@ -302,7 +317,7 @@ short Range::comparePoint(Node* refNode, int offset, ExceptionCode& ec)
     }
 
     if (!m_detached && !refNode->attached()) {
-        // firefox doesn't throw an exception for this case; it returns 1
+        // firefox doesn't throw an exception for this case; it returns -1
         return -1;
     }
 
@@ -326,6 +341,53 @@ short Range::comparePoint(Node* refNode, int offset, ExceptionCode& ec)
     // point is in the middle of this range, or on the boundary points
     else
         return 0;
+}
+
+Range::CompareResults Range::compareNode(Node* refNode, ExceptionCode& ec)
+{
+    // http://developer.mozilla.org/en/docs/DOM:range.compareNode
+    // This method returns 0, 1, 2, or 3 based on if the node is before, after,
+    // before and after(surrounds), or inside the range, respectively
+
+    if (!refNode) {
+        ec = NOT_FOUND_ERR;
+        return NODE_BEFORE;
+    }
+    
+    if (m_detached && refNode->attached()) {
+        ec = INVALID_STATE_ERR;
+        return NODE_BEFORE;
+    }
+
+    if (!m_detached && !refNode->attached()) {
+        // firefox doesn't throw an exception for this case; it returns 0
+        return NODE_BEFORE;
+    }
+
+    if (refNode->document() != m_ownerDocument) {
+        // firefox doesn't throw an exception for this case; it returns 0
+        return NODE_BEFORE;
+    }
+
+    Node* parentNode = refNode->parentNode();
+    unsigned nodeIndex = refNode->nodeIndex();
+    
+    if (!parentNode) {
+        // if the node is the top document we should return NODE_BEFORE_AND_AFTER
+        // but we throw to match firefox behavior
+        ec = NOT_FOUND_ERR;
+        return NODE_BEFORE;
+    }
+
+    if (comparePoint(parentNode, nodeIndex, ec) == -1) { // starts before
+        if (comparePoint(parentNode, nodeIndex + 1, ec) == 1) // ends after the range
+            return NODE_BEFORE_AND_AFTER;
+        return NODE_BEFORE; // ends before or in the range
+    } else { // starts at or after the range start
+        if (comparePoint(parentNode, nodeIndex + 1, ec) == 1) // ends after the range
+            return NODE_AFTER;
+        return NODE_INSIDE; // ends inside the range
+    }
 }
 
 
@@ -479,7 +541,7 @@ short Range::compareBoundaryPoints( const Position &a, const Position &b )
 
 bool Range::boundaryPointsValid() const
 {
-    return compareBoundaryPoints(m_startContainer.get(), m_startOffset, m_endContainer.get(), m_endOffset) <= 0;
+    return m_startContainer && m_endContainer && compareBoundaryPoints(m_startContainer.get(), m_startOffset, m_endContainer.get(), m_endOffset) <= 0;
 }
 
 void Range::deleteContents(ExceptionCode& ec) {
@@ -493,6 +555,43 @@ void Range::deleteContents(ExceptionCode& ec) {
         return;
 
     processContents(DELETE_CONTENTS,ec);
+}
+
+bool Range::intersectsNode(Node* refNode, ExceptionCode& ec)
+{
+    // http://developer.mozilla.org/en/docs/DOM:range.intersectsNode
+    // Returns a bool if the node intersects the range.
+
+    if (!refNode) {
+        ec = NOT_FOUND_ERR;
+        return false;
+    }
+    
+    if (m_detached && refNode->attached() ||
+        !m_detached && !refNode->attached() ||
+        refNode->document() != m_ownerDocument)
+        // firefox doesn't throw an exception for these case; it returns false
+        return false;
+
+    Node* parentNode = refNode->parentNode();
+    unsigned nodeIndex = refNode->nodeIndex();
+    
+    if (!parentNode) {
+        // if the node is the top document we should return NODE_BEFORE_AND_AFTER
+        // but we throw to match firefox behavior
+        ec = NOT_FOUND_ERR;
+        return false;
+    }
+
+    if (comparePoint(parentNode, nodeIndex, ec) == -1 && // starts before start
+        comparePoint(parentNode, nodeIndex + 1, ec) == -1) { // ends before start
+        return false;
+    } else if(comparePoint(parentNode, nodeIndex, ec) == 1 && // starts after end
+              comparePoint(parentNode, nodeIndex + 1, ec) == 1) { // ends after end
+        return false;
+    }
+    
+    return true;    //all other cases
 }
 
 PassRefPtr<DocumentFragment> Range::processContents ( ActionType action, ExceptionCode& ec)
@@ -1241,19 +1340,20 @@ void Range::surroundContents(PassRefPtr<Node> passNewParent, ExceptionCode& ec)
         return;
     }
 
-    // HIERARCHY_REQUEST_ERR: Raised if the container of the start of the Range is of a type that
-    // does not allow children of the type of newParent or if newParent is an ancestor of the container
-    // or if node would end up with a child node of a type not allowed by the type of node.
-    if (!m_startContainer->childTypeAllowed(newParent->nodeType())) {
+    // Raise a HIERARCHY_REQUEST_ERR if m_startContainer doesn't accept children like newParent.
+    Node* parentOfNewParent = m_startContainer.get();
+    // If m_startContainer is a textNode, it will be split and it will be its parent that will 
+    // need to accept newParent.
+    if (parentOfNewParent->isTextNode())
+        parentOfNewParent = parentOfNewParent->parentNode();
+    if (!parentOfNewParent->childTypeAllowed(newParent->nodeType())) {
         ec = HIERARCHY_REQUEST_ERR;
         return;
     }
-
-    for (Node *n = m_startContainer.get(); n; n = n->parentNode()) {
-        if (n == newParent) {
-            ec = HIERARCHY_REQUEST_ERR;
-            return;
-        }
+    
+    if (m_startContainer == newParent || m_startContainer->isDescendantOf(newParent.get())) {
+        ec = HIERARCHY_REQUEST_ERR;
+        return;
     }
 
     // ### check if node would end up with a child node of a type not allowed by the type of node
@@ -1407,6 +1507,38 @@ Node *Range::pastEndNode() const
     if (child)
         return child;
     return m_endContainer->traverseNextSibling();
+}
+
+IntRect Range::boundingBox()
+{
+    IntRect result;
+    Vector<IntRect> rects;
+    addLineBoxRects(rects);
+    const size_t n = rects.size();
+    for (size_t i = 0; i < n; ++i)
+        result.unite(rects[i]);
+    return result;
+}
+
+void Range::addLineBoxRects(Vector<IntRect>& rects)
+{
+    if (!m_startContainer || !m_endContainer)
+        return;
+
+    RenderObject* start = m_startContainer->renderer();
+    RenderObject* end = m_endContainer->renderer();
+    if (!start || !end)
+        return;
+
+    RenderObject* stop = end->nextInPreOrderAfterChildren();
+    for (RenderObject* r = start; r && r != stop; r = r->nextInPreOrder()) {
+        // only ask leaf render objects for their line box rects
+        if (!r->firstChild()) {
+            int startOffset = r == start ? m_startOffset : 0;
+            int endOffset = r == end ? m_endOffset : UINT_MAX;
+            r->addLineBoxRects(rects, startOffset, endOffset);
+        }
+    }
 }
 
 #ifndef NDEBUG

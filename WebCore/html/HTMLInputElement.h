@@ -32,8 +32,7 @@ namespace WebCore {
 
 class HTMLImageLoader;
 
-class HTMLInputElement : public HTMLGenericFormElement
-{
+class HTMLInputElement : public HTMLGenericFormElement {
 public:
     enum InputType {
         TEXT,
@@ -58,7 +57,7 @@ public:
     virtual HTMLTagStatus endTagRequirement() const { return TagStatusForbidden; }
     virtual int tagPriority() const { return 0; }
 
-    virtual bool isKeyboardFocusable() const;
+    virtual bool isKeyboardFocusable(KeyboardEvent*) const;
     virtual bool isMouseFocusable() const;
     virtual bool isEnumeratable() const { return inputType() != IMAGE; }
     virtual void focus();
@@ -78,10 +77,8 @@ public:
 
     bool isTextButton() const { return m_type == SUBMIT || m_type == RESET || m_type == BUTTON; }
     virtual bool isRadioButton() const { return m_type == RADIO; }
-    bool isTextField() const { return m_type == TEXT || m_type == PASSWORD || m_type == SEARCH; }
-    // FIXME: When other text fields switch to the non-NSView implementation, we should add them here.
-    // Once all text fields switch over, we should merge this with isTextField.
-    bool isNonWidgetTextField() const { return m_type == TEXT; }
+    bool isTextField() const { return m_type == TEXT || m_type == PASSWORD || m_type == SEARCH || m_type == ISINDEX; }
+    bool isSearchField() const { return m_type == SEARCH; }
 
     bool checked() const { return m_checked; }
     void setChecked(bool, bool sendChangeEvent = false);
@@ -109,8 +106,7 @@ public:
     void setSelectionEnd(int);
     void select();
     void setSelectionRange(int start, int end);
-    
-    virtual void click(bool sendMouseEvents = false, bool showPressedLook = true);
+
     virtual void accessKeyAction(bool sendToAnyElement);
 
     virtual bool mapToEntry(const QualifiedName& attrName, MappedAttributeEntry& result) const;
@@ -135,10 +131,6 @@ public:
     bool respectHeightAndWidthAttrs() const { return inputType() == IMAGE || inputType() == HIDDEN; }
 
     virtual void reset();
-
-    // used in case input type=image was clicked.
-    int clickX() const { return xPos; }
-    int clickY() const { return yPos; }
 
     virtual void* preDispatchEventHandler(Event*);
     virtual void postDispatchEventHandler(Event*, void* dataFromPreDispatch);
@@ -182,6 +174,8 @@ public:
     void setAutofilled(bool b = true) { m_autofilled = b; }
     
     void cacheSelection(int s, int e) { cachedSelStart = s; cachedSelEnd = e; };
+    void addSearchResult();
+    void onSearch();
 
 protected:
     AtomicString m_name;

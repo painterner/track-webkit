@@ -38,9 +38,8 @@ using namespace HTMLNames;
 
 FormatBlockCommand::FormatBlockCommand(Document* document, const String& tagName) 
     : CompositeEditCommand(document), m_tagName(tagName)
-{}
-
-
+{
+}
 
 bool FormatBlockCommand::modifyRange()
 {
@@ -73,11 +72,24 @@ void FormatBlockCommand::doApply()
 {
     if (endingSelection().isNone())
         return;
-
-    if (endingSelection().isRange() && modifyRange())
-        return;
     
     if (!endingSelection().rootEditableElement())
+        return;
+
+    VisiblePosition visibleEnd = endingSelection().visibleEnd();
+    VisiblePosition visibleStart = endingSelection().visibleStart();
+    // When a selection ends at the start of a paragraph, we rarely paint 
+    // the selection gap before that paragraph, because there often is no gap.  
+    // In a case like this, it's not obvious to the user that the selection 
+    // ends "inside" that paragraph, so it would be confusing if FormatBlock
+    // operated on that paragraph.
+    // FIXME: We paint the gap before some paragraphs that are indented with left 
+    // margin/padding, but not others.  We should make the gap painting more consistent and 
+    // then use a left margin/padding rule here.
+    if (visibleEnd != visibleStart && isStartOfParagraph(visibleEnd))
+        setEndingSelection(Selection(visibleStart, visibleEnd.previous(true)));
+
+    if (endingSelection().isRange() && modifyRange())
         return;
     
     String localName, prefix;
@@ -98,12 +110,12 @@ void FormatBlockCommand::doApply()
     RefPtr<Node> placeholder = createBreakElement(document());
     
     Node* root = endingSelection().start().node()->rootEditableElement();
-    if (refNode == root || root->isAncestor(refNode))
+    if (refNode == root || root->isDescendantOf(refNode))
         refNode = paragraphStart.deepEquivalent().node();
     
     Position upstreamStart = paragraphStart.deepEquivalent().upstream();
     if ((validBlockTag(refNode->nodeName().lower()) && paragraphStart == blockStart && paragraphEnd == blockEnd) ||
-        !upstreamStart.node()->isAncestor(root))
+        !upstreamStart.node()->isDescendantOf(root))
         // Already in a valid block tag that only contains the current paragraph, so we can swap with the new tag
         insertNodeBefore(blockNode.get(), refNode);
     else {

@@ -24,7 +24,7 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				CommandLine="bash build-generated-files.sh &quot;$(ConfigurationName)&quot; &quot;$(WebKitOutputDir)&quot;&#x0D;&#x0A;"
+				CommandLine="set PATH=%PATH%;%SystemDrive%\cygwin\bin&#x0D;&#x0A;&#x0D;&#x0A;bash build-generated-files.sh &quot;$(ConfigurationName)&quot; &quot;$(WebKitOutputDir)&quot;&#x0D;&#x0A;"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -41,8 +41,8 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="&quot;$(ProjectDir)\..\..\..\iconv\include&quot;;&quot;$(ProjectDir)\..\..\..\icu\include&quot;;&quot;$(ProjectDir)\..\..\..\libxml\include&quot;;&quot;$(ProjectDir)\..\..\..\libxslt\include&quot;;&quot;$(ProjectDir)\..\..\DerivedSources\WebCore&quot;;&quot;$(ProjectDir)\..\..\&quot;;&quot;$(ProjectDir)\..\..\css&quot;;&quot;$(ProjectDir)\..\..\editing&quot;;&quot;$(ProjectDir)\..\..\rendering&quot;;&quot;$(ProjectDir)\..\..\bindings\js&quot;;&quot;$(ProjectDir)\..\..\dom&quot;;&quot;$(ProjectDir)\..\..\html&quot;;&quot;$(ProjectDir)\..\..\bridge&quot;;&quot;$(ProjectDir)\..\..\bridge\win&quot;;&quot;$(ProjectDir)\..\..\loader&quot;;&quot;$(ProjectDir)\..\..\page&quot;;&quot;$(ProjectDir)\..\..\platform&quot;;&quot;$(ProjectDir)\..\..\platform\cairo&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\bmp&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\gif&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\ico&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\jpeg&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\png&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\xbm&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\zlib&quot;;&quot;$(ProjectDir)\..\..\xml&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore\os-win32&quot;;&quot;$(ProjectDir)\..\..\ForwardingHeaders&quot;;&quot;$(WebKitOutputDir)\WebCore.intermediate\$(ConfigurationName)\WebCore.intermediate\DerivedSources&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore\kjs&quot;;&quot;$(ProjectDir)\..\..\platform\win&quot;;&quot;$(ProjectDir)\..\..\platform\cairo\pixman\src&quot;;&quot;$(ProjectDir)\..\..\platform\cairo\cairo\src&quot;"
-				PreprocessorDefinitions="WIN32;KHTML_NO_XBL;KHTML_XSLT;XPATH_SUPPORT"
+				AdditionalIncludeDirectories="&quot;$(ProjectDir)\..\..\&quot;;&quot;$(ProjectDir)\..\..\bindings\js&quot;;&quot;$(ProjectDir)\..\..\bridge&quot;;&quot;$(ProjectDir)\..\..\bridge\win&quot;;&quot;$(ProjectDir)\..\..\css&quot;;&quot;$(ProjectDir)\..\..\dom&quot;;&quot;$(ProjectDir)\..\..\editing&quot;;&quot;$(ProjectDir)\..\..\history&quot;;&quot;$(ProjectDir)\..\..\html&quot;;&quot;$(ProjectDir)\..\..\ksvg2\misc&quot;;&quot;$(ProjectDir)\..\..\loader&quot;;&quot;$(ProjectDir)\..\..\loader\icon&quot;;&quot;$(ProjectDir)\..\..\loader\win&quot;;&quot;$(ProjectDir)\..\..\page&quot;;&quot;$(ProjectDir)\..\..\platform&quot;;&quot;$(ProjectDir)\..\..\platform\graphics\cairo&quot;;&quot;$(ProjectDir)\..\..\platform\graphics\cairo\cairo\src&quot;;&quot;$(ProjectDir)\..\..\platform\graphics\cairo\pixman\src&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\bmp&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\gif&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\ico&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\jpeg&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\png&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\xbm&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\zlib&quot;;&quot;$(ProjectDir)\..\..\platform\graphics&quot;;&quot;$(ProjectDir)\..\..\platform\network&quot;;&quot;$(ProjectDir)\..\..\platform\network\win&quot;;&quot;$(ProjectDir)\..\..\platform\win&quot;;&quot;$(ProjectDir)\..\..\rendering&quot;;&quot;$(ProjectDir)\..\..\xml&quot;;&quot;$(ProjectDir)\..\..\DerivedSources\WebCore&quot;;&quot;$(ProjectDir)\..\..\..\iconv\include&quot;;&quot;$(ProjectDir)\..\..\..\icu\include&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore\kjs&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore\os-win32&quot;;&quot;$(ProjectDir)\..\..\..\libxml\include&quot;;&quot;$(ProjectDir)\..\..\..\libxslt\include&quot;"
+				PreprocessorDefinitions="WIN32;XSLT_SUPPORT;XPATH_SUPPORT"
 				MinimalRebuild="true"
 				ExceptionHandling="0"
 				BasicRuntimeChecks="3"
@@ -108,8 +108,8 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="&quot;$(ProjectDir)\..\..\..\iconv\include&quot;;&quot;$(ProjectDir)\..\..\..\icu\include&quot;;&quot;$(ProjectDir)\..\..\..\libxml\include&quot;;&quot;$(ProjectDir)\..\..\..\libxslt\include&quot;;&quot;$(ProjectDir)\..\..\DerivedSources\WebCore&quot;;&quot;$(ProjectDir)\..\..\&quot;;&quot;$(ProjectDir)\..\..\css&quot;;&quot;$(ProjectDir)\..\..\editing&quot;;&quot;$(ProjectDir)\..\..\rendering&quot;;&quot;$(ProjectDir)\..\..\bindings\js&quot;;&quot;$(ProjectDir)\..\..\dom&quot;;&quot;$(ProjectDir)\..\..\html&quot;;&quot;$(ProjectDir)\..\..\bridge&quot;;&quot;$(ProjectDir)\..\..\bridge\win&quot;;&quot;$(ProjectDir)\..\..\loader&quot;;&quot;$(ProjectDir)\..\..\page&quot;;&quot;$(ProjectDir)\..\..\platform&quot;;&quot;$(ProjectDir)\..\..\platform\cairo&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\bmp&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\gif&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\ico&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\jpeg&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\png&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\xbm&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\zlib&quot;;&quot;$(ProjectDir)\..\..\xml&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore\os-win32&quot;;&quot;$(ProjectDir)\..\..\ForwardingHeaders&quot;;&quot;$(WebKitOutputDir)\WebCore.intermediate\$(ConfigurationName)\WebCore.intermediate\DerivedSources&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore\kjs&quot;;&quot;$(ProjectDir)\..\..\platform\win&quot;;&quot;$(ProjectDir)\..\..\platform\cairo\pixman\src&quot;;&quot;$(ProjectDir)\..\..\platform\cairo\cairo\src&quot;"
-				PreprocessorDefinitions="WIN32;KHTML_NO_XBL;KHTML_XSLT;XPATH_SUPPORT;NDEBUG"
+				AdditionalIncludeDirectories="&quot;$(ProjectDir)\..\..\&quot;;&quot;$(ProjectDir)\..\..\bindings\js&quot;;&quot;$(ProjectDir)\..\..\bridge&quot;;&quot;$(ProjectDir)\..\..\bridge\win&quot;;&quot;$(ProjectDir)\..\..\css&quot;;&quot;$(ProjectDir)\..\..\dom&quot;;&quot;$(ProjectDir)\..\..\editing&quot;;&quot;$(ProjectDir)\..\..\history&quot;;&quot;$(ProjectDir)\..\..\html&quot;;&quot;$(ProjectDir)\..\..\ksvg2\misc&quot;;&quot;$(ProjectDir)\..\..\loader&quot;;&quot;$(ProjectDir)\..\..\loader\icon&quot;;&quot;$(ProjectDir)\..\..\loader\win&quot;;&quot;$(ProjectDir)\..\..\page&quot;;&quot;$(ProjectDir)\..\..\platform&quot;;&quot;$(ProjectDir)\..\..\platform\graphics\cairo&quot;;&quot;$(ProjectDir)\..\..\platform\graphics\cairo\cairo\src&quot;;&quot;$(ProjectDir)\..\..\platform\graphics\cairo\pixman\src&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\bmp&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\gif&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\ico&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\jpeg&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\png&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\xbm&quot;;&quot;$(ProjectDir)\..\..\platform\image-decoders\zlib&quot;;&quot;$(ProjectDir)\..\..\platform\graphics&quot;;&quot;$(ProjectDir)\..\..\platform\network&quot;;&quot;$(ProjectDir)\..\..\platform\network\win&quot;;&quot;$(ProjectDir)\..\..\platform\win&quot;;&quot;$(ProjectDir)\..\..\rendering&quot;;&quot;$(ProjectDir)\..\..\xml&quot;;&quot;$(ProjectDir)\..\..\DerivedSources\WebCore&quot;;&quot;$(ProjectDir)\..\..\..\iconv\include&quot;;&quot;$(ProjectDir)\..\..\..\icu\include&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore\kjs&quot;;&quot;$(ProjectDir)\..\..\..\JavaScriptCore\os-win32&quot;;&quot;$(ProjectDir)\..\..\..\libxml\include&quot;;&quot;$(ProjectDir)\..\..\..\libxslt\include&quot;"
+				PreprocessorDefinitions="WIN32;XSLT_SUPPORT;XPATH_SUPPORT;NDEBUG"
 				ExceptionHandling="0"
 				RuntimeLibrary="2"
 				RuntimeTypeInfo="false"
@@ -154,10 +154,6 @@
 		<Filter
 			Name="DerivedSources"
 			>
-			<File
-				RelativePath="..\..\DerivedSources\WebCore\CharsetData.cpp"
-				>
-			</File>
 			<File
 				RelativePath="..\..\DerivedSources\WebCore\ColorData.c"
 				>
@@ -308,6 +304,14 @@
 			</File>
 			<File
 				RelativePath="..\..\DerivedSources\WebCore\JSDOMImplementation.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\DerivedSources\WebCore\JSDOMParser.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\DerivedSources\WebCore\JSDOMParser.h"
 				>
 			</File>
 			<File
@@ -475,7 +479,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\derivedsources\webcore\JSHTMLFormElement.cpp"
+				RelativePath="..\..\DerivedSources\webcore\JSHTMLFormElement.cpp"
 				>
 			</File>
 			<File
@@ -747,6 +751,14 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\DerivedSources\WebCore\JSNodeIterator.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\DerivedSources\WebCore\JSNodeIterator.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\DerivedSources\WebCore\JSNotation.cpp"
 				>
 			</File>
@@ -779,11 +791,27 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\DerivedSources\WebCore\JSRangeException.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\DerivedSources\WebCore\JSRangeException.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\DerivedSources\WebCore\JSText.cpp"
 				>
 			</File>
 			<File
 				RelativePath="..\..\DerivedSources\WebCore\JSText.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\DerivedSources\WebCore\JSTreeWalker.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\DerivedSources\WebCore\JSTreeWalker.h"
 				>
 			</File>
 			<File
@@ -807,7 +835,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\DerivedSources\WebCore\JSXMLSerializer.lut.h"
+				RelativePath="..\..\DerivedSources\WebCore\JSXMLSerializer.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\DerivedSources\WebCore\JSXMLSerializer.h"
 				>
 			</File>
 			<File
@@ -875,6 +907,22 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\DerivedSources\WebCore\ksvgcssproperties.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\DerivedSources\WebCore\ksvgcssvalues.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\DerivedSources\WebCore\SVGElementFactory.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\DerivedSources\WebCore\SVGNames.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\DerivedSources\WebCore\UserAgentStyleSheets.h"
 				>
 			</File>
@@ -884,6 +932,10 @@
 			</File>
 			<File
 				RelativePath="..\..\DerivedSources\WebCore\XLinkNames.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\DerivedSources\WebCore\XMLNames.cpp"
 				>
 			</File>
 			<File
@@ -899,6 +951,30 @@
 			Name="page"
 			>
 			<File
+				RelativePath="..\..\page\Chrome.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\page\Chrome.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\page\ChromeClient.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\page\ContextMenuClient.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\page\ContextMenuController.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\page\ContextMenuController.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\page\DOMWindow.cpp"
 				>
 			</File>
@@ -907,11 +983,31 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\page\EventHandler.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\page\EventHandler.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\page\FocusController.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\page\FocusController.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\page\Frame.cpp"
 				>
 			</File>
 			<File
 				RelativePath="..\..\page\Frame.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\page\FrameLoadRequest.h"
 				>
 			</File>
 			<File
@@ -951,11 +1047,67 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\page\PageState.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\page\PageState.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\page\Plugin.h"
 				>
 			</File>
 			<File
+				RelativePath="..\..\page\Settings.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\page\Settings.h"
+				>
+			</File>
+			<Filter
+				Name="win"
+				>
+				<File
+					RelativePath="..\..\page\win\EventHandlerWin.cpp"
+					>
+				</File>
+			</Filter>
+		</Filter>
+		<Filter
+			Name="history"
+			>
+			<File
+				RelativePath="..\..\history\BackForwardList.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\history\BackForwardList.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\history\HistoryItem.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\history\HistoryItem.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\history\HistoryItemTimer.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\history\HistoryItemTimer.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\history\PageCache.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\history\PageCache.h"
 				>
 			</File>
 		</Filter>
@@ -1023,11 +1175,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\loader\Decoder.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\loader\Decoder.h"
+				RelativePath="..\..\loader\CachePolicy.h"
 				>
 			</File>
 			<File
@@ -1039,11 +1187,35 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\loader\FormData.cpp"
+				RelativePath="..\..\loader\DocumentLoader.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\loader\FormData.h"
+				RelativePath="..\..\loader\DocumentLoader.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\FormState.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\FormState.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\FrameLoader.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\FrameLoader.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\FrameLoaderClient.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\FrameLoaderTypes.h"
 				>
 			</File>
 			<File
@@ -1067,6 +1239,30 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\loader\MainResourceLoader.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\MainResourceLoader.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\NavigationAction.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\NavigationAction.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\NetscapePlugInStreamLoader.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\NetscapePlugInStreamLoader.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\loader\PluginDocument.cpp"
 				>
 			</File>
@@ -1083,6 +1279,26 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\loader\ResourceLoader.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\ResourceLoader.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\SubresourceLoader.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\SubresourceLoader.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\SubresourceLoaderClient.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\loader\TextDocument.cpp"
 				>
 			</File>
@@ -1090,14 +1306,46 @@
 				RelativePath="..\..\loader\TextDocument.h"
 				>
 			</File>
+			<File
+				RelativePath="..\..\loader\TextResourceDecoder.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\loader\TextResourceDecoder.h"
+				>
+			</File>
+			<Filter
+				Name="icon"
+				>
+				<File
+					RelativePath="..\..\loader\icon\IconDatabase.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\loader\icon\IconLoader.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\loader\icon\IconLoader.h"
+					>
+				</File>
+			</Filter>
+			<Filter
+				Name="win"
+				>
+				<File
+					RelativePath="..\..\loader\win\DocumentLoaderWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\loader\win\FrameLoaderWin.cpp"
+					>
+				</File>
+			</Filter>
 		</Filter>
 		<Filter
 			Name="platform"
 			>
-			<File
-				RelativePath="..\..\platform\AffineTransform.h"
-				>
-			</File>
 			<File
 				RelativePath="..\..\platform\Arena.cpp"
 				>
@@ -1127,27 +1375,39 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\Brush.h"
+				RelativePath="..\..\platform\Base64.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\CharsetNames.cpp"
+				RelativePath="..\..\platform\Base64.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\CharsetNames.h"
+				RelativePath="..\..\platform\CharsetData.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\Color.cpp"
+				RelativePath="..\..\platform\ContextMenu.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\Color.h"
+				RelativePath="..\..\platform\ContextMenu.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\ContextMenuItem.h"
 				>
 			</File>
 			<File
 				RelativePath="..\..\platform\CookieJar.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\CString.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\CString.h"
 				>
 			</File>
 			<File
@@ -1211,31 +1471,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\FileButton.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\FloatPoint.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\FloatPoint.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\FloatRect.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\FloatRect.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\FloatSize.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\FloatSize.h"
+				RelativePath="..\..\platform\FileChooser.h"
 				>
 			</File>
 			<File
@@ -1303,54 +1539,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\GraphicsContext.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\GraphicsContext.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\GraphicsTypes.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\GraphicsTypes.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\Image.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\Image.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\ImageAnimationObserver.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\ImageSource.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\IntPoint.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\IntRect.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\IntRect.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\IntSize.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\platform\KURL.cpp"
 				>
 			</File>
@@ -1360,10 +1548,6 @@
 			</File>
 			<File
 				RelativePath="..\..\platform\Language.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\ListBox.h"
 				>
 			</File>
 			<File
@@ -1379,19 +1563,23 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\Path.h"
+				RelativePath="..\..\platform\MimeTypeRegistry.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\Pen.cpp"
+				RelativePath="..\..\platform\MimeTypeRegistry.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\Pen.h"
+				RelativePath="..\..\platform\Pasteboard.h"
 				>
 			</File>
 			<File
 				RelativePath="..\..\platform\PlatformKeyboardEvent.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\PlatformMenuDescription.h"
 				>
 			</File>
 			<File
@@ -1411,7 +1599,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\PopUpButton.h"
+				RelativePath="..\..\platform\PopupMenu.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\PopupMenuClient.h"
 				>
 			</File>
 			<File
@@ -1427,15 +1619,23 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\platform\ScrollBar.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\platform\ScrollBar.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\ScrollBarMode.h"
+				RelativePath="..\..\platform\ScrollTypes.h"
 				>
 			</File>
 			<File
 				RelativePath="..\..\platform\ScrollView.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\SearchPopupMenu.h"
 				>
 			</File>
 			<File
@@ -1455,7 +1655,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\Slider.h"
+				RelativePath="..\..\platform\Sound.h"
 				>
 			</File>
 			<File
@@ -1467,23 +1667,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\StreamingTextDecoder.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\StreamingTextDecoder.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\StreamingTextDecoderICU.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\StreamingTextDecoderICU.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\platform\String.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\StringHash.h"
 				>
 			</File>
 			<File
@@ -1503,7 +1691,55 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\TextBox.h"
+				RelativePath="..\..\platform\TextBreakIterator.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextBreakIteratorICU.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextCodec.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextCodec.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextCodecICU.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextCodecICU.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextCodecLatin1.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextCodecLatin1.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextCodecUTF16.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextCodecUTF16.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextDecoder.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextDecoder.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextDirection.h"
 				>
 			</File>
 			<File
@@ -1515,7 +1751,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\platform\TextField.h"
+				RelativePath="..\..\platform\TextEncodingRegistry.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\platform\TextEncodingRegistry.h"
 				>
 			</File>
 			<File
@@ -1527,27 +1767,15 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\platform\TextStyle.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\platform\Timer.cpp"
 				>
 			</File>
 			<File
 				RelativePath="..\..\platform\Timer.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\ResourceLoader.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\ResourceLoader.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\ResourceLoaderClient.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\platform\ResourceLoaderInternal.h"
 				>
 			</File>
 			<File
@@ -1563,92 +1791,532 @@
 				>
 			</File>
 			<Filter
-				Name="win"
+				Name="graphics"
 				>
 				<File
-					RelativePath="..\..\platform\win\CookieJarWin.cpp"
+					RelativePath="..\..\platform\graphics\AffineTransform.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\CursorWin.cpp"
+					RelativePath="..\..\platform\graphics\AffineTransform.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\FontCacheWin.cpp"
+					RelativePath="..\..\platform\graphics\BitmapImage.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\FontDataWin.cpp"
+					RelativePath="..\..\platform\graphics\BitmapImage.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\FontPlatformData.h"
+					RelativePath="..\..\platform\graphics\Color.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\FontPlatformDataWin.cpp"
+					RelativePath="..\..\platform\graphics\Color.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\FontWin.cpp"
+					RelativePath="..\..\platform\graphics\FloatPoint.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\GlyphMapWin.cpp"
+					RelativePath="..\..\platform\graphics\FloatPoint.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\IntPointWin.cpp"
+					RelativePath="..\..\platform\graphics\FloatRect.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\IntRectWin.cpp"
+					RelativePath="..\..\platform\graphics\FloatRect.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\IntSizeWin.cpp"
+					RelativePath="..\..\platform\graphics\FloatSize.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\KeyEventWin.cpp"
+					RelativePath="..\..\platform\graphics\FloatSize.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\MouseEventWin.cpp"
+					RelativePath="..\..\platform\graphics\GraphicsContext.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\ScreenWin.cpp"
+					RelativePath="..\..\platform\graphics\GraphicsContext.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\ScrollViewWin.cpp"
+					RelativePath="..\..\platform\graphics\GraphicsTypes.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\SharedTimerWin.cpp"
+					RelativePath="..\..\platform\graphics\GraphicsTypes.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\SystemTimeWin.cpp"
+					RelativePath="..\..\platform\graphics\Icon.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\TemporaryLinkStubs.cpp"
+					RelativePath="..\..\platform\graphics\Image.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\ResourceLoaderWin.cpp"
+					RelativePath="..\..\platform\graphics\Image.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\ResourceLoaderWin.h"
+					RelativePath="..\..\platform\graphics\ImageAnimationObserver.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\win\WidgetWin.cpp"
+					RelativePath="..\..\platform\graphics\ImageBuffer.cpp"
 					>
 				</File>
+				<File
+					RelativePath="..\..\platform\graphics\ImageBuffer.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\ImageSource.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\IntPoint.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\IntRect.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\IntRect.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\IntSize.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\IntSizeHash.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\Path.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\Path.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\PathTraversalState.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\PathTraversalState.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\Pen.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\graphics\Pen.h"
+					>
+				</File>
+				<Filter
+					Name="cairo"
+					>
+					<File
+						RelativePath="..\..\platform\graphics\cairo\AffineTransformCairo.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\graphics\cairo\GraphicsContextCairo.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\graphics\cairo\ImageCairo.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\graphics\cairo\ImageSourceCairo.cpp"
+						>
+					</File>
+					<Filter
+						Name="cairo"
+						>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-arc-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-arc.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-array.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-cache-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-cache.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-clip-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-clip.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-color.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-debug.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-debug.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-features.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-fixed.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-font-options.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-font.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-gstate-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-gstate.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-hash-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-hash.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-hull.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-image-surface.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-matrix.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-meta-surface-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-meta-surface.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-output-stream.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-paginated-surface-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-paginated-surface.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-path-bounds.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-path-data-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-path-data.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-path-fill.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-path-fixed-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-path-stroke.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-path.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-pattern.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-pen.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-platform.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-polygon.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-region.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-scaled-font.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-slope.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-spline.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-stroke-style.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-surface-fallback-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-surface-fallback.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-surface.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-traps.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-unicode.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-wideint.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-wideint.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-win32-font.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-win32-private.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-win32-surface.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo-win32.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairo.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\cairo\src\cairoint.h"
+							>
+						</File>
+					</Filter>
+					<Filter
+						Name="pixman"
+						>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\fbcompose.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\fbedge.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\fbedgeimp.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\fbpict.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\fbpict.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\fbtrap.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\icblt.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\icbltone.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\iccolor.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\icformat.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\icimage.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\icimage.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\icint.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\icpixels.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\icrect.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\icrop.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\icstipple.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\ictransform.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\ictrap.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\ictri.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\icutil.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\pixman-remap.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\pixman.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\pixregion.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\pixregionint.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\renderedge.c"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\renderedge.h"
+							>
+						</File>
+						<File
+							RelativePath="..\..\platform\graphics\cairo\pixman\src\slim_internal.h"
+							>
+						</File>
+					</Filter>
+				</Filter>
+				<Filter
+					Name="win"
+					>
+					<File
+						RelativePath="..\..\platform\graphics\win\ImageWin.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\graphics\win\IntPointWin.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\graphics\win\IntRectWin.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\graphics\win\IntSizeWin.cpp"
+						>
+					</File>
+				</Filter>
 			</Filter>
 			<Filter
 				Name="image-decoders"
@@ -1657,6 +2325,18 @@
 					RelativePath="..\..\platform\image-decoders\ImageDecoder.h"
 					>
 				</File>
+				<Filter
+					Name="bmp"
+					>
+					<File
+						RelativePath="..\..\platform\image-decoders\bmp\BMPImageDecoder.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\bmp\BMPImageDecoder.h"
+						>
+					</File>
+				</Filter>
 				<Filter
 					Name="gif"
 					>
@@ -1678,194 +2358,14 @@
 					</File>
 				</Filter>
 				<Filter
-					Name="png"
+					Name="ico"
 					>
 					<File
-						RelativePath="..\..\platform\image-decoders\png\mozpngconf.h"
+						RelativePath="..\..\platform\image-decoders\ico\ICOImageDecoder.cpp"
 						>
 					</File>
 					<File
-						RelativePath="..\..\platform\image-decoders\png\png.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\png.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngasmrd.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngconf.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngerror.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pnggccrd.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngget.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\PNGImageDecoder.cpp"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\PNGImageDecoder.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngmem.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngpread.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngread.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngrio.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngrtran.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngrutil.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngset.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngtrans.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngvcrd.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngwio.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngwrite.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngwtran.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\png\pngwutil.c"
-						>
-					</File>
-				</Filter>
-				<Filter
-					Name="zlib"
-					>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\adler32.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\compress.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\crc32.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\crc32.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\deflate.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\deflate.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\gzio.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\infback.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\inffast.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\inffast.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\inffixed.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\inflate.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\inflate.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\inftrees.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\inftrees.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\mozzconf.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\trees.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\trees.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\uncompr.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\zconf.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\zlib.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\zutil.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\image-decoders\zlib\zutil.h"
+						RelativePath="..\..\platform\image-decoders\ico\ICOImageDecoder.h"
 						>
 					</File>
 				</Filter>
@@ -2042,26 +2542,98 @@
 					</File>
 				</Filter>
 				<Filter
-					Name="bmp"
+					Name="png"
 					>
 					<File
-						RelativePath="..\..\platform\image-decoders\bmp\BMPImageDecoder.cpp"
+						RelativePath="..\..\platform\image-decoders\png\mozpngconf.h"
 						>
 					</File>
 					<File
-						RelativePath="..\..\platform\image-decoders\bmp\BMPImageDecoder.h"
-						>
-					</File>
-				</Filter>
-				<Filter
-					Name="ico"
-					>
-					<File
-						RelativePath="..\..\platform\image-decoders\ico\ICOImageDecoder.cpp"
+						RelativePath="..\..\platform\image-decoders\png\png.c"
 						>
 					</File>
 					<File
-						RelativePath="..\..\platform\image-decoders\ico\ICOImageDecoder.h"
+						RelativePath="..\..\platform\image-decoders\png\png.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngasmrd.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngconf.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngerror.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pnggccrd.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngget.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\PNGImageDecoder.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\PNGImageDecoder.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngmem.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngpread.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngread.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngrio.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngrtran.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngrutil.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngset.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngtrans.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngvcrd.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngwio.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngwrite.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngwtran.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\png\pngwutil.c"
 						>
 					</File>
 				</Filter>
@@ -2077,370 +2649,258 @@
 						>
 					</File>
 				</Filter>
+				<Filter
+					Name="zlib"
+					>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\adler32.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\compress.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\crc32.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\crc32.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\deflate.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\deflate.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\gzio.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\infback.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\inffast.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\inffast.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\inffixed.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\inflate.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\inflate.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\inftrees.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\inftrees.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\mozzconf.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\trees.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\trees.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\uncompr.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\zconf.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\zlib.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\zutil.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\platform\image-decoders\zlib\zutil.h"
+						>
+					</File>
+				</Filter>
 			</Filter>
 			<Filter
-				Name="cairo"
+				Name="network"
 				>
 				<File
-					RelativePath="..\..\platform\cairo\GraphicsContextCairo.cpp"
+					RelativePath="..\..\platform\network\FormData.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\cairo\ImageCairo.cpp"
+					RelativePath="..\..\platform\network\FormData.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\platform\cairo\ImageSourceCairo.cpp"
+					RelativePath="..\..\platform\network\HTTPHeaderMap.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\HTTPParsers.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\HTTPParsers.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\ResourceError.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\ResourceError.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\ResourceHandle.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\ResourceHandle.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\ResourceHandleClient.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\ResourceHandleInternal.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\ResourceRequest.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\ResourceRequest.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\ResourceResponse.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\network\ResourceResponse.h"
 					>
 				</File>
 				<Filter
-					Name="pixman"
+					Name="win"
 					>
 					<File
-						RelativePath="..\..\platform\cairo\pixman\src\fbcompose.c"
+						RelativePath="..\..\platform\network\win\ResourceHandleWin.cpp"
 						>
 					</File>
 					<File
-						RelativePath="..\..\platform\cairo\pixman\src\fbedge.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\fbedgeimp.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\fbpict.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\fbpict.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\fbtrap.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\icblt.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\icbltone.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\iccolor.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\icformat.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\icimage.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\icimage.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\icint.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\icpixels.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\icrect.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\icrop.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\icstipple.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\ictransform.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\ictrap.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\ictri.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\icutil.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\pixman-remap.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\pixman.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\pixregion.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\pixregionint.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\renderedge.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\renderedge.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\pixman\src\slim_internal.h"
+						RelativePath="..\..\platform\network\win\ResourceHandleWin.h"
 						>
 					</File>
 				</Filter>
-				<Filter
-					Name="cairo"
+			</Filter>
+			<Filter
+				Name="win"
+				>
+				<File
+					RelativePath="..\..\platform\win\CookieJarWin.cpp"
 					>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-arc-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-arc.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-array.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-cache-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-cache.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-clip-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-clip.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-color.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-debug.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-debug.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-features.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-fixed.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-font-options.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-font.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-gstate-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-gstate.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-hash-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-hash.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-hull.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-image-surface.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-matrix.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-meta-surface-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-meta-surface.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-output-stream.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-paginated-surface-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-paginated-surface.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-path-bounds.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-path-data-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-path-data.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-path-fill.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-path-fixed-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-path-stroke.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-path.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-pattern.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-pen.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-platform.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-polygon.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-region.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-scaled-font.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-slope.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-spline.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-stroke-style.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-surface-fallback-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-surface-fallback.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-surface.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-traps.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-unicode.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-wideint.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-wideint.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-win32-font.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-win32-private.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-win32-surface.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo-win32.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairo.h"
-						>
-					</File>
-					<File
-						RelativePath="..\..\platform\cairo\cairo\src\cairoint.h"
-						>
-					</File>
-				</Filter>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\CursorWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\FontCacheWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\FontDataWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\FontPlatformData.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\FontPlatformDataWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\FontWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\GlyphMapWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\GraphicsContextWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\KeyEventWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\MouseEventWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\PlatformScrollBar.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\ScreenWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\ScrollViewWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\SharedTimerWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\SoundWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\SystemTimeWin.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\TemporaryLinkStubs.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\platform\win\WidgetWin.cpp"
+					>
+				</File>
 			</Filter>
 		</Filter>
 		<Filter
@@ -2459,6 +2919,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\css\CSSCharsetRule.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\css\CSSCharsetRule.h"
 				>
 			</File>
@@ -2468,6 +2932,14 @@
 			</File>
 			<File
 				RelativePath="..\..\css\CSSComputedStyleDeclaration.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\css\CSSCursorImageValue.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\css\CSSCursorImageValue.h"
 				>
 			</File>
 			<File
@@ -2616,10 +3088,6 @@
 			</File>
 			<File
 				RelativePath="..\..\css\CSSStyleRule.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\css\CSSStyleRule.h"
 				>
 			</File>
 			<File
@@ -2779,7 +3247,15 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\css\svg.css"
+				>
+			</File>
+			<File
 				RelativePath="..\..\css\tokenizer.flex"
+				>
+			</File>
+			<File
+				RelativePath="..\..\css\view-source.css"
 				>
 			</File>
 		</Filter>
@@ -2811,23 +3287,27 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\rendering\CounterListItem.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\rendering\CounterNode.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\rendering\CounterNode.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\rendering\CounterResetNode.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\rendering\CounterResetNode.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\rendering\DataRef.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\rendering\DeprecatedRenderSelect.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\rendering\DeprecatedRenderSelect.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\rendering\DeprecatedSlider.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\rendering\DeprecatedSlider.h"
 				>
 			</File>
 			<File
@@ -2848,6 +3328,18 @@
 			</File>
 			<File
 				RelativePath="..\..\rendering\GapRects.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\rendering\HitTestRequest.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\rendering\HitTestResult.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\rendering\HitTestResult.h"
 				>
 			</File>
 			<File
@@ -2947,6 +3439,14 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\rendering\RenderCounter.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\rendering\RenderCounter.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\rendering\RenderFieldset.cpp"
 				>
 			</File>
@@ -2955,11 +3455,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\rendering\RenderFileButton.cpp"
+				RelativePath="..\..\rendering\RenderFileUploadControl.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\rendering\RenderFileButton.h"
+				RelativePath="..\..\rendering\RenderFileUploadControl.h"
 				>
 			</File>
 			<File
@@ -2976,14 +3476,6 @@
 			</File>
 			<File
 				RelativePath="..\..\rendering\RenderFlow.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\rendering\RenderFormElement.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\rendering\RenderFormElement.h"
 				>
 			</File>
 			<File
@@ -3019,27 +3511,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\rendering\RenderImageButton.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\rendering\RenderImageButton.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\rendering\RenderInline.cpp"
 				>
 			</File>
 			<File
 				RelativePath="..\..\rendering\RenderInline.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\rendering\RenderLabel.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\rendering\RenderLabel.h"
 				>
 			</File>
 			<File
@@ -3059,11 +3535,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\rendering\RenderLineEdit.cpp"
+				RelativePath="..\..\rendering\RenderListBox.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\rendering\RenderLineEdit.h"
+				RelativePath="..\..\rendering\RenderListBox.h"
 				>
 			</File>
 			<File
@@ -3115,23 +3591,19 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\rendering\RenderPopupMenu.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\rendering\RenderPopupMenu.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\rendering\RenderPopupMenuWin.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\rendering\RenderReplaced.cpp"
 				>
 			</File>
 			<File
 				RelativePath="..\..\rendering\RenderReplaced.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\rendering\RenderSlider.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\rendering\RenderSlider.h"
 				>
 			</File>
 			<File
@@ -3263,11 +3735,27 @@
 			Name="xml"
 			>
 			<File
+				RelativePath="..\..\xml\DOMParser.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\xml\DOMParser.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\xml\xmlhttprequest.cpp"
 				>
 			</File>
 			<File
 				RelativePath="..\..\xml\xmlhttprequest.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\xml\XMLSerializer.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\xml\XMLSerializer.h"
 				>
 			</File>
 			<File
@@ -3279,19 +3767,19 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\xml\XPathExpressionNode.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\xml\XPathExpressionNode.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\xml\XPathExpression.cpp"
 				>
 			</File>
 			<File
 				RelativePath="..\..\xml\XPathExpression.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\xml\XPathExpressionNode.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\xml\XPathExpressionNode.h"
 				>
 			</File>
 			<File
@@ -3479,6 +3967,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\dom\ClipboardAccessPolicy.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\dom\ClipboardEvent.cpp"
 				>
 			</File>
@@ -3528,6 +4020,10 @@
 			</File>
 			<File
 				RelativePath="..\..\dom\DocumentFragment.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\dom\DocumentMarker.h"
 				>
 			</File>
 			<File
@@ -3596,6 +4092,14 @@
 			</File>
 			<File
 				RelativePath="..\..\dom\EventNames.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\dom\EventTarget.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\dom\EventTarget.h"
 				>
 			</File>
 			<File
@@ -3771,6 +4275,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\dom\RangeException.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\dom\RegisteredEventListener.cpp"
 				>
 			</File>
@@ -3784,6 +4292,14 @@
 			</File>
 			<File
 				RelativePath="..\..\dom\StyledElement.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\dom\StyleElement.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\dom\StyleElement.h"
 				>
 			</File>
 			<File
@@ -3819,6 +4335,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\dom\UIEventWithKeyState.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\dom\UIEventWithKeyState.h"
 				>
 			</File>
@@ -3847,7 +4367,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\bridge\BrowserExtension.h"
+				RelativePath="..\..\bridge\EditorClient.h"
 				>
 			</File>
 			<File
@@ -3855,26 +4375,18 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\bridge\JavaAppletWidget.h"
+				RelativePath="..\..\bridge\WindowFeatures.h"
 				>
 			</File>
 			<Filter
 				Name="win"
 				>
 				<File
-					RelativePath="..\..\bridge\win\BrowserExtensionWin.h"
-					>
-				</File>
-				<File
 					RelativePath="..\..\bridge\win\FrameWin.cpp"
 					>
 				</File>
 				<File
 					RelativePath="..\..\bridge\win\FrameWin.h"
-					>
-				</File>
-				<File
-					RelativePath="..\..\bridge\win\PageWin.cpp"
 					>
 				</File>
 			</Filter>
@@ -3907,6 +4419,14 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\editing\CommandByName.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\editing\CommandByName.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\editing\CompositeEditCommand.cpp"
 				>
 			</File>
@@ -3920,6 +4440,22 @@
 			</File>
 			<File
 				RelativePath="..\..\editing\CreateLinkCommand.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\editing\DeleteButton.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\editing\DeleteButton.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\editing\DeleteButtonController.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\editing\DeleteButtonController.h"
 				>
 			</File>
 			<File
@@ -3948,6 +4484,22 @@
 			</File>
 			<File
 				RelativePath="..\..\editing\EditCommand.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\editing\Editor.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\editing\Editor.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\editing\EditorDeleteAction.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\editing\EditorInsertAction.h"
 				>
 			</File>
 			<File
@@ -4076,14 +4628,6 @@
 			</File>
 			<File
 				RelativePath="..\..\editing\MoveSelectionCommand.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\editing\RebalanceWhitespaceCommand.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\editing\RebalanceWhitespaceCommand.h"
 				>
 			</File>
 			<File
@@ -4456,6 +5000,22 @@
 			</File>
 			<File
 				RelativePath="..\..\html\HTMLFrameElement.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\html\HTMLFrameElementBase.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\html\HTMLFrameElementBase.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\html\HTMLFrameOwnerElement.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\html\HTMLFrameOwnerElement.h"
 				>
 			</File>
 			<File
@@ -4862,14 +5422,6 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\bindings\js\JSDOMParser.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\bindings\js\JSDOMParser.h"
-					>
-				</File>
-				<File
 					RelativePath="..\..\bindings\js\JSHTMLElementWrapperFactory.cpp"
 					>
 				</File>
@@ -4902,19 +5454,19 @@
 					>
 				</File>
 				<File
+					RelativePath="..\..\bindings\js\JSNodeIteratorCustom.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\bindings\js\JSTreeWalkerCustom.cpp"
+					>
+				</File>
+				<File
 					RelativePath="..\..\bindings\js\JSXMLHttpRequest.cpp"
 					>
 				</File>
 				<File
 					RelativePath="..\..\bindings\js\JSXMLHttpRequest.h"
-					>
-				</File>
-				<File
-					RelativePath="..\..\bindings\js\JSXMLSerializer.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\bindings\js\JSXMLSerializer.h"
 					>
 				</File>
 				<File

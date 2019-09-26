@@ -26,11 +26,13 @@
 #import "config.h"
 #import "FrameView.h"
 
-#import "Document.h"
 #import "BlockExceptions.h"
+#import "Document.h"
 #import "FrameMac.h"
-#import "WebCoreFrameBridge.h"
+#import "MouseEventWithHitTestResults.h"
+#import "PlatformScrollBar.h"
 #import "RenderObject.h"
+#import "WebCoreFrameBridge.h"
 
 namespace WebCore {
 
@@ -45,8 +47,8 @@ void FrameView::updateDashboardRegions()
 {
     Document* doc = m_frame->document();
     if (doc->hasDashboardRegions()) {
-        DeprecatedValueList<DashboardRegionValue> newRegions = doc->renderer()->computeDashboardRegions();
-        DeprecatedValueList<DashboardRegionValue> currentRegions = doc->dashboardRegions();
+        Vector<DashboardRegionValue> newRegions;
+        doc->renderer()->collectDashboardRegions(newRegions);
         doc->setDashboardRegions(newRegions);
         Mac(m_frame.get())->dashboardRegionsChanged();
     }

@@ -27,6 +27,7 @@
  */
 
 var Inspector = null;
+var showUserAgentStyles = true;
 
 // Property values to omit in the computed style list.
 // If a property has this value, it will be omitted.
@@ -47,6 +48,16 @@ var typicalStylePropertyValue = {
     "-webkit-box-ordinal-group": "1",
     "-webkit-box-orient": "horizontal",
     "-webkit-box-pack": "start",
+    "-webkit-box-shadow": "none",
+    "-webkit-column-break-after" : "auto",
+    "-webkit-column-break-before" : "auto",
+    "-webkit-column-break-inside" : "auto",
+    "-webkit-column-count" : "auto",
+    "-webkit-column-gap" : "normal",
+    "-webkit-column-rule-color" : "rgb(0, 0, 0)",
+    "-webkit-column-rule-style" : "none",
+    "-webkit-column-rule-width" : "0px",
+    "-webkit-column-width" : "auto",
     "-webkit-highlight": "none",
     "-webkit-line-break": "normal",
     "-webkit-line-clamp": "none",
@@ -56,6 +67,10 @@ var typicalStylePropertyValue = {
     "-webkit-marquee-style": "scroll",
     "-webkit-nbsp-mode": "normal",
     "-webkit-text-decorations-in-effect": "none",
+    "-webkit-text-fill-color": "rgb(0, 0, 0)",
+    "-webkit-text-security": "none",
+    "-webkit-text-stroke-color": "rgb(0, 0, 0)",
+    "-webkit-text-stroke-width": "0",
     "-webkit-user-modify": "read-only",
     "background-attachment": "scroll",
     "background-color": "rgba(0, 0, 0, 0)",
@@ -63,17 +78,17 @@ var typicalStylePropertyValue = {
     "background-position-x": "auto",
     "background-position-y": "auto",
     "background-repeat": "repeat",
-    "border-bottom-color": "rgba(0, 0, 0, 0)",
+    "border-bottom-color": "rgb(0, 0, 0)",
     "border-bottom-style": "none",
     "border-bottom-width": "0px",
     "border-collapse": "separate",
-    "border-left-color": "rgba(0, 0, 0, 0)",
+    "border-left-color": "rgb(0, 0, 0)",
     "border-left-style": "none",
     "border-left-width": "0px",
-    "border-right-color": "rgba(0, 0, 0, 0)",
+    "border-right-color": "rgb(0, 0, 0)",
     "border-right-style": "none",
     "border-right-width": "0px",
-    "border-top-color": "rgba(0, 0, 0, 0)",
+    "border-top-color": "rgb(0, 0, 0)",
     "border-top-style": "none",
     "border-top-width": "0px",
     "bottom": "auto",
@@ -103,6 +118,7 @@ var typicalStylePropertyValue = {
     "min-width": "0px",
     "opacity": "1",
     "orphans": "2",
+    "outline-color": "rgb(0, 0, 0)",
     "outline-style": "none",
     "overflow": "visible",
     "overflow-x": "visible",
@@ -115,6 +131,7 @@ var typicalStylePropertyValue = {
     "page-break-before": "auto",
     "page-break-inside": "auto",
     "position": "static",
+    "resize": "none",
     "right": "auto",
     "table-layout": "auto",
     "text-align": "auto",
@@ -256,7 +273,7 @@ function loaded()
     }
     AppleScrollbar.prototype.show = function() {
         this._track.style.display = "block";
-        this.scrollbar.style.display = null;
+        this.scrollbar.style.removeProperty("display");
         if (this.hidden) {
             this.hidden = false;
             this.refresh();
@@ -264,6 +281,9 @@ function loaded()
     }
 
     window.addEventListener("resize", refreshScrollbars, false);
+
+    toggleNoSelection(false);
+    switchPane("node");
 }
 
 function refreshScrollbars()
@@ -289,9 +309,9 @@ function performSearch(query)
         searchField.style.width = "150px";
         searchActive = true;
     } else if (!query.length && searchActive) {
-        treePopup.style.display = null;
-        searchCount.style.display = null;
-        searchField.style.width = null;
+        treePopup.style.removeProperty("display");
+        searchCount.style.removeProperty("display");
+        searchField.style.removeProperty("width");
         searchActive = false;
     }
 
@@ -321,7 +341,7 @@ function toggleNoSelection(state)
     if (noSelection) {
         for (var i = 0; i < tabNames.length; i++)
             document.getElementById(tabNames[i] + "Pane").style.display = "none";
-        document.getElementById("noSelection").style.display = null;
+        document.getElementById("noSelection").style.removeProperty("display");
     } else {
         document.getElementById("noSelection").style.display = "none";
         switchPane(currentPane);
@@ -332,13 +352,17 @@ function switchPane(pane)
 {
     currentPane = pane;
     for (var i = 0; i < tabNames.length; i++) {
+        var paneElement = document.getElementById(tabNames[i] + "Pane");
+        var button = document.getElementById(tabNames[i] + "Button");
+        if (!button.originalClassName)
+            button.originalClassName = button.className;
         if (pane == tabNames[i]) {
             if (!noSelection)
-                document.getElementById(tabNames[i] + "Pane").style.display = null;
-            document.getElementById(tabNames[i] + "Button").className = "square selected";
+                paneElement.style.removeProperty("display");
+            button.className = button.originalClassName + " selected";
         } else {
-            document.getElementById(tabNames[i] + "Pane").style.display = "none";
-            document.getElementById(tabNames[i] + "Button").className = "square";
+            paneElement.style.display = "none";
+            button.className = button.originalClassName;
         }
     }
 
@@ -402,10 +426,15 @@ function updateElementAttributes()
             span.title = attr.namespaceURI;
         span.textContent = attr.name;
         li.appendChild(span);
+        
+        span = document.createElement("span");
+        span.className = "relation";
+        span.textContent = "=";
+        li.appendChild(span);
 
         span = document.createElement("span");
         span.className = "value";
-        span.textContent = attr.value;
+        span.textContent = "\"" + attr.value + "\"";
         span.title = attr.value;
         li.appendChild(span);
 
@@ -424,17 +453,19 @@ function updateElementAttributes()
 
 function updateNodePane()
 {
+    if (!Inspector)
+        return;
     var focusedNode = Inspector.focusedDOMNode();
 
     if (focusedNode.nodeType == Node.TEXT_NODE || focusedNode.nodeType == Node.COMMENT_NODE) {
         document.getElementById("nodeNamespaceRow").style.display = "none";
         document.getElementById("elementAttributes").style.display = "none";
-        document.getElementById("nodeContents").style.display = null;
+        document.getElementById("nodeContents").style.removeProperty("display");
 
         document.getElementById("nodeContentsScrollview").textContent = focusedNode.nodeValue;
         nodeContentsScrollArea.refresh();
     } else if (focusedNode.nodeType == Node.ELEMENT_NODE) {
-        document.getElementById("elementAttributes").style.display = null;
+        document.getElementById("elementAttributes").style.removeProperty("display");
         document.getElementById("nodeContents").style.display = "none";
 
         updateElementAttributes();
@@ -442,7 +473,7 @@ function updateNodePane()
         if (focusedNode.namespaceURI.length > 0) {
             document.getElementById("nodeNamespace").textContent = focusedNode.namespaceURI;
             document.getElementById("nodeNamespace").title = focusedNode.namespaceURI;
-            document.getElementById("nodeNamespaceRow").style.display = null;
+            document.getElementById("nodeNamespaceRow").style.removeProperty("display");
         } else {
             document.getElementById("nodeNamespaceRow").style.display = "none";
         }
@@ -477,8 +508,8 @@ function updateStylePane()
     styleProperties = [];
 
     if (focusedNode.nodeType == Node.ELEMENT_NODE) {
-        document.getElementById("styleRules").style.display = null;
-        document.getElementById("styleProperties").style.display = null;
+        document.getElementById("styleRules").style.removeProperty("display");
+        document.getElementById("styleProperties").style.removeProperty("display");
         document.getElementById("noStyle").style.display = "none";
 
         var propertyCount = [];
@@ -511,7 +542,7 @@ function updateStylePane()
             }
         }
 
-        var matchedStyleRules = focusedNode.ownerDocument.defaultView.getMatchedCSSRules(focusedNode, "");
+        var matchedStyleRules = focusedNode.ownerDocument.defaultView.getMatchedCSSRules(focusedNode, "", !showUserAgentStyles);
         if (matchedStyleRules) {
             for (var i = 0; i < matchedStyleRules.length; i++) {
                 styleRules.push(matchedStyleRules[i]);
@@ -555,6 +586,8 @@ function updateStylePane()
                 sheet = styleRules[i].subtitle;
             else if (styleRules[i].parentStyleSheet && styleRules[i].parentStyleSheet.href)
                 sheet = styleRules[i].parentStyleSheet.href;
+            else if (styleRules[i].parentStyleSheet && !styleRules[i].parentStyleSheet.ownerNode)
+                sheet = "user agent stylesheet";
             else
                 sheet = "inline stylesheet";
             cell.textContent = sheet;
@@ -653,7 +686,7 @@ function updateStylePane()
         noStyle.textContent = "Can't style " + nodeTypeName(focusedNode) + " nodes.";
         document.getElementById("styleRules").style.display = "none";
         document.getElementById("styleProperties").style.display = "none";
-        noStyle.style.display = null;
+        noStyle.style.removeProperty("display");
     }
 
     styleRulesScrollArea.refresh();
@@ -679,7 +712,7 @@ function populateStyleListItem(li, prop, name)
 {
     var span = document.createElement("span");
     span.className = "property";
-    span.textContent = name;
+    span.textContent = name + ": ";
     li.appendChild(span);
 
     var value = prop.style.getPropertyValue(name);
@@ -692,7 +725,7 @@ function populateStyleListItem(li, prop, name)
     var priority = prop.style.getPropertyPriority(name);
     if (priority.length)
         textValue += " !" + priority;
-    span.textContent = textValue;
+    span.textContent = textValue + ";";
     span.title = textValue;
     li.appendChild(span);
 
@@ -780,11 +813,17 @@ function toggleStyleShorthand(event)
         expandedStyleShorthands[li.shorthand] = false;
     } else {
         li.className += " expanded";
-        li.nextSibling.style.display = null;
+        li.nextSibling.style.removeProperty("display");
         expandedStyleShorthands[li.shorthand] = true;
     }
 
     stylePropertiesScrollArea.refresh();
+}
+
+function toggleShowUserAgentStyles()
+{
+    showUserAgentStyles = !showUserAgentStyles;
+    updateStylePane();
 }
 
 function selectMappedStyleRule(attrName)
@@ -840,13 +879,13 @@ function updateMetricsPane()
     if (focusedNode.nodeType == Node.ELEMENT_NODE)
         style = focusedNode.ownerDocument.defaultView.getComputedStyle(focusedNode);
     if (!style || style.length == 0) {
-        document.getElementById("noMetrics").style.display = null;
+        document.getElementById("noMetrics").style.removeProperty("display");
         document.getElementById("marginBoxTable").style.display = "none";
         return;
     }
 
     document.getElementById("noMetrics").style.display = "none";
-    document.getElementById("marginBoxTable").style.display = null;
+    document.getElementById("marginBoxTable").style.removeProperty("display");
 
     setBoxMetrics(style, "margin", "");
     setBoxMetrics(style, "border", "-width");
@@ -883,7 +922,7 @@ function updatePropertiesPane()
 
         var span = document.createElement("span");
         span.className = "property";
-        span.textContent = name;
+        span.textContent = name + ": ";
         li.appendChild(span);
 
         var value = focusedNode[name];
@@ -898,4 +937,11 @@ function updatePropertiesPane()
     }
 
     jsPropertiesScrollArea.refresh();
+}
+
+// This is a workaround for rdar://4901491 - Dashboard AppleClasses try to set a NaN value and break the scrollbar.
+AppleVerticalScrollbar.prototype._setObjectLength = function(object, length)
+{
+    if (!isNaN(length))
+        object.style.height = length + "px";
 }

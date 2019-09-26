@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,17 +21,16 @@
 */
 
 #include "config.h"
-#ifdef SVG_SUPPORT
-#include "DeprecatedStringList.h"
 
-#include "SVGMatrix.h"
-#include "SVGSVGElement.h"
+#ifdef SVG_SUPPORT
 #include "SVGLengthList.h"
 
-using namespace WebCore;
+#include "SVGParserUtilities.h"
 
-SVGLengthList::SVGLengthList(const SVGStyledElement *context)
-: SVGList<SVGLength>(context)
+namespace WebCore {
+
+SVGLengthList::SVGLengthList()
+    : SVGPODList<SVGLength>()
 {
 }
 
@@ -39,18 +38,26 @@ SVGLengthList::~SVGLengthList()
 {
 }
 
-void SVGLengthList::parse(const DeprecatedString &value, const SVGStyledElement *context, LengthMode mode)
+void SVGLengthList::parse(const String& value, const SVGStyledElement* context, SVGLengthMode mode)
 {
-    DeprecatedStringList lengths = DeprecatedStringList::split(' ', value);
-    for(unsigned int i = 0;i < lengths.count();i++)
-    {
-        SVGLength *length = new SVGLength(context, mode);
-        String str(lengths[i]);
-        length->setValueAsString(str.impl());
-        appendItem(length);
+    ExceptionCode ec = 0;
+    clear(ec);
+
+    const UChar* ptr = value.characters();
+    const UChar* end = ptr + value.length();
+    while (ptr < end) {
+        const UChar* start = ptr;
+        while (ptr < end && *ptr != ',' && !isWhitespace(*ptr))
+            ptr++;
+        if (ptr == start)
+            break;
+        appendItem(SVGLength(context, mode, String(start, ptr - start)), ec);
+        skipOptionalSpacesOrDelimiter(ptr, end);
     }
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

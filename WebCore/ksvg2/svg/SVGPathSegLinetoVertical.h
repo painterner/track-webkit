@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,23 +20,24 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGPathSegLinetoVerticalImpl_H
-#define KSVG_SVGPathSegLinetoVerticalImpl_H
+#ifndef SVGPathSegLinetoVertical_H
+#define SVGPathSegLinetoVertical_H
+
 #ifdef SVG_SUPPORT
 
-#include <ksvg2/svg/SVGPathSeg.h>
+#include "SVGPathSeg.h"
 
 namespace WebCore
 {
     class SVGPathSegLinetoVerticalAbs : public SVGPathSeg
     {
     public:
-        SVGPathSegLinetoVerticalAbs(const SVGStyledElement *context = 0);
+        SVGPathSegLinetoVerticalAbs(double y);
         virtual~SVGPathSegLinetoVerticalAbs();
 
         virtual unsigned short pathSegType() const { return PATHSEG_LINETO_VERTICAL_ABS; }
         virtual String pathSegTypeAsLetter() const { return "V"; }
-        virtual String toString() const { return String::sprintf("V %.6lg", m_y); }
+        virtual String toString() const { return String::format("V %.6lg", m_y); }
 
         void setY(double);
         double y() const;
@@ -48,12 +49,12 @@ namespace WebCore
     class SVGPathSegLinetoVerticalRel : public SVGPathSeg
     {
     public:
-        SVGPathSegLinetoVerticalRel(const SVGStyledElement *context = 0);
+        SVGPathSegLinetoVerticalRel(double y);
         virtual ~SVGPathSegLinetoVerticalRel();
 
         virtual unsigned short pathSegType() const { return PATHSEG_LINETO_VERTICAL_REL; }
         virtual String pathSegTypeAsLetter() const { return "v"; }
-        virtual String toString() const { return String::sprintf("v %.6lg", m_y); }
+        virtual String toString() const { return String::format("v %.6lg", m_y); }
 
         void setY(double);
         double y() const;

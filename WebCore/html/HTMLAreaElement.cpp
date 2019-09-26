@@ -26,7 +26,8 @@
 #include "Document.h"
 #include "HTMLNames.h"
 #include "FloatRect.h"
-#include "IntSize.h"
+#include "HitTestResult.h"
+#include "RenderObject.h"
 
 using namespace std;
 
@@ -68,7 +69,7 @@ void HTMLAreaElement::parseMappedAttribute(MappedAttribute *attr)
         HTMLAnchorElement::parseMappedAttribute(attr);
 }
 
-bool HTMLAreaElement::mapMouseEvent(int x, int y, const IntSize& size, RenderObject::NodeInfo& info)
+bool HTMLAreaElement::mapMouseEvent(int x, int y, const IntSize& size, HitTestResult& result)
 {
     if (m_lastSize != size) {
         region = getRegion(size);
@@ -78,8 +79,8 @@ bool HTMLAreaElement::mapMouseEvent(int x, int y, const IntSize& size, RenderObj
     if (!region.contains(IntPoint(x, y)))
         return false;
     
-    info.setInnerNode(this);
-    info.setURLElement(this);
+    result.setInnerNode(this);
+    result.setURLElement(this);
     return true;
 }
 
@@ -94,9 +95,9 @@ IntRect HTMLAreaElement::getRect(RenderObject* obj) const
 
 Path HTMLAreaElement::getRegion(const IntSize& size) const
 {
-    if (!m_coords)
+    if (!m_coords && m_shape != Default)
         return Path();
-        
+
     int width = size.width();
     int height = size.height();
 
@@ -206,11 +207,6 @@ String HTMLAreaElement::shape() const
 void HTMLAreaElement::setShape(const String& value)
 {
     setAttribute(shapeAttr, value);
-}
-
-int HTMLAreaElement::tabIndex() const
-{
-    return getAttribute(tabindexAttr).toInt();
 }
 
 void HTMLAreaElement::setTabIndex(int tabIndex)

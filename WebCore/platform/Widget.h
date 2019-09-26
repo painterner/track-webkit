@@ -28,7 +28,7 @@
 
 #include <wtf/Platform.h>
 
-#if __APPLE__
+#if PLATFORM(MAC)
 #ifdef __OBJC__
 @class NSView;
 #else
@@ -37,41 +37,36 @@ class NSView;
 #endif
 
 #if PLATFORM(WIN)
-typedef struct HWND__ *HWND;
-typedef struct HINSTANCE__ *HINSTANCE;
+typedef struct HWND__* HWND;
 #endif
 
 #if PLATFORM(GDK)
 typedef struct _GdkDrawable GdkDrawable;
 #endif
 
+#if PLATFORM(QT)
+class QWidget;
+#endif
+
 namespace WebCore {
 
     class Cursor;
+    class Event;
     class Font;
     class GraphicsContext;
     class IntPoint;
     class IntRect;
     class IntSize;
+    class PlatformMouseEvent;
+    class ScrollView;
     class WidgetClient;
     class WidgetPrivate;
 
     class Widget {
     public:
-
-        enum FocusPolicy {
-            NoFocus = 0,
-            TabFocus = 0x1,
-            ClickFocus = 0x2,
-            StrongFocus = 0x3,
-            WheelFocus = 0x7
-        };
-
         Widget();
         virtual ~Widget();
 
-        virtual IntSize sizeHint() const;
-        
         virtual void setEnabled(bool);
         virtual bool isEnabled() const;
 
@@ -87,38 +82,19 @@ namespace WebCore {
         void move(const IntPoint&);
 
         virtual void paint(GraphicsContext*, const IntRect&);
+        virtual void invalidate();
+        virtual void invalidateRect(const IntRect&);
 
-        virtual IntRect frameGeometry() const;
         virtual void setFrameGeometry(const IntRect&);
+        virtual IntRect frameGeometry() const;
 
-        virtual int baselinePosition(int height) const; // relative to the top of the widget
-
-        virtual IntPoint mapFromGlobal(const IntPoint&) const;
-
-        float scaleFactor() const;
-
-        bool hasFocus() const;
-        void setFocus();
-        void clearFocus();
-        virtual bool checksDescendantsForFocus() const;
-
-        virtual FocusPolicy focusPolicy() const;
-
-        const Font& font() const;
-        virtual void setFont(const Font&);
+        virtual void setFocus();
 
         void setCursor(const Cursor&);
         Cursor cursor();
 
-        void show();
-        void hide();
-
-        virtual void populate() {}
-
-        GraphicsContext* lockDrawingFocus();
-        void unlockDrawingFocus(GraphicsContext*);
-        void enableFlushDrawing();
-        void disableFlushDrawing();
+        virtual void show();
+        virtual void hide();
 
         void setIsSelected(bool);
 
@@ -127,22 +103,61 @@ namespace WebCore {
 
         virtual bool isFrameView() const;
 
+        virtual void removeFromParent();
+
+        // This method is used by plugins on all platforms to obtain a clip rect that includes clips set by WebCore,
+        // e.g., in overflow:auto sections.  The clip rects coordinates are in the containing window's coordinate space.
+        // This clip includes any clips that the widget itself sets up for its children.
+        virtual IntRect windowClipRect() const;
+
+        virtual void handleEvent(Event*) { }
+
 #if PLATFORM(WIN)
-        Widget(HWND);
-        HWND windowHandle() const;
-        void setWindowHandle(HWND);
-        // The global DLL or application instance used for all WebCore windows.
-        static HINSTANCE instanceHandle;
+        void setContainingWindow(HWND);
+        HWND containingWindow() const;
+
+        void setParent(ScrollView*);
+        ScrollView* parent() const;
+
+        virtual void geometryChanged() const {};
+
+        bool capturingMouse() const;
+        void setCapturingMouse(bool);
+        Widget* capturingTarget();
+        Widget* capturingChild();
+        void setCapturingChild(Widget*);
+        
+        IntRect convertToContainingWindow(const IntRect&) const;
+        IntPoint convertToContainingWindow(const IntPoint&) const;
+        IntPoint convertFromContainingWindow(const IntPoint&) const;
+
+        virtual IntPoint convertChildToSelf(const Widget*, const IntPoint&) const;
+        virtual IntPoint convertSelfToChild(const Widget*, const IntPoint&) const;
+
+        bool suppressInvalidation() const;
+        void setSuppressInvalidation(bool);
+
+        // These methods will be called on a widget while it is capturing the mouse. 
+        virtual bool handleMouseMoveEvent(const PlatformMouseEvent&) { return false; } 
+        virtual bool handleMouseReleaseEvent(const PlatformMouseEvent&) { return false; }
 #endif
 
 #if PLATFORM(GDK)
-      Widget(GdkDrawable* drawable);
-      virtual void setDrawable(GdkDrawable* drawable);
-      GdkDrawable* drawable() const;
+        Widget(GdkDrawable*);
+        virtual void setDrawable(GdkDrawable*);
+        GdkDrawable* drawable() const;
 #endif
 
-#if __APPLE__
-        Widget(NSView* view);
+#if PLATFORM(QT)
+        QWidget* parentWidget() const;
+        virtual void setParentWidget(QWidget*);
+
+        QWidget* qwidget();
+        void setQWidget(QWidget*);
+#endif
+
+#if PLATFORM(MAC)
+        Widget(NSView*);
 
         NSView* getView() const;
         NSView* getOuterView() const;
@@ -150,14 +165,24 @@ namespace WebCore {
         
         void sendConsumedMouseUp();
         
-        static void beforeMouseDown(NSView*);
-        static void afterMouseDown(NSView*);
+        static void beforeMouseDown(NSView*, Widget*);
+        static void afterMouseDown(NSView*, Widget*);
 
         void addToSuperview(NSView* superview);
         void removeFromSuperview();
-
-        static void setDeferFirstResponderChanges(bool);
 #endif
+
+        // To be deleted.
+        enum FocusPolicy { NoFocus, TabFocus, ClickFocus, StrongFocus, WheelFocus };
+        GraphicsContext* lockDrawingFocus();
+        const Font& font() const;
+        virtual FocusPolicy focusPolicy() const;
+        virtual bool hasFocus() const;
+        virtual void clearFocus();
+        virtual void setFont(const Font&);
+        void disableFlushDrawing();
+        void enableFlushDrawing();
+        void unlockDrawingFocus(GraphicsContext*);
 
     private:
         WidgetPrivate* data;

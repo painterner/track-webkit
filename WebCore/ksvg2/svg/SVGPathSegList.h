@@ -1,8 +1,7 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2007 Eric Seidel <eric@webkit.org>
 
-    This file is part of the KDE project
+    This file is part of the WebKit project
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Library General Public
@@ -20,8 +19,9 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGPathSegListImpl_H
-#define KSVG_SVGPathSegListImpl_H
+#ifndef SVGPathSegList_H
+#define SVGPathSegList_H
+
 #ifdef SVG_SUPPORT
 
 #include "SVGList.h"
@@ -29,11 +29,21 @@
 
 namespace WebCore
 {
-    class SVGPathSegList : public SVGList<SVGPathSeg>
+    class Path;
+    
+    class SVGPathSegList : public SVGList<RefPtr<SVGPathSeg> >
     {
     public:
-        SVGPathSegList(const SVGStyledElement *context = 0);
+        SVGPathSegList(const SVGStyledElement* context);
         virtual ~SVGPathSegList();
+
+        const SVGStyledElement* context() const;
+        
+        unsigned getPathSegAtLength(double);
+        Path toPathData();
+
+    private:
+        const SVGStyledElement* m_context;
     };
 
 } // namespace WebCore

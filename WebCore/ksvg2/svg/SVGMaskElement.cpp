@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <wildfox@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
                   2005 Alexander Kellett <lypanov@kde.org>
 
     This file is part of the KDE project
@@ -22,59 +22,60 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGMaskElement.h"
 
 #include "GraphicsContext.h"
+#include "ImageBuffer.h"
 #include "RenderSVGContainer.h"
-#include "KCanvasImage.h"
-#include "KCanvasPath.h"
-#include "KRenderingDevice.h"
-#include "SVGAnimatedLength.h"
-#include "SVGHelper.h"
+#include "SVGLength.h"
 #include "SVGNames.h"
-#include "SVGRenderStyle.h"
 #include "cssstyleselector.h"
-#include "ksvg.h"
-#include "Attr.h"
+#include <math.h>
+#include <wtf/MathExtras.h>
 #include <wtf/OwnPtr.h>
+
+using namespace std;
 
 namespace WebCore {
 
-SVGMaskElement::SVGMaskElement(const QualifiedName& tagName, Document *doc) : SVGStyledLocatableElement(tagName, doc), SVGURIReference(), SVGTests(), SVGLangSpace(), SVGExternalResourcesRequired(), m_masker(0), m_dirty(true)
+SVGMaskElement::SVGMaskElement(const QualifiedName& tagName, Document* doc)
+    : SVGStyledLocatableElement(tagName, doc)
+    , SVGURIReference()
+    , SVGTests()
+    , SVGLangSpace()
+    , SVGExternalResourcesRequired()
+    , m_x(this, LengthModeWidth)
+    , m_y(this, LengthModeHeight)
+    , m_width(this, LengthModeWidth)
+    , m_height(this, LengthModeHeight)
+    , m_dirty(true)
 {
+    // Spec: If the attribute is not specified, the effect is as if a value of "-10%" were specified.
+    setXBaseValue(SVGLength(this, LengthModeWidth, "-10%"));
+    setYBaseValue(SVGLength(this, LengthModeHeight, "-10%"));
+  
+    // Spec: If the attribute is not specified, the effect is as if a value of "120%" were specified.
+    setWidthBaseValue(SVGLength(this, LengthModeWidth, "120%"));
+    setHeightBaseValue(SVGLength(this, LengthModeHeight, "120%"));
 }
 
 SVGMaskElement::~SVGMaskElement()
 {
-    delete m_masker;
 }
 
-SVGAnimatedLength *SVGMaskElement::x() const
-{
-    return lazy_create<SVGAnimatedLength>(m_x, this, LM_WIDTH, viewportElement());
-}
-
-SVGAnimatedLength *SVGMaskElement::y() const
-{
-    return lazy_create<SVGAnimatedLength>(m_y, this, LM_HEIGHT, viewportElement());
-}
-
-SVGAnimatedLength *SVGMaskElement::width() const
-{
-    return lazy_create<SVGAnimatedLength>(m_width, this, LM_WIDTH, viewportElement());
-}
-
-SVGAnimatedLength *SVGMaskElement::height() const
-{
-    return lazy_create<SVGAnimatedLength>(m_height, this, LM_HEIGHT, viewportElement());
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGMaskElement, SVGLength, Length, length, X, x, SVGNames::xAttr.localName(), m_x)
+ANIMATED_PROPERTY_DEFINITIONS(SVGMaskElement, SVGLength, Length, length, Y, y, SVGNames::yAttr.localName(), m_y)
+ANIMATED_PROPERTY_DEFINITIONS(SVGMaskElement, SVGLength, Length, length, Width, width, SVGNames::widthAttr.localName(), m_width)
+ANIMATED_PROPERTY_DEFINITIONS(SVGMaskElement, SVGLength, Length, length, Height, height, SVGNames::heightAttr.localName(), m_height)
 
 void SVGMaskElement::attributeChanged(Attribute* attr, bool preserveDecls)
 {
-    IntSize newSize = IntSize(lroundf(width()->baseVal()->value()), lroundf(height()->baseVal()->value()));
+    IntSize newSize = IntSize(lroundf(width().value()), lroundf(height().value()));
     if (!m_masker || !m_masker->mask() || (m_masker->mask()->size() != newSize))
         m_dirty = true;
+
     SVGStyledLocatableElement::attributeChanged(attr, preserveDecls);
 }
 
@@ -84,17 +85,17 @@ void SVGMaskElement::childrenChanged()
     SVGStyledLocatableElement::childrenChanged();
 }
 
-void SVGMaskElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGMaskElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::xAttr)
-        x()->baseVal()->setValueAsString(value.impl());
+        setXBaseValue(SVGLength(this, LengthModeWidth, value));
     else if (attr->name() == SVGNames::yAttr)
-        y()->baseVal()->setValueAsString(value.impl());
+        setYBaseValue(SVGLength(this, LengthModeHeight, value));
     else if (attr->name() == SVGNames::widthAttr)
-        width()->baseVal()->setValueAsString(value.impl());
+        setWidthBaseValue(SVGLength(this, LengthModeWidth, value));
     else if (attr->name() == SVGNames::heightAttr)
-        height()->baseVal()->setValueAsString(value.impl());
+        setHeightBaseValue(SVGLength(this, LengthModeHeight, value));
     else {
         if (SVGURIReference::parseMappedAttribute(attr))
             return;
@@ -108,35 +109,26 @@ void SVGMaskElement::parseMappedAttribute(MappedAttribute *attr)
     }
 }
 
-KCanvasImage *SVGMaskElement::drawMaskerContent()
+auto_ptr<ImageBuffer> SVGMaskElement::drawMaskerContent()
 {
-    KRenderingDevice *device = renderingDevice();
-    if (!device->currentContext()) // FIXME: hack for now until Image::lockFocus exists
-        return 0;
-    if (!renderer())
-        return 0;
-    KCanvasImage *maskImage = static_cast<KCanvasImage *>(device->createResource(RS_IMAGE));
+    IntSize size = IntSize(lroundf(width().value()), lroundf(height().value()));
 
-    IntSize size = IntSize(lroundf(width()->baseVal()->value()), lroundf(height()->baseVal()->value()));
-    maskImage->init(size);
+    auto_ptr<ImageBuffer> maskImage = ImageBuffer::create(size, false);
+    if (!maskImage.get())
+        return maskImage;
 
-    KRenderingDeviceContext *patternContext = device->contextForImage(maskImage);
-    device->pushContext(patternContext);
+    GraphicsContext* maskImageContext = maskImage->context();
+    ASSERT(maskImageContext);
 
-    OwnPtr<GraphicsContext> context(patternContext->createGraphicsContext());
+    maskImageContext->save();
+    maskImageContext->translate(-x().value(), -y().value());
 
-    RenderSVGContainer *maskContainer = static_cast<RenderSVGContainer *>(renderer());
-    RenderObject::PaintInfo info(context.get(), IntRect(), PaintPhaseForeground, 0, 0, 0);
-    maskContainer->setDrawsContents(true);
-    maskContainer->paint(info, 0, 0);
-    maskContainer->setDrawsContents(false);
-    
-    device->popContext();
-    delete patternContext;
+    ImageBuffer::renderSubtreeToImage(maskImage.get(), renderer());
 
+    maskImageContext->restore();
     return maskImage;
 }
-
+ 
 RenderObject* SVGMaskElement::createRenderer(RenderArena* arena, RenderStyle*)
 {
     RenderSVGContainer* maskContainer = new (arena) RenderSVGContainer(this);
@@ -144,22 +136,21 @@ RenderObject* SVGMaskElement::createRenderer(RenderArena* arena, RenderStyle*)
     return maskContainer;
 }
 
-KCanvasMasker *SVGMaskElement::canvasResource()
+SVGResource* SVGMaskElement::canvasResource()
 {
     if (!m_masker) {
-        m_masker = static_cast<KCanvasMasker *>(renderingDevice()->createResource(RS_MASKER));
+        m_masker = new SVGResourceMasker();
         m_dirty = true;
     }
     if (m_dirty) {
-        KCanvasImage *newMaskImage = drawMaskerContent();
-        m_masker->setMask(newMaskImage);
-        m_dirty = (newMaskImage != 0);
+        m_masker->setMask(drawMaskerContent());
+        m_dirty = !m_masker->mask();
     }
-    return m_masker;
+    return m_masker.get();
 }
 
 }
 
-// vim:ts=4:noet
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

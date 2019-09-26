@@ -6,6 +6,7 @@
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
  * Copyright (C) 2004, 2005, 2006 Apple Computer, Inc.
  *           (C) 2006 Alexey Proskuryakov (ap@nypop.com)
+ * Copyright (C) 2007 Samuel Weinig (sam@webkit.org)
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -78,7 +79,7 @@ void HTMLTextAreaElement::restoreState(const String& state)
 int HTMLTextAreaElement::selectionStart()
 {
     if (renderer()) {
-        if (document()->focusNode() != this && cachedSelStart >= 0)
+        if (document()->focusedNode() != this && cachedSelStart >= 0)
             return cachedSelStart;
         return static_cast<RenderTextControl *>(renderer())->selectionStart();
     }
@@ -88,7 +89,7 @@ int HTMLTextAreaElement::selectionStart()
 int HTMLTextAreaElement::selectionEnd()
 {
     if (renderer()) {
-        if (document()->focusNode() != this && cachedSelEnd >= 0)
+        if (document()->focusedNode() != this && cachedSelEnd >= 0)
             return cachedSelEnd;
         return static_cast<RenderTextControl *>(renderer())->selectionEnd();
     }
@@ -149,6 +150,9 @@ void HTMLTextAreaElement::parseMappedAttribute(MappedAttribute *attr)
             renderer()->setNeedsLayoutAndMinMaxRecalc();
     } else if (attr->name() == accesskeyAttr) {
         // ignore for the moment
+    } else if (attr->name() == alignAttr) {
+        // Don't map 'align' attribute.  This matches what Firefox, Opera and IE do.
+        // See http://bugs.webkit.org/show_bug.cgi?id=7075
     } else if (attr->name() == onfocusAttr)
         setHTMLEventListener(focusEvent, attr);
     else if (attr->name() == onblurAttr)
@@ -182,7 +186,7 @@ void HTMLTextAreaElement::reset()
     setValue(defaultValue());
 }
 
-bool HTMLTextAreaElement::isKeyboardFocusable() const
+bool HTMLTextAreaElement::isKeyboardFocusable(KeyboardEvent*) const
 {
     // If text areas can be focused, then they should always be keyboard focusable
     return HTMLGenericFormElement::isFocusable();
@@ -196,12 +200,12 @@ bool HTMLTextAreaElement::isMouseFocusable() const
 void HTMLTextAreaElement::focus()
 {
     Document* doc = document();
-    if (doc->focusNode() == this)
+    if (doc->focusedNode() == this)
         return;
     doc->updateLayout();
     if (!supportsFocus())
         return;
-    doc->setFocusNode(this);
+    doc->setFocusedNode(this);
     // FIXME: Should isFocusable do the updateLayout?
     if (!isFocusable()) {
         setNeedsFocusAppearanceUpdate(true);
@@ -216,10 +220,10 @@ void HTMLTextAreaElement::updateFocusAppearance()
     
     if (cachedSelStart == -1) {
         ASSERT(cachedSelEnd == -1);
-        // If this is the first focus, set a caret at the end of the text.  
-        // This matches other browsers' behavior.
-        int max = static_cast<RenderTextControl*>(renderer())->text().length();
-        setSelectionRange(max, max);
+        // If this is the first focus, set a caret at the beginning of the text.  
+        // This matches some browsers' behavior; see Bugzilla Bug 11746 Comment #15.
+        // http://bugs.webkit.org/show_bug.cgi?id=11746#c15
+        setSelectionRange(0, 0);
     } else
         // Restore the cached selection.  This matches other browsers' behavior.
         setSelectionRange(cachedSelStart, cachedSelEnd); 
@@ -271,7 +275,7 @@ void HTMLTextAreaElement::setValue(const String& value)
         
     // Restore a caret at the starting point of the old selection.
     // This matches Safari 2.0 behavior.
-    if (document()->focusNode() == this && cachedSelStart >= 0) {
+    if (document()->focusedNode() == this && cachedSelStart >= 0) {
         ASSERT(cachedSelEnd >= 0);
         setSelectionRange(cachedSelStart, cachedSelStart);
     }

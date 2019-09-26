@@ -29,16 +29,21 @@
 #include "IntPoint.h"
 #include <wtf/Platform.h>
 
-#if __APPLE__
+#if PLATFORM(MAC)
 #ifdef __OBJC__
 @class NSEvent;
+@class NSScreen;
+@class NSWindow;
 #else
 class NSEvent;
+class NSScreen;
+class NSWindow;
 #endif
 #endif
 
 #if PLATFORM(WIN)
 typedef struct HWND__* HWND;
+typedef unsigned UINT;
 typedef unsigned WPARAM;
 typedef long LPARAM;
 #endif
@@ -47,10 +52,14 @@ typedef long LPARAM;
 typedef union _GdkEvent GdkEvent;
 #endif
 
+#if PLATFORM(QT)
+class QMouseEvent;
+#endif
+
 namespace WebCore {
 
-    // These button numbers match the one used in the DOM API.
-    enum MouseButton { LeftButton, MiddleButton, RightButton };
+    // These button numbers match the ones used in the DOM API, 0 through 2, except for NoButton which isn't specified.
+    enum MouseButton { NoButton = -1, LeftButton, MiddleButton, RightButton };
 
     class PlatformMouseEvent {
     public:
@@ -91,14 +100,20 @@ namespace WebCore {
         bool altKey() const { return m_altKey; }
         bool metaKey() const { return m_metaKey; }
 
-#if __APPLE__
+#if PLATFORM(MAC)
         PlatformMouseEvent(NSEvent*);
 #endif
 #if PLATFORM(WIN)
-        PlatformMouseEvent(HWND, WPARAM, LPARAM, int clickCount);
+        PlatformMouseEvent(HWND, UINT, WPARAM, LPARAM, bool activatedWebView = false);
+        void setClickCount(int count) { m_clickCount = count; }
+        double timestamp() const { return m_timestamp; }
+        bool activatedWebView() const { return m_activatedWebView; }
 #endif
 #if PLATFORM(GDK) 
         PlatformMouseEvent(GdkEvent*);
+#endif
+#if PLATFORM(QT)
+        PlatformMouseEvent(QMouseEvent*, int clickCount);
 #endif
 
     private:
@@ -110,7 +125,18 @@ namespace WebCore {
         bool m_ctrlKey;
         bool m_altKey;
         bool m_metaKey;
+
+#if PLATFORM(WIN)
+        double m_timestamp; // unit: seconds
+        bool m_activatedWebView;
+#endif
     };
+
+#if PLATFORM(MAC)
+    IntPoint globalPoint(const NSPoint& windowPoint, NSWindow *window);
+    IntPoint pointForEvent(NSEvent *event);
+    IntPoint globalPointForEvent(NSEvent *event);
+#endif
 
 } // namespace WebCore
 

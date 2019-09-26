@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,17 +21,16 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
-#include "SVGPointList.h"
 #include "SVGPolylineElement.h"
 
-#include <kcanvas/KCanvasCreator.h>
-#include <kcanvas/device/KRenderingDevice.h>
+#include "SVGPointList.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGPolylineElement::SVGPolylineElement(const QualifiedName& tagName, Document *doc)
-: SVGPolyElement(tagName, doc)
+SVGPolylineElement::SVGPolylineElement(const QualifiedName& tagName, Document* doc)
+    : SVGPolyElement(tagName, doc)
 {
 }
 
@@ -39,22 +38,25 @@ SVGPolylineElement::~SVGPolylineElement()
 {
 }
 
-KCanvasPath* SVGPolylineElement::toPathData() const
+Path SVGPolylineElement::toPathData() const
 {
+    Path polyData;
+
     int len = points()->numberOfItems();
-    if(len < 1)
-        return 0;
+    if (len < 1)
+        return polyData;
 
-    KCanvasPath* polyData = renderingDevice()->createPath();
-    polyData->moveTo(points()->getItem(0)->x(), points()->getItem(0)->y());
-    for (int i = 1; i < len; ++i) {
-        SVGPoint *p = points()->getItem(i);
-        polyData->lineTo(p->x(), p->y());
-    }
+    ExceptionCode ec = 0;
+    polyData.moveTo(points()->getItem(0, ec));
 
+    for (int i = 1; i < len; ++i)
+        polyData.addLineTo(points()->getItem(i, ec));
+    
     return polyData;
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

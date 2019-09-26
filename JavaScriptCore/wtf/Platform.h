@@ -24,14 +24,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef KXMLCORE_PLATFORM_H
-#define KXMLCORE_PLATFORM_H
+#ifndef WTF_Platform_h
+#define WTF_Platform_h
 
 /* PLATFORM handles OS, operating environment, graphics API, and CPU */
-#define PLATFORM(KX_FEATURE) (defined( KXMLCORE_PLATFORM_##KX_FEATURE ) && KXMLCORE_PLATFORM_##KX_FEATURE)
-#define COMPILER(KX_FEATURE) (defined( KXMLCORE_COMPILER_##KX_FEATURE ) && KXMLCORE_COMPILER_##KX_FEATURE)
-#define HAVE(KX_FEATURE) (defined( HAVE_##KX_FEATURE ) && HAVE_##KX_FEATURE)
-#define USE(KX_FEATURE) (defined( KXMLCORE_USE_##KX_FEATURE ) && KXMLCORE_USE_##KX_FEATURE)
+#define PLATFORM(WTF_FEATURE) (defined( WTF_PLATFORM_##WTF_FEATURE ) && WTF_PLATFORM_##WTF_FEATURE)
+#define COMPILER(WTF_FEATURE) (defined( WTF_COMPILER_##WTF_FEATURE ) && WTF_COMPILER_##WTF_FEATURE)
+#define HAVE(WTF_FEATURE) (defined( HAVE_##WTF_FEATURE ) && HAVE_##WTF_FEATURE)
+#define USE(WTF_FEATURE) (defined( WTF_USE_##WTF_FEATURE ) && WTF_USE_##WTF_FEATURE)
 
 /* Operating systems - low-level dependencies */
 
@@ -39,14 +39,14 @@
 /* Operating system level dependencies for Mac OS X / Darwin that should */
 /* be used regardless of operating environment */
 #ifdef __APPLE__
-#define KXMLCORE_PLATFORM_DARWIN 1
+#define WTF_PLATFORM_DARWIN 1
 #endif
 
 /* PLATFORM(WIN_OS) */
 /* Operating system level dependencies for Windows that should be used */
 /* regardless of operating environment */
 #if defined(WIN32) || defined(_WIN32)
-#define KXMLCORE_PLATFORM_WIN_OS 1
+#define WTF_PLATFORM_WIN_OS 1
 #endif
 
 /* PLATFORM(UNIX) */
@@ -59,27 +59,51 @@
    || defined(__unix__)    \
    || defined (__NetBSD__) \
    || defined(_AIX)
-#define KXMLCORE_PLATFORM_UNIX 1
+#define WTF_PLATFORM_UNIX 1
 #endif
 
 /* Operating environments */
 
-/* I made the BUILDING_KDE__ macro up for the KDE build system to define */
-
-/* PLATFORM(KDE) */
+/* PLATFORM(QT) */
 /* PLATFORM(MAC) */
 /* PLATFORM(WIN) */
+#if defined(BUILDING_QT__)
+#define WTF_PLATFORM_QT 1
+
+/* PLATFORM(KDE) */
 #if defined(BUILDING_KDE__)
-#define KXMLCORE_PLATFORM_KDE 1
-#elif PLATFORM(DARWIN)
-#define KXMLCORE_PLATFORM_MAC 1
-#elif PLATFORM(WIN_OS)
-#define KXMLCORE_PLATFORM_WIN 1
-#endif
-#if defined(BUILDING_GDK__)
-#define KXMLCORE_PLATFORM_GDK 1
+#define WTF_PLATFORM_KDE 1
 #endif
 
+#elif PLATFORM(DARWIN)
+#define WTF_PLATFORM_MAC 1
+#elif PLATFORM(WIN_OS)
+#define WTF_PLATFORM_WIN 1
+#endif
+#if defined(BUILDING_GDK__)
+#define WTF_PLATFORM_GDK 1
+#endif
+
+/* Graphics engines */
+
+/* PLATFORM(CG) */
+/* PLATFORM(CAIRO) */
+#if PLATFORM(MAC)
+#define WTF_PLATFORM_CG 1
+#define WTF_PLATFORM_CI 1
+#elif !PLATFORM(QT)
+#define WTF_PLATFORM_CAIRO 1
+#endif
+
+
+#ifdef __S60__
+// we are cross-compiling, it is not really windows
+#undef WTF_PLATFORM_WIN_OS
+#undef WTF_PLATFORM_WIN
+#undef WTF_PLATFORM_CAIRO
+#define WTF_PLATFORM_S60 1
+#define WTF_PLATFORM_SYMBIAN 1
+#endif
 
 /* CPU */
 
@@ -91,20 +115,20 @@
    || defined(__POWERPC__) \
    || defined(_M_PPC)      \
    || defined(__PPC)
-#define KXMLCORE_PLATFORM_PPC 1
-#define KXMLCORE_PLATFORM_BIG_ENDIAN 1
+#define WTF_PLATFORM_PPC 1
+#define WTF_PLATFORM_BIG_ENDIAN 1
 #endif
 
 /* PLATFORM(PPC64) */
 #if   defined(__ppc64__) \
    || defined(__PPC64__)
-#define KXMLCORE_PLATFORM_PPC64 1
-#define KXMLCORE_PLATFORM_BIG_ENDIAN 1
+#define WTF_PLATFORM_PPC64 1
+#define WTF_PLATFORM_BIG_ENDIAN 1
 #endif
 
 #if defined(arm)
-#define KXMLCORE_PLATFORM_ARM 1
-#define KXMLCORE_PLATFORM_MIDDLE_ENDIAN 1
+#define WTF_PLATFORM_ARM 1
+#define WTF_PLATFORM_MIDDLE_ENDIAN 1
 #endif
 
 /* PLATFORM(X86) */
@@ -113,49 +137,63 @@
    || defined(_M_IX86)  \
    || defined(_X86_)    \
    || defined(__THW_INTEL)
-#define KXMLCORE_PLATFORM_X86 1
+#define WTF_PLATFORM_X86 1
 #endif
 
 /* PLATFORM(X86_64) */
 #if   defined(__x86_64__) \
    || defined(__ia64__)
-#define KXMLCORE_PLATFORM_X86_64 1
+#define WTF_PLATFORM_X86_64 1
 #endif
 
 /* Compiler */
 
 /* COMPILER(MSVC) */
 #if defined(_MSC_VER)
-#define KXMLCORE_COMPILER_MSVC 1
+#define WTF_COMPILER_MSVC 1
 #endif
 
 /* COMPILER(GCC) */
 #if defined(__GNUC__)
-#define KXMLCORE_COMPILER_GCC 1
+#define WTF_COMPILER_GCC 1
 #endif
 
 /* COMPILER(BORLAND) */
 /* not really fully supported - is this relevant any more? */
 #if defined(__BORLANDC__)
-#define KXMLCORE_COMPILER_BORLAND 1
+#define WTF_COMPILER_BORLAND 1
 #endif
 
 /* COMPILER(CYGWIN) */
 /* not really fully supported - is this relevant any more? */
 #if defined(__CYGWIN__)
-#define KXMLCORE_COMPILER_CYGWIN 1
+#define WTF_COMPILER_CYGWIN 1
 #endif
 
 /* multiple threads only supported on Mac for now */
 #if PLATFORM(MAC)
-#define KXMLCORE_USE_MULTIPLE_THREADS 1
+#define WTF_USE_MULTIPLE_THREADS 1
 #endif
 
 /* for Unicode, KDE uses Qt, everything else uses ICU */
-#if PLATFORM(KDE)
-#define KXMLCORE_USE_QT4_UNICODE 1
+#if PLATFORM(KDE) || PLATFORM(QT)
+#define WTF_USE_QT4_UNICODE 1
+#elif PLATFORM(SYMBIAN)
+#define WTF_USE_SYMBIAN_UNICODE 1
 #else
-#define KXMLCORE_USE_ICU_UNICODE 1
+#define WTF_USE_ICU_UNICODE 1
 #endif
 
-#endif /* KXMLCORE_PLATFORM_H */
+#if PLATFORM(MAC)
+#define WTF_PLATFORM_CF 1
+#endif
+
+#if PLATFORM(WIN)
+#define WTF_USE_WININET 1
+#endif
+
+#if PLATFORM(GDK)
+#define WTF_USE_CURL 1
+#endif
+
+#endif /* WTF_Platform_h */

@@ -38,8 +38,6 @@ class Position;
 class String;
 class VisiblePosition;
 
-const unsigned short NON_BREAKING_SPACE = 0xa0;
-
 Position rangeCompliantEquivalent(const Position&);
 Position rangeCompliantEquivalent(const VisiblePosition&);
 int maxDeepOffset(const Node*);
@@ -61,7 +59,7 @@ Element* editableRootForPosition(const Position&);
 bool isBlock(Node*);
 Node* enclosingBlock(Node*);
 
-void rebalanceWhitespaceInTextNode(Node*, unsigned start, unsigned length);
+String stringWithRebalancedWhitespace(const String&, bool, bool);
 const String& nonBreakingSpaceString();
 
 //------------------------------------------------------------------------------------------
@@ -103,6 +101,7 @@ Position positionAfterContainingSpecialElement(const Position&, Node** containin
 Position positionOutsideContainingSpecialElement(const Position&, Node** containingSpecialElement=0);
 
 Node* enclosingNodeWithTag(Node*, const QualifiedName&);
+Node* enclosingNodeOfType(Node*, bool (*nodeIsOfType)(Node*));
 Node* enclosingTableCell(Node*);
 Node* enclosingEmptyListItem(const VisiblePosition&);
 bool isListElement(Node*);
@@ -115,7 +114,7 @@ bool isFirstVisiblePositionAfterTableElement(const Position&);
 Position positionBeforePrecedingTableElement(const Position&);
 bool isLastVisiblePositionBeforeTableElement(const Position&);
 Position positionAfterFollowingTableElement(const Position&);
-Position positionAvoidingSpecialElementBoundary(const Position&);
+Position positionAvoidingSpecialElementBoundary(const Position&, bool avoidAnchor = true);
 
 }
 

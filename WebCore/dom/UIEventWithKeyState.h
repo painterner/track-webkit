@@ -26,14 +26,10 @@
 #ifndef UIEventWithKeyState_h
 #define UIEventWithKeyState_h
 
-#include "AtomicString.h"
-#include "DOMWindow.h"
 #include "UIEvent.h"
 
 namespace WebCore {
     
-    typedef DOMWindow AbstractView;
-
     class UIEventWithKeyState : public UIEvent {
     public:
         UIEventWithKeyState()
@@ -66,6 +62,8 @@ namespace WebCore {
         bool m_shiftKey : 1;
         bool m_metaKey : 1;
     };
+
+    UIEventWithKeyState* findEventWithKeyState(Event*);
 
 } // namespace WebCore
 

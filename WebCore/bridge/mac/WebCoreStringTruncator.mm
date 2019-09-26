@@ -29,8 +29,10 @@
 #import "config.h"
 #import "WebCoreStringTruncator.h"
 
-#import <wtf/Assertions.h>
 #import "Font.h"
+#import "FontPlatformData.h"
+#import "TextStyle.h"
+#import <wtf/Assertions.h>
 
 #define STRING_BUFFER_SIZE 2048
 #define ELLIPSIS_CHARACTER 0x2026
@@ -110,7 +112,7 @@ static NSString *truncateString(NSString *string, float maxWidth, NSFont *font, 
         currentFont = [font retain];
         FontPlatformData f(font);
         delete currentRenderer;
-        currentRenderer = new Font(f);
+        currentRenderer = new Font(f, ![[NSGraphicsContext currentContext] isDrawingToScreen]);
         ellipsis = ELLIPSIS_CHARACTER;
         currentEllipsisWidth = stringWidth(currentRenderer, &ellipsis, 1);
     }
@@ -217,7 +219,7 @@ static NSFont *defaultMenuFont(void)
     unichar *s = static_cast<unichar*>(malloc(sizeof(unichar) * length));
     [string getCharacters:s];
     FontPlatformData f(font);
-    Font fontRenderer(f);
+    Font fontRenderer(f, ![[NSGraphicsContext currentContext] isDrawingToScreen]);
     float width = stringWidth(&fontRenderer, s, length);
     free(s);
     return width;

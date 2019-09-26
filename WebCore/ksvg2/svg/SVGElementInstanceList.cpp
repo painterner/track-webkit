@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,13 +21,14 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGElementInstanceList.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGElementInstanceList::SVGElementInstanceList(const SVGStyledElement *context)
-: SVGList<SVGElementInstance>(context)
+SVGElementInstanceList::SVGElementInstanceList()
+    : SVGList<RefPtr<SVGElementInstance> >()
 {
 }
 
@@ -35,6 +36,8 @@ SVGElementInstanceList::~SVGElementInstanceList()
 {
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

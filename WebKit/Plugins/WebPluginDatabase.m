@@ -52,23 +52,23 @@
 
 @implementation WebPluginDatabase
 
-static WebPluginDatabase *database = nil;
+static WebPluginDatabase *sharedDatabase = nil;
 
-+ (WebPluginDatabase *)installedPlugins 
++ (WebPluginDatabase *)sharedDatabase 
 {
-    if (!database) {
-        database = [[WebPluginDatabase alloc] init];
-        [database setPlugInPaths:[self _defaultPlugInPaths]];
-        [database refresh];
+    if (!sharedDatabase) {
+        sharedDatabase = [[WebPluginDatabase alloc] init];
+        [sharedDatabase setPlugInPaths:[self _defaultPlugInPaths]];
+        [sharedDatabase refresh];
         
         // Clear the global plug-in database on app exit
-        [[NSNotificationCenter defaultCenter] addObserver:database
+        [[NSNotificationCenter defaultCenter] addObserver:sharedDatabase
                                                  selector:@selector(_applicationWillTerminate)
                                                      name:NSApplicationWillTerminateNotification
                                                    object:NSApp];
     }
     
-    return database;
+    return sharedDatabase;
 }
 
 - (WebBasePluginPackage *)pluginForKey:(NSString *)key withEnumeratorSelector:(SEL)enumeratorSelector
@@ -252,6 +252,8 @@ static NSArray *additionalWebPlugInPaths;
     NSEnumerator *MIMEEnumerator = [MIMETypes objectEnumerator];
     NSString *MIMEType;
     while ((MIMEType = [MIMEEnumerator nextObject]) != nil) {
+        [registeredMIMETypes addObject:MIMEType];
+
         if ([WebView canShowMIMETypeAsHTML:MIMEType])
             // Don't allow plug-ins to override our core HTML types.
             continue;
@@ -263,9 +265,8 @@ static NSArray *additionalWebPlugInPaths;
             // Don't allow the QT plug-in to override any types because it claims many that we can handle ourselves.
             continue;
         
-        if (self == database)
+        if (self == sharedDatabase)
             [WebView registerViewClass:[WebHTMLView class] representationClass:[WebHTMLRepresentation class] forMIMEType:MIMEType];
-        [registeredMIMETypes addObject:MIMEType];
     }
     [MIMETypes release];
     
@@ -297,7 +298,7 @@ static NSArray *additionalWebPlugInPaths;
 
 - (NSArray *)_plugInPaths
 {
-    if (self == database && additionalWebPlugInPaths) {
+    if (self == sharedDatabase && additionalWebPlugInPaths) {
         // Add additionalWebPlugInPaths to the global WebPluginDatabase.  We do this here for
         // backward compatibility with earlier versions of the +setAdditionalWebPlugInPaths: SPI,
         // which simply saved a copy of the additional paths and did not cause the plugin DB to 
@@ -327,7 +328,7 @@ static NSArray *additionalWebPlugInPaths;
     NSString *MIMEType;
     while ((MIMEType = [MIMETypeEnumerator nextObject])) {
         if ([registeredMIMETypes containsObject:MIMEType]) {
-            if (self == database)
+            if (self == sharedDatabase)
                 [WebView _unregisterViewClassAndRepresentationClassForMIMEType:MIMEType];
             [registeredMIMETypes removeObject:MIMEType];
         }
@@ -375,7 +376,7 @@ static NSArray *additionalWebPlugInPaths;
 
 - (void)_applicationWillTerminate
 {
-    ASSERT(self == database);
+    ASSERT(self == sharedDatabase);
     // Remove all plug-ins from database.  Netscape plug-ins have "destructor functions" that should be called
     // when the browser unloads the plug-in.  These functions can do important things, such as closing/deleting files,
     // so it is important to ensure that they are properly called when the application terminates.

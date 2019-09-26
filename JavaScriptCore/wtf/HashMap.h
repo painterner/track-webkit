@@ -21,8 +21,8 @@
  *
  */
 
-#ifndef KXMLCORE_HASH_MAP_H
-#define KXMLCORE_HASH_MAP_H
+#ifndef WTF_HashMap_h
+#define WTF_HashMap_h
 
 #include "HashTable.h"
 
@@ -305,6 +305,31 @@ namespace WTF {
         m_impl.clear();
     }
 
+    template<typename T, typename U, typename V, typename W, typename X>
+    bool operator==(const HashMap<T, U, V, W, X>& a, const HashMap<T, U, V, W, X>& b)
+    {
+        if (a.size() != b.size())
+            return false;
+
+        typedef typename HashMap<T, U, V, W, X>::const_iterator const_iterator;
+
+        const_iterator end = a.end();
+        const_iterator notFound = b.end();
+        for (const_iterator it = a.begin(); it != end; ++it) {
+            const_iterator bPos = b.find(it->first);
+            if (bPos == notFound || it->second != bPos->second)
+                return false;
+        }
+
+        return true;
+    }
+
+    template<typename T, typename U, typename V, typename W, typename X>
+    inline bool operator!=(const HashMap<T, U, V, W, X>& a, const HashMap<T, U, V, W, X>& b)
+    {
+        return !(a == b);
+    }
+
     template<typename MappedType, typename HashTableType>
     void deleteAllPairSeconds(HashTableType& collection)
     {
@@ -320,8 +345,23 @@ namespace WTF {
         deleteAllPairSeconds<typename HashMap<T, U, V, W, X>::MappedType>(collection);
     }
 
+    template<typename KeyType, typename HashTableType>
+    void deleteAllPairFirsts(HashTableType& collection)
+    {
+        typedef typename HashTableType::const_iterator iterator;
+        iterator end = collection.end();
+        for (iterator it = collection.begin(); it != end; ++it)
+            delete *(KeyType*)&it->first;
+    }
+
+    template<typename T, typename U, typename V, typename W, typename X>
+    inline void deleteAllKeys(const HashMap<T, U, V, W, X>& collection)
+    {
+        deleteAllPairFirsts<typename HashMap<T, U, V, W, X>::KeyType>(collection);
+    }
+
 } // namespace WTF
 
 using WTF::HashMap;
 
-#endif /* KXMLCORE_HASH_MAP_H */
+#endif /* WTF_HashMap_h */

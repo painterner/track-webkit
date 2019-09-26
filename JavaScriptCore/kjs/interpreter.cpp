@@ -46,9 +46,7 @@
 #include "types.h"
 #include "value.h"
 
-#if PLATFORM(MAC)
 #include "runtime.h"
-#endif
 
 #if HAVE(SYS_TIME_H)
 #include <sys/time.h>
@@ -274,6 +272,9 @@ Interpreter::~Interpreter()
     }
     
     interpreterMap().remove(m_globalObject);
+
+    // It's likely that destroying the interpreter has created a lot of garbage.
+    Collector::collect();
 }
 
 JSObject* Interpreter::globalObject() const
@@ -472,6 +473,7 @@ Completion Interpreter::evaluate(const UString& sourceURL, int startingLineNumbe
         // execute the code
         Context ctx(globalObj, this, thisObj, progNode.get());
         ExecState newExec(this, &ctx);
+        ctx.setExecState(&newExec);
         progNode->processVarDecls(&newExec);
         res = progNode->execute(&newExec);
     }
@@ -689,14 +691,6 @@ void Interpreter::setShouldPrintExceptions(bool print)
 {
   printExceptions = print;
 }
-
-// bindings are OS X WebKit-only for now
-#if PLATFORM(MAC)
-void *Interpreter::createLanguageInstanceForValue(ExecState *exec, int language, JSObject *value, const Bindings::RootObject *origin, const Bindings::RootObject *current)
-{
-    return Bindings::Instance::createLanguageInstanceForValue (exec, (Bindings::Instance::BindingLanguage)language, value, origin, current);
-}
-#endif
 
 void Interpreter::saveBuiltins (SavedBuiltins& builtins) const
 {

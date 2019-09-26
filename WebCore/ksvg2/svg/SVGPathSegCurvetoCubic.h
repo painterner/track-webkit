@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,8 +20,9 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGPathSegCurvetoCubicImpl_H
-#define KSVG_SVGPathSegCurvetoCubicImpl_H
+#ifndef SVGPathSegCurvetoCubic_H
+#define SVGPathSegCurvetoCubic_H
+
 #ifdef SVG_SUPPORT
 
 #include "SVGPathSeg.h"
@@ -31,12 +32,12 @@ namespace WebCore
     class SVGPathSegCurvetoCubicAbs : public SVGPathSeg 
     { 
     public:
-        SVGPathSegCurvetoCubicAbs(const SVGStyledElement *context = 0);
+        SVGPathSegCurvetoCubicAbs(double x, double y, double x1, double y1, double x2, double y2);
         virtual ~SVGPathSegCurvetoCubicAbs();
 
         virtual unsigned short pathSegType() const { return PATHSEG_CURVETO_CUBIC_ABS; }
         virtual String pathSegTypeAsLetter() const { return "C"; }
-        virtual String toString() const { return String::sprintf("C %.6lg %.6lg %.6lg %.6lg %.6lg %.6lg", m_x1, m_y1, m_x2, m_y2, m_x, m_y); }
+        virtual String toString() const { return String::format("C %.6lg %.6lg %.6lg %.6lg %.6lg %.6lg", m_x1, m_y1, m_x2, m_y2, m_x, m_y); }
 
         void setX(double);
         double x() const;
@@ -68,12 +69,12 @@ namespace WebCore
     class SVGPathSegCurvetoCubicRel : public SVGPathSeg 
     { 
     public:
-        SVGPathSegCurvetoCubicRel(const SVGStyledElement *context = 0);
+        SVGPathSegCurvetoCubicRel(double x, double y, double x1, double y1, double x2, double y2);
         virtual ~SVGPathSegCurvetoCubicRel();
 
         virtual unsigned short pathSegType() const { return PATHSEG_CURVETO_CUBIC_REL; }
         virtual String pathSegTypeAsLetter() const { return "c"; }
-        virtual String toString() const { return String::sprintf("c %.6lg %.6lg %.6lg %.6lg %.6lg %.6lg", m_x1, m_y1, m_x2, m_y2, m_x, m_y); }
+        virtual String toString() const { return String::format("c %.6lg %.6lg %.6lg %.6lg %.6lg %.6lg", m_x1, m_y1, m_x2, m_y2, m_x, m_y); }
 
         void setX(double);
         double x() const;

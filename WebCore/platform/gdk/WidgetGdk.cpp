@@ -158,21 +158,4 @@ void Widget::setFrameGeometry(const IntRect& r)
     gdk_window_move_resize(window, r.x(), r.y(), r.width(), r.height());
 }
 
-IntPoint Widget::mapFromGlobal(const IntPoint& p) const
-{
-    GdkDrawable* drawable = data->drawable;
-    if (!drawable || !GDK_IS_WINDOW(drawable))
-        return p;
-    GdkWindow* window = GDK_WINDOW(drawable);
-    gint x, y;
-    gdk_window_get_origin(window, &x, &y);
-    return IntPoint(p.x() - x, p.y() - y);
-}
-
-float Widget::scaleFactor() const
-{
-    return 1.0f;
-
-}
-
 }

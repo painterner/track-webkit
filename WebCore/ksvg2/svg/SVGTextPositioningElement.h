@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -28,8 +28,8 @@
 
 namespace WebCore
 {
-    class SVGAnimatedLengthList;
-    class SVGAnimatedNumberList;
+    class SVGLengthList;
+    class SVGNumberList;
 
     class SVGTextPositioningElement : public SVGTextContentElement
     {
@@ -38,20 +38,14 @@ namespace WebCore
         virtual ~SVGTextPositioningElement();
 
         // 'SVGTextPositioningElement' functions
-        SVGAnimatedLengthList *x() const;
-        SVGAnimatedLengthList *y() const;
-        SVGAnimatedLengthList *dx() const;
-        SVGAnimatedLengthList *dy() const;
-        SVGAnimatedNumberList *rotate() const;
-
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute*);
 
     private:
-        mutable RefPtr<SVGAnimatedLengthList> m_x;
-        mutable RefPtr<SVGAnimatedLengthList> m_y;
-        mutable RefPtr<SVGAnimatedLengthList> m_dx;
-        mutable RefPtr<SVGAnimatedLengthList> m_dy;
-        mutable RefPtr<SVGAnimatedNumberList> m_rotate;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGTextPositioningElement, SVGLengthList*, RefPtr<SVGLengthList>, X, x)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGTextPositioningElement, SVGLengthList*, RefPtr<SVGLengthList>, Y, y)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGTextPositioningElement, SVGLengthList*, RefPtr<SVGLengthList>, Dx, dx)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGTextPositioningElement, SVGLengthList*, RefPtr<SVGLengthList>, Dy, dy)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGTextPositioningElement, SVGNumberList*, RefPtr<SVGNumberList>, Rotate, rotate)
     };
 
 } // namespace WebCore

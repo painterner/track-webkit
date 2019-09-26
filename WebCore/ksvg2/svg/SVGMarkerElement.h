@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <wildfox@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,11 +20,12 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGMarkerElementImpl_H
-#define KSVG_SVGMarkerElementImpl_H
+#ifndef SVGMarkerElement_H
+#define SVGMarkerElement_H
+
 #ifdef SVG_SUPPORT
 
-#include "KCanvasResources.h"
+#include "SVGResourceMarker.h"
 #include "SVGExternalResourcesRequired.h"
 #include "SVGFitToViewBox.h"
 #include "SVGLangSpace.h"
@@ -34,45 +35,55 @@ namespace WebCore
 {
     class Document;
     class SVGAngle;
-    class SVGAnimatedAngle;
-    class SVGAnimatedLength;
-    class SVGAnimatedEnumeration;
+    
     class SVGMarkerElement : public SVGStyledElement,
-                                 public SVGLangSpace,
-                                 public SVGExternalResourcesRequired,
-                                 public SVGFitToViewBox
+                             public SVGLangSpace,
+                             public SVGExternalResourcesRequired,
+                             public SVGFitToViewBox
     {
     public:
+        enum SVGMarkerUnitsType {
+            SVG_MARKERUNITS_UNKNOWN           = 0,
+            SVG_MARKERUNITS_USERSPACEONUSE    = 1,
+            SVG_MARKERUNITS_STROKEWIDTH       = 2
+        };
+
+        enum SVGMarkerOrientType {
+            SVG_MARKER_ORIENT_UNKNOWN    = 0,
+            SVG_MARKER_ORIENT_AUTO       = 1,
+            SVG_MARKER_ORIENT_ANGLE      = 2
+        };
+
         SVGMarkerElement(const QualifiedName&, Document*);
         virtual ~SVGMarkerElement();
 
         // 'SVGMarkerElement' functions
-        SVGAnimatedLength *refX() const;
-        SVGAnimatedLength *refY() const;
-        SVGAnimatedEnumeration *markerUnits() const;
-        SVGAnimatedLength *markerWidth() const;
-        SVGAnimatedLength *markerHeight() const;
-        SVGAnimatedEnumeration *orientType() const;
-        SVGAnimatedAngle *orientAngle() const;
-
         void setOrientToAuto();
-        void setOrientToAngle(SVGAngle *angle);
+        void setOrientToAngle(SVGAngle*);
 
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute*);
     
-        virtual bool rendererIsNeeded(RenderStyle *style) { return StyledElement::rendererIsNeeded(style); }
-        virtual RenderObject *createRenderer(RenderArena *arena, RenderStyle *style);
-        virtual KCanvasMarker *canvasResource();
+        virtual bool rendererIsNeeded(RenderStyle* style) { return StyledElement::rendererIsNeeded(style); }
+        virtual RenderObject* createRenderer(RenderArena*, RenderStyle*);
+        virtual SVGResource* canvasResource();
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedLength> m_refX;
-        mutable RefPtr<SVGAnimatedLength> m_refY;
-        mutable RefPtr<SVGAnimatedLength> m_markerWidth;
-        mutable RefPtr<SVGAnimatedLength> m_markerHeight;
-        mutable RefPtr<SVGAnimatedEnumeration> m_markerUnits;
-        mutable RefPtr<SVGAnimatedEnumeration> m_orientType;
-        mutable RefPtr<SVGAnimatedAngle> m_orientAngle;
-        KCanvasMarker *m_marker;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired) 
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGFitToViewBox, FloatRect, ViewBox, viewBox)
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGFitToViewBox, SVGPreserveAspectRatio*, PreserveAspectRatio, preserveAspectRatio)
+
+        ANIMATED_PROPERTY_DECLARATIONS(SVGMarkerElement, SVGLength, SVGLength, RefX, refX)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGMarkerElement, SVGLength, SVGLength, RefY, refY)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGMarkerElement, SVGLength, SVGLength, MarkerWidth, markerWidth)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGMarkerElement, SVGLength, SVGLength, MarkerHeight, markerHeight)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGMarkerElement, int, int, MarkerUnits, markerUnits)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGMarkerElement, int, int, OrientType, orientType)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGMarkerElement, SVGAngle*, RefPtr<SVGAngle>, OrientAngle, orientAngle)
+
+        RefPtr<SVGResourceMarker> m_marker;
     };
 
 } // namespace WebCore

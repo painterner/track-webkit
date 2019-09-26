@@ -384,7 +384,7 @@ void StyledElement::addCSSColor(MappedAttribute* attr, int id, const String &c)
             colors[2] >>= 4*maxDigit;
             // assert(colors[0] < 0x100 && colors[1] < 0x100 && colors[2] < 0x100);
             
-            color = String::sprintf("#%02x%02x%02x", colors[0], colors[1], colors[2]);
+            color = String::format("#%02x%02x%02x", colors[0], colors[1], colors[2]);
             if (attr->decl()->setProperty(id, color, false))
                 return;
         }
@@ -461,6 +461,19 @@ unsigned MappedAttributeHash::hash(const MappedAttributeKey& key)
         hash = 0x80000000;
 
     return hash;
+}
+
+void StyledElement::copyNonAttributeProperties(const Element *sourceElement)
+{
+    const StyledElement* source = static_cast<const StyledElement*>(sourceElement);
+    if (!source->m_inlineStyleDecl)
+        return;
+
+    *getInlineStyleDecl() = *source->m_inlineStyleDecl;
+    m_isStyleAttributeValid = source->m_isStyleAttributeValid;
+    m_synchronizingStyleAttribute = source->m_synchronizingStyleAttribute;
+    
+    Element::copyNonAttributeProperties(sourceElement);
 }
 
 }

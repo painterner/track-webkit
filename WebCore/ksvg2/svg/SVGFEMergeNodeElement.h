@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -28,7 +28,6 @@
 
 namespace WebCore
 {
-    class SVGAnimatedString;
     class SVGFEMergeNodeElement : public SVGElement
     {
     public:
@@ -36,13 +35,15 @@ namespace WebCore
         virtual ~SVGFEMergeNodeElement();
 
         // Derived from: 'Element'
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute* attr);
 
         // 'SVGFEMergeNodeElement' functions
-        SVGAnimatedString *in1() const;
+    
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedString> m_in1;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEMergeNodeElement, String, String, In1, in1)
     };
 
 } // namespace WebCore

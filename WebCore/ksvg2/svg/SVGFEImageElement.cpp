@@ -21,6 +21,7 @@
 */
 
 #include "config.h"
+
 #ifdef SVG_SUPPORT
 #include "SVGFEImageElement.h"
 
@@ -28,25 +29,22 @@
 #include "CachedImage.h"
 #include "DocLoader.h"
 #include "Document.h"
-#include "KCanvasRenderingStyle.h"
-#include "KCanvasRenderingStyle.h"
-#include "SVGAnimatedLength.h"
-#include "SVGAnimatedPreserveAspectRatio.h"
-#include "SVGAnimatedString.h"
-#include "SVGHelper.h"
+#include "SVGLength.h"
 #include "SVGNames.h"
-#include <kcanvas/KCanvasCreator.h>
-#include <kcanvas/KCanvasImage.h>
-#include <kcanvas/device/KRenderingDevice.h>
-#include <kcanvas/device/KRenderingFillPainter.h>
+#include "SVGPreserveAspectRatio.h"
+#include "SVGResourceFilter.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGFEImageElement::SVGFEImageElement(const QualifiedName& tagName, Document *doc)
-: SVGFilterPrimitiveStandardAttributes(tagName, doc), SVGURIReference(), SVGLangSpace(), SVGExternalResourcesRequired()
+SVGFEImageElement::SVGFEImageElement(const QualifiedName& tagName, Document* doc)
+    : SVGFilterPrimitiveStandardAttributes(tagName, doc)
+    , SVGURIReference()
+    , SVGLangSpace()
+    , SVGExternalResourcesRequired()
+    , m_preserveAspectRatio(new SVGPreserveAspectRatio(this))
+    , m_cachedImage(0)
+    , m_filterEffect(0)
 {
-    m_filterEffect = 0;
-    m_cachedImage = 0;
 }
 
 SVGFEImageElement::~SVGFEImageElement()
@@ -56,49 +54,52 @@ SVGFEImageElement::~SVGFEImageElement()
         m_cachedImage->deref(this);
 }
 
-SVGAnimatedPreserveAspectRatio *SVGFEImageElement::preserveAspectRatio() const
-{
-    return lazy_create<SVGAnimatedPreserveAspectRatio>(m_preserveAspectRatio, this);
-}
+ANIMATED_PROPERTY_DEFINITIONS(SVGFEImageElement, SVGPreserveAspectRatio*, PreserveAspectRatio, preserveAspectRatio, PreserveAspectRatio, preserveAspectRatio, SVGNames::preserveAspectRatioAttr.localName(), m_preserveAspectRatio.get())
 
-void SVGFEImageElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGFEImageElement::parseMappedAttribute(MappedAttribute* attr)
 {
     const String& value = attr->value();
     if (attr->name() == SVGNames::preserveAspectRatioAttr)
-        preserveAspectRatio()->baseVal()->parsePreserveAspectRatio(value.impl());
-    else
-    {
+        preserveAspectRatioBaseValue()->parsePreserveAspectRatio(value);
+    else {
         if (SVGURIReference::parseMappedAttribute(attr)) {
-            if (m_cachedImage)
-                m_cachedImage->deref(this);
-            m_cachedImage = ownerDocument()->docLoader()->requestImage(href()->baseVal());
-            if (m_cachedImage)
-                m_cachedImage->ref(this);
+            if (!href().startsWith("#")) {
+                // FIXME: this code needs to special-case url fragments and later look them up using getElementById instead of loading them here
+                if (m_cachedImage)
+                    m_cachedImage->deref(this);
+                m_cachedImage = ownerDocument()->docLoader()->requestImage(href());
+                if (m_cachedImage)
+                    m_cachedImage->ref(this);
+            }
             return;
         }
-        if(SVGLangSpace::parseMappedAttribute(attr)) return;
-        if(SVGExternalResourcesRequired::parseMappedAttribute(attr)) return;
+        if (SVGLangSpace::parseMappedAttribute(attr))
+            return;
+        if (SVGExternalResourcesRequired::parseMappedAttribute(attr))
+            return;
 
         SVGFilterPrimitiveStandardAttributes::parseMappedAttribute(attr);
     }
 }
 
-void SVGFEImageElement::notifyFinished(CachedResource *finishedObj)
+void SVGFEImageElement::notifyFinished(CachedResource* finishedObj)
 {
     if (finishedObj == m_cachedImage && filterEffect())
         filterEffect()->setCachedImage(m_cachedImage);
 }
 
-KCanvasFEImage *SVGFEImageElement::filterEffect() const
+SVGFEImage* SVGFEImageElement::filterEffect() const
 {
     if (!m_filterEffect)
-        m_filterEffect = static_cast<KCanvasFEImage *>(renderingDevice()->createFilterEffect(FE_IMAGE));
+        m_filterEffect = static_cast<SVGFEImage*>(SVGResourceFilter::createFilterEffect(FE_IMAGE));
     if (!m_filterEffect)
         return 0;
     setStandardAttributes(m_filterEffect);
     return m_filterEffect;
 }
 
-// vim:ts=4:noet
+}
+
 #endif // SVG_SUPPORT
 
+// vim:ts=4:noet

@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -22,18 +22,19 @@
 
 #include "config.h"
 #ifdef SVG_SUPPORT
-#include "Text.h"
 #include "SVGTRefElement.h"
-#include "SVGNames.h"
-#include "XLinkNames.h"
-#include "SVGAnimatedString.h"
+
+#include "RenderSVGInline.h"
 #include "SVGDocument.h"
-#include "RenderInline.h"
+#include "SVGNames.h"
+#include "Text.h"
+#include "XLinkNames.h"
 
-using namespace WebCore;
+namespace WebCore {
 
-SVGTRefElement::SVGTRefElement(const QualifiedName& tagName, Document *doc)
-: SVGTextPositioningElement(tagName, doc), SVGURIReference()
+SVGTRefElement::SVGTRefElement(const QualifiedName& tagName, Document* doc)
+    : SVGTextPositioningElement(tagName, doc)
+    , SVGURIReference()
 {
 }
 
@@ -43,12 +44,11 @@ SVGTRefElement::~SVGTRefElement()
 
 void SVGTRefElement::updateReferencedText()
 {
-    String targetId = SVGURIReference::getTarget(String(href()->baseVal()).deprecatedString());
-    Element *targetElement = ownerDocument()->getElementById(targetId.impl());
-    SVGElement *target = svg_dynamic_cast(targetElement);
+    Element* targetElement = ownerDocument()->getElementById(SVGURIReference::getTarget(href()));
+    SVGElement* target = svg_dynamic_cast(targetElement);
     if (target) {
         ExceptionCode ignore = 0;
-        setTextContent(target->textContent().impl(), ignore);
+        setTextContent(target->textContent(), ignore);
     }
 }
 
@@ -60,7 +60,7 @@ void SVGTRefElement::attributeChanged(Attribute* attr, bool preserveDecls)
     SVGTextPositioningElement::attributeChanged(attr, preserveDecls);
 }
 
-void SVGTRefElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGTRefElement::parseMappedAttribute(MappedAttribute* attr)
 {
     if (SVGURIReference::parseMappedAttribute(attr)) {
         updateReferencedText();
@@ -70,7 +70,7 @@ void SVGTRefElement::parseMappedAttribute(MappedAttribute *attr)
     SVGTextPositioningElement::parseMappedAttribute(attr);
 }
 
-bool SVGTRefElement::childShouldCreateRenderer(Node *child) const
+bool SVGTRefElement::childShouldCreateRenderer(Node* child) const
 {
     if (child->isTextNode() || child->hasTagName(SVGNames::tspanTag) ||
         child->hasTagName(SVGNames::trefTag))
@@ -78,9 +78,11 @@ bool SVGTRefElement::childShouldCreateRenderer(Node *child) const
     return false;
 }
 
-RenderObject *SVGTRefElement::createRenderer(RenderArena *arena, RenderStyle *)
+RenderObject* SVGTRefElement::createRenderer(RenderArena* arena, RenderStyle*)
 {
-    return new (arena) RenderInline(this);
+    return new (arena) RenderSVGInline(this);
+}
+
 }
 
 // vim:ts=4:noet

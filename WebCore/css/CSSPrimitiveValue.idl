@@ -51,13 +51,13 @@ module css {
 
         readonly attribute unsigned short primitiveType;
 
-        void setFloatValue(in unsigned short unitType,
-                           in float floatValue)
-            raises(dom::DOMException);
+        [OldStyleObjC] void setFloatValue(in unsigned short unitType,
+                                          in float floatValue)
+            raises(DOMException);
         float getFloatValue(in unsigned short unitType);
-        void setStringValue(in unsigned short stringType, 
-                            in DOMString stringValue)
-            raises(dom::DOMException);
+        [OldStyleObjC] void setStringValue(in unsigned short stringType, 
+                                           in DOMString stringValue)
+            raises(DOMException);
         DOMString getStringValue();
         Counter getCounterValue();
         Rect getRectValue();

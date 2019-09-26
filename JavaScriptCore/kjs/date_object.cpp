@@ -51,30 +51,25 @@
 
 #include "error_object.h"
 #include "operations.h"
+#include "DateMath.h"
+
+#include <wtf/MathExtras.h>
+#include <wtf/StringExtras.h>
 
 #if PLATFORM(MAC)
-#include <CoreFoundation/CoreFoundation.h>
+    #include <CoreFoundation/CoreFoundation.h>
 #endif
-
-#if PLATFORM(WIN_OS)
-#define copysign(x, y) _copysign(x, y)
-#define isfinite(x) _finite(x)
-#define strncasecmp(x, y, z) strnicmp(x, y, z)
-#define snprintf _snprintf
-#endif
-
-inline int gmtoffset(const tm& t)
-{
-#if PLATFORM(WIN_OS)
-    // Time is supposed to be in the current timezone.
-    // FIXME: Use undocumented _dstbias?
-    return -(_timezone / 60 - (t.tm_isdst > 0 ? 60 : 0 )) * 60;
-#else
-    return t.tm_gmtoff;
-#endif
-}
 
 namespace KJS {
+
+static double parseDate(const UString&);
+static double timeClip(double);
+
+inline int gmtoffset(const GregorianDateTime& t)
+{
+    return t.utcOffset;
+}
+
 
 /**
  * @internal
@@ -93,23 +88,6 @@ public:
 private:
     int id;
 };
-
-// some constants
-const double hoursPerDay = 24;
-const double minutesPerHour = 60;
-const double secondsPerMinute = 60;
-const double msPerSecond = 1000;
-const double msPerMinute = 60 * 1000;
-const double msPerHour = 60 * 60 * 1000;
-const double msPerDay = 24 * 60 * 60 * 1000;
-
-static const char * const weekdayName[7] = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
-static const char * const monthName[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-
-static double makeTime(tm *, double ms, bool utc);
-static double parseDate(const UString &);
-static double timeClip(double);
-static void millisecondsToTM(double milli, bool utc, tm *t);
 
 #if PLATFORM(MAC)
 
@@ -176,122 +154,94 @@ static UString formatLocaleDate(ExecState *exec, double time, bool includeDate, 
     return UString(buffer, length);
 }
 
-#endif // PLATFORM(MAC)
+#else
 
-static UString formatDate(const tm &t)
+enum LocaleDateTimeFormat { LocaleDateAndTime, LocaleDate, LocaleTime };
+ 
+static JSCell* formatLocaleDate(GregorianDateTime gdt, const LocaleDateTimeFormat format)
+{
+    static const char* formatStrings[] = {"%#c", "%#x", "%X"};
+ 
+    // Offset year if needed
+    struct tm localTM = gdt;
+    gdt.year += 1900;
+    bool yearNeedsOffset = gdt.year < 1900 || gdt.year > 2038;
+    if (yearNeedsOffset) {
+        localTM.tm_year = equivalentYearForDST(gdt.year) - 1900;
+     }
+ 
+    // Do the formatting
+    const int bufsize=128;
+    char timebuffer[bufsize];
+    size_t ret = strftime(timebuffer, bufsize, formatStrings[format], &localTM);
+ 
+    if ( ret == 0 )
+        return jsString("");
+ 
+    // Copy original into the buffer
+    if (yearNeedsOffset && format != LocaleTime) {
+        static const int yearLen = 5;   // FIXME will be a problem in the year 10,000
+        char yearString[yearLen];
+ 
+        snprintf(yearString, yearLen, "%d", localTM.tm_year + 1900);
+        char* yearLocation = strstr(timebuffer, yearString);
+        snprintf(yearString, yearLen, "%d", gdt.year);
+ 
+        strncpy(yearLocation, yearString, yearLen - 1);
+    }
+ 
+    return jsString(timebuffer);
+}
+
+#endif // PLATFORM(WIN_OS)
+
+static UString formatDate(const GregorianDateTime &t)
 {
     char buffer[100];
     snprintf(buffer, sizeof(buffer), "%s %s %02d %04d",
-        weekdayName[(t.tm_wday + 6) % 7],
-        monthName[t.tm_mon], t.tm_mday, t.tm_year + 1900);
+        weekdayName[(t.weekDay + 6) % 7],
+        monthName[t.month], t.monthDay, t.year + 1900);
     return buffer;
 }
 
-static UString formatDateUTCVariant(const tm &t)
+static UString formatDateUTCVariant(const GregorianDateTime &t)
 {
     char buffer[100];
     snprintf(buffer, sizeof(buffer), "%s, %02d %s %04d",
-        weekdayName[(t.tm_wday + 6) % 7],
-        t.tm_mday, monthName[t.tm_mon], t.tm_year + 1900);
+        weekdayName[(t.weekDay + 6) % 7],
+        t.monthDay, monthName[t.month], t.year + 1900);
     return buffer;
 }
 
-static UString formatTime(const tm &t, bool utc)
+static UString formatTime(const GregorianDateTime &t, bool utc)
 {
     char buffer[100];
     if (utc) {
-        // FIXME: why not on windows?
-#if !PLATFORM(WIN_OS)
-        ASSERT(t.tm_gmtoff == 0);
-#endif
-        snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d GMT", t.tm_hour, t.tm_min, t.tm_sec);
+        snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d GMT", t.hour, t.minute, t.second);
     } else {
         int offset = abs(gmtoffset(t));
-#if PLATFORM(WIN_OS)
         char tzname[70];
-        strftime(tzname, sizeof(tzname), "%Z", &t);
-#else
-        const char *tzname = t.tm_zone;
-#endif
+        struct tm gtm = t;
+        strftime(tzname, sizeof(tzname), "%Z", &gtm);
+
         if (tzname) {
             snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d GMT%c%02d%02d (%s)",
-                t.tm_hour, t.tm_min, t.tm_sec,
+                t.hour, t.minute, t.second,
                 gmtoffset(t) < 0 ? '-' : '+', offset / (60*60), (offset / 60) % 60, tzname);
         } else {
             snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d GMT%c%02d%02d",
-                t.tm_hour, t.tm_min, t.tm_sec,
+                t.hour, t.minute, t.second,
                 gmtoffset(t) < 0 ? '-' : '+', offset / (60*60), (offset / 60) % 60);
         }
     }
     return UString(buffer);
 }
 
-static int day(double t)
-{
-    return int(floor(t / msPerDay));
-}
-
-static double dayFromYear(int year)
-{
-    return 365.0 * (year - 1970)
-        + floor((year - 1969) / 4.0)
-        - floor((year - 1901) / 100.0)
-        + floor((year - 1601) / 400.0);
-}
-
-// based on the rule for whether it's a leap year or not
-static int daysInYear(int year)
-{
-    if (year % 4 != 0)
-        return 365;
-    if (year % 400 == 0)
-        return 366;
-    if (year % 100 == 0)
-        return 365;
-    return 366;
-}
-
-// time value of the start of a year
-static double timeFromYear(int year)
-{
-    return msPerDay * dayFromYear(year);
-}
-
-// year determined by time value
-static int yearFromTime(double t)
-{
-    // ### there must be an easier way
-
-    // initial guess
-    int y = 1970 + int(t / (365.25 * msPerDay));
-
-    // adjustment
-    if (timeFromYear(y) > t) {
-        do
-            --y;
-        while (timeFromYear(y) > t);
-    } else {
-        while (timeFromYear(y + 1) < t)
-            ++y;
-    }
-
-    return y;
-}
-
-// 0: Sunday, 1: Monday, etc.
-static int weekDay(double t)
-{
-    int wd = (day(t) + 4) % 7;
-    if (wd < 0)
-        wd += 7;
-    return wd;
-}
-
 // Converts a list of arguments sent to a Date member function into milliseconds, updating
 // ms (representing milliseconds) and t (representing the rest of the date structure) appropriately.
 //
 // Format of member function: f([hour,] [min,] [sec,] [ms])
-static void fillStructuresUsingTimeArgs(ExecState *exec, const List &args, int maxArgs, double *ms, tm *t)
+static void fillStructuresUsingTimeArgs(ExecState *exec, const List &args, int maxArgs, double *ms, GregorianDateTime *t)
 {
     double milliseconds = 0;
     int idx = 0;
@@ -303,19 +253,19 @@ static void fillStructuresUsingTimeArgs(ExecState *exec, const List &args, int m
 
     // hours
     if (maxArgs >= 4 && idx < numArgs) {
-        t->tm_hour = 0;
+        t->hour = 0;
         milliseconds += args[idx++]->toInt32(exec) * msPerHour;
     }
 
     // minutes
     if (maxArgs >= 3 && idx < numArgs) {
-        t->tm_min = 0;
+        t->minute = 0;
         milliseconds += args[idx++]->toInt32(exec) * msPerMinute;
     }
     
     // seconds
     if (maxArgs >= 2 && idx < numArgs) {
-        t->tm_sec = 0;
+        t->second = 0;
         milliseconds += args[idx++]->toInt32(exec) * msPerSecond;
     }
     
@@ -333,7 +283,7 @@ static void fillStructuresUsingTimeArgs(ExecState *exec, const List &args, int m
 // ms (representing milliseconds) and t (representing the rest of the date structure) appropriately.
 //
 // Format of member function: f([years,] [months,] [days])
-static void fillStructuresUsingDateArgs(ExecState *exec, const List &args, int maxArgs, double *ms, tm *t)
+static void fillStructuresUsingDateArgs(ExecState *exec, const List &args, int maxArgs, double *ms, GregorianDateTime *t)
 {
     int idx = 0;
     int numArgs = args.size();
@@ -344,15 +294,15 @@ static void fillStructuresUsingDateArgs(ExecState *exec, const List &args, int m
   
     // years
     if (maxArgs >= 3 && idx < numArgs)
-        t->tm_year = args[idx++]->toInt32(exec) - 1900;
+        t->year = args[idx++]->toInt32(exec) - 1900;
   
     // months
     if (maxArgs >= 2 && idx < numArgs)
-        t->tm_mon = args[idx++]->toInt32(exec);
+        t->month = args[idx++]->toInt32(exec);
   
     // days
     if (idx < numArgs) {
-        t->tm_mday = 0;
+        t->monthDay = 0;
         *ms += args[idx]->toInt32(exec) * msPerDay;
     }
 }
@@ -366,24 +316,24 @@ DateInstance::DateInstance(JSObject *proto)
 {
 }
 
-bool DateInstance::getTime(tm &t, int &offset) const
+bool DateInstance::getTime(GregorianDateTime &t, int &offset) const
 {
     double milli = internalValue()->getNumber();
     if (isNaN(milli))
         return false;
     
-    millisecondsToTM(milli, false, &t);
+    msToGregorianDateTime(milli, false, t);
     offset = gmtoffset(t);
     return true;
 }
 
-bool DateInstance::getUTCTime(tm &t) const
+bool DateInstance::getUTCTime(GregorianDateTime &t) const
 {
     double milli = internalValue()->getNumber();
     if (isNaN(milli))
         return false;
     
-    millisecondsToTM(milli, true, &t);
+    msToGregorianDateTime(milli, true, t);
     return true;
 }
 
@@ -393,8 +343,8 @@ bool DateInstance::getTime(double &milli, int &offset) const
     if (isNaN(milli))
         return false;
     
-    tm t;
-    millisecondsToTM(milli, false, &t);
+    GregorianDateTime t;
+    msToGregorianDateTime(milli, false, t);
     offset = gmtoffset(t);
     return true;
 }
@@ -413,43 +363,6 @@ static inline bool isTime_tSigned()
     time_t minusOne = (time_t)(-1);
     return minusOne < 0;
 }
-
-static void millisecondsToTM(double milli, bool utc, tm *t)
-{
-  // check whether time value is outside time_t's usual range
-  // make the necessary transformations if necessary
-  static bool time_tIsSigned = isTime_tSigned();
-  static double time_tMin = (time_tIsSigned ? - (double)(1ULL << (8 * sizeof(time_t) - 1)) : 0);
-  static double time_tMax = (time_tIsSigned ? (1ULL << 8 * sizeof(time_t) - 1) - 1 : 2 * (double)(1ULL << 8 * sizeof(time_t) - 1) - 1);
-  int realYearOffset = 0;
-  double milliOffset = 0.0;
-  double secs = floor(milli / msPerSecond);
-
-  if (secs < time_tMin || secs > time_tMax) {
-    // ### ugly and probably not very precise
-    int realYear = yearFromTime(milli);
-    int base = daysInYear(realYear) == 365 ? 2001 : 2000;
-    milliOffset = timeFromYear(base) - timeFromYear(realYear);
-    milli += milliOffset;
-    realYearOffset = realYear - base;
-  }
-
-  time_t tv = (time_t) floor(milli / msPerSecond);
-
-  *t = *(utc ? gmtime(&tv) : localtime(&tv));
-  // We had an out of range year. Restore the year (plus/minus offset
-  // found by calculating tm_year) and fix the week day calculation.
-  if (realYearOffset != 0) {
-    t->tm_year += realYearOffset;
-    milli -= milliOffset;
-    // Do our own weekday calculation. Use time zone offset to handle local time.
-    double m = milli;
-    if (!utc)
-      m += gmtoffset(*t) * msPerSecond;
-    t->tm_wday = weekDay(m);
-  }
-}    
-
 
 // ------------------------------ DatePrototype -----------------------------
 
@@ -538,14 +451,6 @@ JSValue *DateProtoFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const
 
   JSValue *result = 0;
   UString s;
-#if !PLATFORM(DARWIN)
-  const int bufsize=100;
-  char timebuffer[bufsize];
-  CString oldlocale = setlocale(LC_TIME, 0);
-  if (!oldlocale.size())
-    oldlocale = setlocale(LC_ALL, 0);
-  // FIXME: Where's the code to set the locale back to oldlocale?
-#endif
   JSValue *v = thisDateObj->internalValue();
   double milli = v->toNumber(exec);
   if (isNaN(milli)) {
@@ -578,8 +483,8 @@ JSValue *DateProtoFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const
   double secs = floor(milli / msPerSecond);
   double ms = milli - secs * msPerSecond;
 
-  tm t;
-  millisecondsToTM(milli, utc, &t);
+  GregorianDateTime t;
+  msToGregorianDateTime(milli, utc, t);
 
   switch (id) {
   case ToString:
@@ -606,16 +511,13 @@ JSValue *DateProtoFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const
     break;
 #else
   case ToLocaleString:
-    strftime(timebuffer, bufsize, "%c", &t);
-    return jsString(timebuffer);
+    return formatLocaleDate(t, LocaleDateAndTime);
     break;
   case ToLocaleDateString:
-    strftime(timebuffer, bufsize, "%x", &t);
-    return jsString(timebuffer);
+    return formatLocaleDate(t, LocaleDate);
     break;
   case ToLocaleTimeString:
-    strftime(timebuffer, bufsize, "%X", &t);
-    return jsString(timebuffer);
+    return formatLocaleDate(t, LocaleTime);
     break;
 #endif
   case ValueOf:
@@ -624,26 +526,26 @@ JSValue *DateProtoFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const
   case GetYear:
     // IE returns the full year even in getYear.
     if (exec->dynamicInterpreter()->compatMode() == Interpreter::IECompat)
-      return jsNumber(1900 + t.tm_year);
-    return jsNumber(t.tm_year);
+      return jsNumber(1900 + t.year);
+    return jsNumber(t.year);
   case GetFullYear:
-    return jsNumber(1900 + t.tm_year);
+    return jsNumber(1900 + t.year);
   case GetMonth:
-    return jsNumber(t.tm_mon);
+    return jsNumber(t.month);
   case GetDate:
-    return jsNumber(t.tm_mday);
+    return jsNumber(t.monthDay);
   case GetDay:
-    return jsNumber(t.tm_wday);
+    return jsNumber(t.weekDay);
   case GetHours:
-    return jsNumber(t.tm_hour);
+    return jsNumber(t.hour);
   case GetMinutes:
-    return jsNumber(t.tm_min);
+    return jsNumber(t.minute);
   case GetSeconds:
-    return jsNumber(t.tm_sec);
+    return jsNumber(t.second);
   case GetMilliSeconds:
     return jsNumber(ms);
   case GetTimezoneOffset:
-    return jsNumber(-gmtoffset(t) / 60);
+    return jsNumber(-gmtoffset(t) / minutesPerHour);
   case SetTime:
     milli = roundValue(exec, args[0]);
     result = jsNumber(milli);
@@ -671,14 +573,14 @@ JSValue *DateProtoFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const
     fillStructuresUsingDateArgs(exec, args, 3, &ms, &t);
     break;
   case SetYear:
-    t.tm_year = (args[0]->toInt32(exec) > 99 || args[0]->toInt32(exec) < 0) ? args[0]->toInt32(exec) - 1900 : args[0]->toInt32(exec);
+    t.year = (args[0]->toInt32(exec) > 99 || args[0]->toInt32(exec) < 0) ? args[0]->toInt32(exec) - 1900 : args[0]->toInt32(exec);
     break;
   }
 
   if (id == SetYear || id == SetMilliSeconds || id == SetSeconds ||
       id == SetMinutes || id == SetHours || id == SetDate ||
       id == SetMonth || id == SetFullYear ) {
-    result = jsNumber(makeTime(&t, ms, utc));
+    result = jsNumber(gregorianDateTimeToMS(t, ms, utc));
     thisDateObj->setInternalValue(result);
   }
   
@@ -754,18 +656,17 @@ JSObject *DateObjectImp::construct(ExecState *exec, const List &args)
         || (numArgs >= 7 && isNaN(args[6]->toNumber(exec)))) {
       value = NaN;
     } else {
-      tm t;
-      memset(&t, 0, sizeof(t));
+      GregorianDateTime t;
       int year = args[0]->toInt32(exec);
-      t.tm_year = (year >= 0 && year <= 99) ? year : year - 1900;
-      t.tm_mon = args[1]->toInt32(exec);
-      t.tm_mday = (numArgs >= 3) ? args[2]->toInt32(exec) : 1;
-      t.tm_hour = (numArgs >= 4) ? args[3]->toInt32(exec) : 0;
-      t.tm_min = (numArgs >= 5) ? args[4]->toInt32(exec) : 0;
-      t.tm_sec = (numArgs >= 6) ? args[5]->toInt32(exec) : 0;
-      t.tm_isdst = -1;
+      t.year = (year >= 0 && year <= 99) ? year : year - 1900;
+      t.month = args[1]->toInt32(exec);
+      t.monthDay = (numArgs >= 3) ? args[2]->toInt32(exec) : 1;
+      t.hour = (numArgs >= 4) ? args[3]->toInt32(exec) : 0;
+      t.minute = (numArgs >= 5) ? args[4]->toInt32(exec) : 0;
+      t.second = (numArgs >= 6) ? args[5]->toInt32(exec) : 0;
+      t.isDST = -1;
       double ms = (numArgs >= 7) ? roundValue(exec, args[6]) : 0;
-      value = makeTime(&t, ms, false);
+      value = gregorianDateTimeToMS(t, ms, false);
     }
   }
   
@@ -778,7 +679,7 @@ JSObject *DateObjectImp::construct(ExecState *exec, const List &args)
 JSValue *DateObjectImp::callAsFunction(ExecState * /*exec*/, JSObject * /*thisObj*/, const List &/*args*/)
 {
     time_t t = time(0);
-    tm ts = *localtime(&t);
+    GregorianDateTime ts(*localtime(&t));
     return jsString(formatDate(ts) + " " + formatTime(ts, false));
 }
 
@@ -808,17 +709,17 @@ JSValue *DateObjectFuncImp::callAsFunction(ExecState* exec, JSObject*, const Lis
       return jsNaN();
     }
 
-    tm t;
+    GregorianDateTime t;
     memset(&t, 0, sizeof(t));
     int year = args[0]->toInt32(exec);
-    t.tm_year = (year >= 0 && year <= 99) ? year : year - 1900;
-    t.tm_mon = args[1]->toInt32(exec);
-    t.tm_mday = (n >= 3) ? args[2]->toInt32(exec) : 1;
-    t.tm_hour = (n >= 4) ? args[3]->toInt32(exec) : 0;
-    t.tm_min = (n >= 5) ? args[4]->toInt32(exec) : 0;
-    t.tm_sec = (n >= 6) ? args[5]->toInt32(exec) : 0;
+    t.year = (year >= 0 && year <= 99) ? year : year - 1900;
+    t.month = args[1]->toInt32(exec);
+    t.monthDay = (n >= 3) ? args[2]->toInt32(exec) : 1;
+    t.hour = (n >= 4) ? args[3]->toInt32(exec) : 0;
+    t.minute = (n >= 5) ? args[4]->toInt32(exec) : 0;
+    t.second = (n >= 6) ? args[5]->toInt32(exec) : 0;
     double ms = (n >= 7) ? roundValue(exec, args[6]) : 0;
-    return jsNumber(makeTime(&t, ms, true));
+    return jsNumber(gregorianDateTimeToMS(t, ms, true));
   }
 }
 
@@ -857,58 +758,6 @@ static const struct KnownZone {
     { "PDT", -420 }
 };
 
-static double makeTime(tm *t, double ms, bool utc)
-{
-    int utcOffset;
-    if (utc) {
-        time_t zero = 0;
-#if PLATFORM(WIN_OS)
-        // FIXME: not thread safe
-        (void)localtime(&zero);
-#if COMPILER(BORLAND) || COMPILER(CYGWIN)
-        utcOffset = - _timezone;
-#else
-        utcOffset = - timezone;
-#endif
-        t->tm_isdst = 0;
-#else
-        tm t3;
-        localtime_r(&zero, &t3);
-        utcOffset = t3.tm_gmtoff;
-        t->tm_isdst = t3.tm_isdst;
-#endif
-    } else {
-        utcOffset = 0;
-        t->tm_isdst = -1;
-    }
-
-    double yearOffset = 0.0;
-    if (t->tm_year < (1970 - 1900) || t->tm_year > (2038 - 1900)) {
-        // we'll fool mktime() into believing that this year is within
-        // its normal, portable range (1970-2038) by setting tm_year to
-        // 2000 or 2001 and adding the difference in milliseconds later.
-        // choice between offset will depend on whether the year is a
-        // leap year or not.
-        int y = t->tm_year + 1900;
-        int baseYear = daysInYear(y) == 365 ? 2001 : 2000;
-        double baseTime = timeFromYear(baseYear);
-        yearOffset = timeFromYear(y) - baseTime;
-        t->tm_year = baseYear - 1900;
-    }
-
-    // Determine whether DST is in effect. mktime() can't do this for us because
-    // it doesn't know about ms and yearOffset.
-    // NOTE: Casting values of large magnitude to time_t (long) will 
-    // produce incorrect results, but there's no other option when calling localtime_r().
-    if (!utc) { 
-        time_t tval = mktime(t) + (time_t)((ms + yearOffset) / 1000);  
-        tm t3 = *localtime(&tval);  
-        t->tm_isdst = t3.tm_isdst;  
-    }
-
-    return (mktime(t) + utcOffset) * msPerSecond + ms + yearOffset;
-}
-
 inline static void skipSpacesAndComments(const char *&s)
 {
     int nesting = 0;
@@ -934,13 +783,13 @@ static int findMonth(const char *monthStr)
     for (int i = 0; i < 3; ++i) {
         if (!*monthStr)
             return -1;
-        needle[i] = tolower(*monthStr++);
+        needle[i] = static_cast<char>(tolower(*monthStr++));
     }
     needle[3] = '\0';
     const char *haystack = "janfebmaraprmayjunjulaugsepoctnovdec";
     const char *str = strstr(haystack, needle);
     if (str) {
-        int position = str - haystack;
+        int position = static_cast<int>(str - haystack);
         if (position % 3 == 0)
             return position / 3;
     }
@@ -1227,18 +1076,18 @@ static double parseDate(const UString &date)
 
     // fall back to local timezone
     if (!haveTZ) {
-        tm t;
+        GregorianDateTime t;
         memset(&t, 0, sizeof(tm));
-        t.tm_mday = day;
-        t.tm_mon = month;
-        t.tm_year = year - 1900;
-        t.tm_isdst = -1;
-        t.tm_sec = second;
-        t.tm_min = minute;
-        t.tm_hour = hour;
+        t.monthDay = day;
+        t.month = month;
+        t.year = year - 1900;
+        t.isDST = -1;
+        t.second = second;
+        t.minute = minute;
+        t.hour = hour;
 
-        // Use our makeTime() rather than mktime() as the latter can't handle the full year range.
-        return makeTime(&t, 0, false);
+        // Use our gregorianDateTimeToMS() rather than mktime() as the latter can't handle the full year range.
+        return gregorianDateTimeToMS(t, 0, false);
     }
 
     return (ymdhmsToSeconds(year, month + 1, day, hour, minute, second) - (offset * 60.0)) * msPerSecond;

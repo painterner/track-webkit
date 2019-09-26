@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -22,23 +22,16 @@
 
 #include "config.h"
 #ifdef SVG_SUPPORT
-#include "RegularExpression.h"
-#include "DeprecatedStringList.h"
-#include <wtf/RefPtr.h>
-
-#include "Attr.h"
-
-#include <kcanvas/RenderPath.h>
-
-#include "SVGNames.h"
-#include "SVGHelper.h"
-#include "SVGMatrix.h"
 #include "SVGTransformable.h"
-#include "SVGStyledElement.h"
-#include "SVGAnimatedTransformList.h"
-#include "ksvg.h"
 
-using namespace WebCore;
+#include "RegularExpression.h"
+#include "AffineTransform.h"
+#include "SVGNames.h"
+#include "SVGParserUtilities.h"
+#include "SVGStyledElement.h"
+#include "SVGTransformList.h"
+
+namespace WebCore {
 
 SVGTransformable::SVGTransformable() : SVGLocatable()
 {
@@ -48,77 +41,162 @@ SVGTransformable::~SVGTransformable()
 {
 }
 
-void SVGTransformable::parseTransformAttribute(SVGTransformList *list, const AtomicString& transform)
+AffineTransform SVGTransformable::getCTM(const SVGElement* element) const
 {
-    // Split string for handling 1 transform statement at a time
-    DeprecatedStringList subtransforms = DeprecatedStringList::split(')', transform.deprecatedString().simplifyWhiteSpace());
-    DeprecatedStringList::ConstIterator it = subtransforms.begin();
-    DeprecatedStringList::ConstIterator end = subtransforms.end();
-    for (; it != end; ++it) {
-        DeprecatedStringList subtransform = DeprecatedStringList::split('(', (*it));
-        
-        if (subtransform.count() < 2)
-            break; // invalid transform, ignore.
+    AffineTransform ctm = SVGLocatable::getCTM(element);
+    return localMatrix() * ctm;
+}
 
-        subtransform[0] = subtransform[0].stripWhiteSpace().lower();
-        subtransform[1] = subtransform[1].simplifyWhiteSpace();
-        RegularExpression reg("([-]?\\d*\\.?\\d+(?:e[-]?\\d+)?)");
+AffineTransform SVGTransformable::getScreenCTM(const SVGElement* element) const
+{
+    AffineTransform ctm = SVGLocatable::getScreenCTM(element);
+    return localMatrix() * ctm;
+}
 
-        int pos = 0;
-        DeprecatedStringList params;
-        
-        while (pos >= 0) {
-            pos = reg.search(subtransform[1], pos);
-            if (pos != -1) {
-                params += reg.cap(1);
-                pos += reg.matchedLength();
-            }
-        }
-        
-        if (params.count() < 1)
-            break;
+int parseTransformParamList(const UChar*& ptr, const UChar* end, double* x, int required, int optional)
+{
+    int optionalParams = 0, requiredParams = 0;
+    skipOptionalSpaces(ptr, end);
+    if (*ptr != '(')
+        return -1;
+    ptr++;
+    skipOptionalSpaces(ptr, end);
 
-        if (subtransform[0].startsWith(";") || subtransform[0].startsWith(","))
-            subtransform[0] = subtransform[0].right(subtransform[0].length() - 1);
-
-        RefPtr<SVGTransform> t(new SVGTransform());
-
-        if (subtransform[0] == "rotate") {
-            if (params.count() == 3)
-                t->setRotate(params[0].toDouble(),
-                             params[1].toDouble(),
-                              params[2].toDouble());
-            else if (params.count() == 1)
-                t->setRotate(params[0].toDouble(), 0, 0);
-        } else if (subtransform[0] == "translate") {
-            if (params.count() == 2)
-                t->setTranslate(params[0].toDouble(), params[1].toDouble());
-            else if (params.count() == 1) // Spec: if only one param given, assume 2nd param to be 0
-                t->setTranslate(params[0].toDouble(), 0);
-        } else if (subtransform[0] == "scale") {
-            if (params.count() == 2)
-                t->setScale(params[0].toDouble(), params[1].toDouble());
-            else if (params.count() == 1) // Spec: if only one param given, assume uniform scaling
-                t->setScale(params[0].toDouble(), params[0].toDouble());
-        } else if (subtransform[0] == "skewx" && (params.count() == 1))
-            t->setSkewX(params[0].toDouble());
-        else if (subtransform[0] == "skewy" && (params.count() == 1))
-            t->setSkewY(params[0].toDouble());
-        else if (subtransform[0] == "matrix" && (params.count() == 6)) {
-            SVGMatrix *ret = new SVGMatrix(params[0].toDouble(),
-                                                   params[1].toDouble(),
-                                                   params[2].toDouble(),
-                                                   params[3].toDouble(),
-                                                   params[4].toDouble(),
-                                                   params[5].toDouble());
-            t->setMatrix(ret);
-        }
-        
-        if (t->type() == SVG_TRANSFORM_UNKNOWN)
-            break; // failed to parse a valid transform, abort.
-        
-        list->appendItem(t.release().release());
+    while (requiredParams < required) {
+        if (!parseNumber(ptr, end, x[requiredParams], false))
+            return -1;
+        requiredParams++;
+        if (requiredParams < required)
+            skipOptionalSpacesOrDelimiter(ptr, end);
     }
+    skipOptionalSpaces(ptr, end);
+    bool delimParsed = skipOptionalSpacesOrDelimiter(ptr, end);
+
+    if (*ptr == ')') { // skip optionals
+        ptr++;
+        if (delimParsed)
+            return -1;
+    } else {
+         while (optionalParams < optional) {
+            if (!parseNumber(ptr, end, x[requiredParams + optionalParams], false))
+                return -1;
+            optionalParams++;
+            if (optionalParams < optional)
+                skipOptionalSpacesOrDelimiter(ptr, end);
+         }
+         skipOptionalSpaces(ptr, end);
+         delimParsed = skipOptionalSpacesOrDelimiter(ptr, end);
+
+        if (*ptr != ')' || delimParsed)
+            return -1;
+        ptr++;
+    }
+
+    return requiredParams + optionalParams;
+}
+
+static const UChar skewXDesc[] =  {'s','k','e','w', 'X'};
+static const UChar skewYDesc[] =  {'s','k','e','w', 'Y'};
+static const UChar scaleDesc[] =  {'s','c','a','l', 'e'};
+static const UChar translateDesc[] =  {'t','r','a','n', 's', 'l', 'a', 't', 'e'};
+static const UChar rotateDesc[] =  {'r','o','t','a', 't', 'e'};
+static const UChar matrixDesc[] =  {'m','a','t','r', 'i', 'x'};
+
+bool SVGTransformable::parseTransformAttribute(SVGTransformList* list, const AtomicString& transform)
+{
+    double x[6] = {0, 0, 0, 0, 0, 0};
+    int nr = 0, required = 0, optional = 0;
+    
+    const UChar* currTransform = transform.characters();
+    const UChar* end = currTransform + transform.length();
+
+    bool delimParsed = false;
+    while (currTransform < end) {
+        delimParsed = false;
+        unsigned short type = SVGTransform::SVG_TRANSFORM_UNKNOWN;
+        skipOptionalSpaces(currTransform, end);
+
+        if (*currTransform == 's') {
+            if (checkString(currTransform, end, skewXDesc, sizeof(skewXDesc) / sizeof(UChar))) {
+                required = 1;
+                optional = 0;
+                type = SVGTransform::SVG_TRANSFORM_SKEWX;
+            } else if (checkString(currTransform, end, skewYDesc, sizeof(skewYDesc) / sizeof(UChar))) {
+                required = 1;
+                optional = 0;
+                type = SVGTransform::SVG_TRANSFORM_SKEWY;
+            } else if (checkString(currTransform, end, scaleDesc, sizeof(scaleDesc) / sizeof(UChar))) {
+                required = 1;
+                optional = 1;
+                type = SVGTransform::SVG_TRANSFORM_SCALE;
+            } else
+                goto bail_out;
+        } else if (checkString(currTransform, end, translateDesc, sizeof(translateDesc) / sizeof(UChar))) {
+            required = 1;
+            optional = 1;
+            type = SVGTransform::SVG_TRANSFORM_TRANSLATE;
+        } else if (checkString(currTransform, end, rotateDesc, sizeof(rotateDesc) / sizeof(UChar))) {
+            required = 1;
+            optional = 2;
+            type = SVGTransform::SVG_TRANSFORM_ROTATE;
+        } else if (checkString(currTransform, end, matrixDesc, sizeof(matrixDesc) / sizeof(UChar))) {
+            required = 6;
+            optional = 0;
+            type = SVGTransform::SVG_TRANSFORM_MATRIX;
+        } else 
+            goto bail_out;
+
+        if ((nr = parseTransformParamList(currTransform, end, x, required, optional)) < 0)
+            goto bail_out;
+
+        SVGTransform* t = new SVGTransform();
+
+        switch (type) {
+            case SVGTransform::SVG_TRANSFORM_SKEWX:
+               t->setSkewX(x[0]);
+                break;
+            case SVGTransform::SVG_TRANSFORM_SKEWY:
+               t->setSkewY(x[0]);
+                break;
+            case SVGTransform::SVG_TRANSFORM_SCALE:
+                  if (nr == 1) // Spec: if only one param given, assume uniform scaling
+                      t->setScale(x[0], x[0]);
+                  else
+                      t->setScale(x[0], x[1]);
+                break;
+            case SVGTransform::SVG_TRANSFORM_TRANSLATE:
+                  if (nr == 1) // Spec: if only one param given, assume 2nd param to be 0
+                      t->setTranslate(x[0], 0);
+                  else
+                      t->setTranslate(x[0], x[1]);
+                break;
+            case SVGTransform::SVG_TRANSFORM_ROTATE:
+                  if (nr == 1)
+                      t->setRotate(x[0], 0, 0);
+                  else
+                      t->setRotate(x[0], x[1], x[2]);
+                break;
+            case SVGTransform::SVG_TRANSFORM_MATRIX:
+                t->setMatrix(AffineTransform(x[0], x[1], x[2], x[3], x[4], x[5]));
+                break;
+        }
+
+        ExceptionCode ec = 0;
+        list->appendItem(t, ec);
+        skipOptionalSpaces(currTransform, end);
+        if (currTransform < end && *currTransform == ',') {
+            delimParsed = true;
+            currTransform++;
+        }
+        skipOptionalSpaces(currTransform, end);
+    }
+
+    return !delimParsed;
+
+bail_out: ;
+    return false;
+}
+
 }
 
 // vim:ts=4:noet

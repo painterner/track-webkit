@@ -249,7 +249,7 @@ NodeTest:
     PI '(' LITERAL ')'
     {
         String s = *$1 + " " + *$3;
-        $$ = new String(s.deprecatedString().stripWhiteSpace());
+        $$ = new String(s.stripWhiteSpace());
         PARSER->deleteString($1);        
         PARSER->deleteString($3);
         PARSER->registerString($$);
@@ -317,13 +317,13 @@ PrimaryExpr:
     LITERAL
     {
         $$ = new StringExpression(*$1);
-        PARSER->deleteString($1);        
+        PARSER->deleteString($1);
         PARSER->registerParseNode($$);
     }
     |
     NUMBER
     {
-        $$ = new Number($1->deprecatedString().toDouble());
+        $$ = new Number($1->toDouble());
         PARSER->deleteString($1);
         PARSER->registerParseNode($$);
     }

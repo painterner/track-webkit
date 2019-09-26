@@ -29,11 +29,13 @@
 #include "Frame.h"
 #include "FrameTree.h"
 #include "HTMLNames.h"
+#include "RenderWidget.h"
+#include "Settings.h"
+#include "Widget.h"
 #include "kjs_dom.h"
 #include "kjs_proxy.h"
 
-#if PLATFORM(MAC)
-#include "FrameMac.h"
+#if USE(NPOBJECT)
 #include <JavaScriptCore/npruntime_impl.h>
 #include <JavaScriptCore/NP_jsobject.h>
 #endif
@@ -48,8 +50,8 @@ namespace WebCore {
 using namespace HTMLNames;
 
 HTMLPlugInElement::HTMLPlugInElement(const QualifiedName& tagName, Document* doc)
-    : HTMLElement(tagName, doc)
-#if PLATFORM(MAC)
+    : HTMLFrameOwnerElement(tagName, doc)
+#if USE(NPOBJECT)
     , m_NPObject(0)
 #endif
 {
@@ -57,7 +59,7 @@ HTMLPlugInElement::HTMLPlugInElement(const QualifiedName& tagName, Document* doc
 
 HTMLPlugInElement::~HTMLPlugInElement()
 {
-#if PLATFORM(MAC)
+#if USE(NPOBJECT)
     if (m_NPObject) {
         _NPN_ReleaseObject(m_NPObject);
         m_NPObject = 0;
@@ -157,7 +159,17 @@ void HTMLPlugInElement::detach()
     HTMLElement::detach();
 }
 
-#if PLATFORM(MAC)
+void HTMLPlugInElement::defaultEventHandler(Event* event)
+{
+    RenderObject* r = renderer();
+    if (!r || !r->isWidget())
+        return;
+
+    if (Widget* widget = static_cast<RenderWidget*>(r)->widget())
+        widget->handleEvent(event);
+}
+
+#if USE(NPOBJECT)
 
 NPObject* HTMLPlugInElement::createNPObject()
 {
@@ -167,19 +179,19 @@ NPObject* HTMLPlugInElement::createNPObject()
 
     // Can't create NPObjects when JavaScript is disabled
     Frame* frame = document()->frame();
-    if (!frame->jScriptEnabled())
+    if (!frame->settings()->isJavaScriptEnabled())
         return _NPN_CreateNoScriptObject();
     
     // Create a JSObject bound to this element
     JSLock lock;
-    ExecState *exec = frame->jScript()->interpreter()->globalExec();
+    ExecState *exec = frame->scriptProxy()->interpreter()->globalExec();
     JSValue* jsElementValue = toJS(exec, this);
     if (!jsElementValue || !jsElementValue->isObject())
         return _NPN_CreateNoScriptObject();
 
     // Wrap the JSObject in an NPObject
-    const RootObject *executionContext = Mac(frame)->bindingRootObject();
-    return _NPN_CreateScriptObject(0, jsElementValue->getObject(), executionContext, executionContext);
+    const RootObject* rootObject = frame->bindingRootObject();
+    return _NPN_CreateScriptObject(0, jsElementValue->getObject(), rootObject, rootObject);
 }
 
 NPObject* HTMLPlugInElement::getNPObject()
@@ -189,6 +201,6 @@ NPObject* HTMLPlugInElement::getNPObject()
     return m_NPObject;
 }
 
-#endif /* PLATFORM(MAC) */
+#endif /* USE(NPOBJECT) */
 
 }

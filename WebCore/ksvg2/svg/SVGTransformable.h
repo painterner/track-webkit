@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -28,26 +28,23 @@
 
 namespace WebCore {
     
-    class AffineTransform;
     class AtomicString;
-    class Attribute;
-    class Node;
-    class SVGAnimatedTransformList;
-    class SVGMatrix;
+    class AffineTransform;
     class SVGTransformList;
 
-    class SVGTransformable : public SVGLocatable {
+    class SVGTransformable : virtual public SVGLocatable {
     public:
         SVGTransformable();
         virtual ~SVGTransformable();
 
         // 'SVGTransformable' functions
-        virtual SVGAnimatedTransformList* transform() const = 0;
-        virtual SVGMatrix* localMatrix() const = 0;
-        
+        virtual AffineTransform localMatrix() const = 0;
+
         virtual void updateLocalTransform(SVGTransformList*) = 0;
-        
-        static void parseTransformAttribute(SVGTransformList*, const AtomicString& transform);
+
+        static bool parseTransformAttribute(SVGTransformList*, const AtomicString& transform);
+        AffineTransform getCTM(const SVGElement*) const;
+        AffineTransform getScreenCTM(const SVGElement*) const;
     };
 
 } // namespace WebCore

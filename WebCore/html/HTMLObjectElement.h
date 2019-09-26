@@ -27,7 +27,7 @@
 
 #include "HTMLPlugInElement.h"
 
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
 #include <JavaScriptCore/runtime.h>
 #else
 namespace KJS { namespace Bindings { class Instance; } }
@@ -68,7 +68,7 @@ public:
 
     void renderFallbackContent();
 
-#if PLATFORM(MAC)
+#if USE(JAVASCRIPTCORE_BINDINGS)
     virtual KJS::Bindings::Instance* getInstance() const;
 #endif
 
@@ -86,8 +86,6 @@ public:
 
     String codeType() const;
     void setCodeType(const String&);
-
-    Document* contentDocument() const;
     
     String data() const;
     void setData(const String&);
@@ -103,7 +101,6 @@ public:
     String standby() const;
     void setStandby(const String&);
 
-    int tabIndex() const;
     void setTabIndex(int);
 
     String type() const;
@@ -124,10 +121,10 @@ public:
     SVGDocument* getSVGDocument(ExceptionCode&) const;
 #endif
 
-    DeprecatedString serviceType;
-    DeprecatedString url;
-    String classId;
-    bool needWidgetUpdate : 1;
+    String m_serviceType;
+    String m_url;
+    String m_classId;
+    bool m_needWidgetUpdate : 1;
     bool m_useFallbackContent : 1;
     HTMLImageLoader* m_imageLoader;
 

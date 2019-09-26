@@ -26,6 +26,7 @@
 #include "config.h"
 #include "HTMLParser.h"
 
+#include "CharacterNames.h"
 #include "CSSPropertyNames.h"
 #include "CSSValueKeywords.h"
 #include "Comment.h"
@@ -48,13 +49,12 @@
 #include "HTMLTableSectionElement.h"
 #include "HTMLTokenizer.h"
 #include "LocalizedStrings.h"
+#include "Settings.h"
 #include "Text.h"
 
 namespace WebCore {
 
 using namespace HTMLNames;
-
-const UChar nonBreakingSpace = 0xa0;
 
 /**
  * @internal
@@ -426,6 +426,16 @@ bool HTMLParser::handleError(Node* n, bool flat, const AtomicString& localName, 
                 return insertNode(n);
             }
         }
+    } else if (n->isCommentNode() && !head) { 
+        head = new HTMLHeadElement(document);
+        e = head;
+        insertNode(e);
+        if (head) {
+            head->addChild(n);
+            if (!n->attached() && !m_fragment)
+                n->attach();
+        }
+        return true;
     }
     
     // 2. Next we examine our currently active element to do some further error handling.
@@ -493,7 +503,7 @@ bool HTMLParser::handleError(Node* n, bool flat, const AtomicString& localName, 
                         return false;
                     StringImpl *i = t->string();
                     unsigned int pos = 0;
-                    while (pos < i->length() && ((*i)[pos] == ' ' || (*i)[pos] == nonBreakingSpace))
+                    while (pos < i->length() && ((*i)[pos] == ' ' || (*i)[pos] == noBreakSpace))
                         pos++;
                     if (pos == i->length())
                         possiblyMoveStrayContent = false;
@@ -502,7 +512,7 @@ bool HTMLParser::handleError(Node* n, bool flat, const AtomicString& localName, 
                     Node *node = current;
                     Node *parent = node->parentNode();
                     // A script may have removed the current node's parent from the DOM
-                    // http://bugzilla.opendarwin.org/show_bug.cgi?id=7137
+                    // http://bugs.webkit.org/show_bug.cgi?id=7137
                     // FIXME: we should do real recovery here and re-parent with the correct node.
                     if (!parent)
                         return false;
@@ -739,7 +749,7 @@ bool HTMLParser::noframesCreateErrorCheck(Token* t, RefPtr<Node>& result)
 
 bool HTMLParser::noscriptCreateErrorCheck(Token* t, RefPtr<Node>& result)
 {
-    if (!m_fragment && document->frame() && document->frame()->jScriptEnabled())
+    if (!m_fragment && document->frame() && document->frame()->settings()->isJavaScriptEnabled())
         setSkipMode(noscriptTag);
     return true;
 }
@@ -753,7 +763,10 @@ bool HTMLParser::mapCreateErrorCheck(Token* t, RefPtr<Node>& result)
 
 bool HTMLParser::canvasCreateErrorCheck(Token* t, RefPtr<Node>& result)
 {
-    if (!m_fragment && document->frame() && document->frame()->jScriptEnabled())
+    if (document->frame() && document->frame()->settings()->usesDashboardBackwardCompatibilityMode())
+        return true;
+
+    if (!m_fragment && document->frame() && document->frame()->settings()->isJavaScriptEnabled())
         setSkipMode(canvasTag);
     return true;
 }
@@ -896,7 +909,7 @@ bool HTMLParser::isInline(Node* node) const
             e->hasLocalName(abbrTag) || e->hasLocalName(acronymTag) || e->hasLocalName(subTag) ||
             e->hasLocalName(supTag) || e->hasLocalName(spanTag) || e->hasLocalName(nobrTag) ||
             e->hasLocalName(wbrTag) || e->hasLocalName(noframesTag) || e->hasLocalName(nolayerTag) ||
-            e->hasLocalName(noembedTag) || (e->hasLocalName(noscriptTag) && !m_fragment && document->frame() && document->frame()->jScriptEnabled()))
+            e->hasLocalName(noembedTag) || (e->hasLocalName(noscriptTag) && !m_fragment && document->frame() && document->frame()->settings()->isJavaScriptEnabled()))
             return true;
     }
     
@@ -1032,8 +1045,8 @@ void HTMLParser::handleResidualStyleCloseTagAcrossBlocks(HTMLStackElem* elem)
         while (currElem->node != residualElem) {
             if (isResidualStyleTag(currElem->node->localName())) {
                 // Create a clone of this element.
-                // We call release to get a raw pointer since we plan to hand over ownership to currElem.
-                Node* currNode = currElem->node->cloneNode(false).release();
+                // We call releaseRef to get a raw pointer since we plan to hand over ownership to currElem.
+                Node* currNode = currElem->node->cloneNode(false).releaseRef();
 
                 // Change the stack element's node to point to the clone.
                 // The stack element adopts the reference we obtained above by calling release().
@@ -1060,7 +1073,7 @@ void HTMLParser::handleResidualStyleCloseTagAcrossBlocks(HTMLStackElem* elem)
          
     // Check if the block is still in the tree. If it isn't, then we don't
     // want to remove it from its parent (that would crash) or insert it into
-    // a new parent later. See http://bugzilla.opendarwin.org/show_bug.cgi?id=6778
+    // a new parent later. See http://bugs.webkit.org/show_bug.cgi?id=6778
     bool isBlockStillInTree = blockElem->parentNode();
 
     // We need to make a clone of |residualElem| and place it just inside |blockElem|.

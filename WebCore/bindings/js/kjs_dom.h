@@ -24,8 +24,6 @@
 #include "JSNode.h"
 #include "NodeList.h"
 #include "kjs_binding.h"
-#include "DeprecatedValueList.h"
-
 
 namespace WebCore {
     class AtomicString;
@@ -35,6 +33,7 @@ namespace WebCore {
     class DOMImplementation;
     class Element;
     class Entity;
+    class EventTarget;
     class EventTargetNode;
     class NamedNodeMap;
     class Notation;
@@ -135,19 +134,20 @@ namespace KJS {
   };
 
   JSValue* toJS(ExecState*, WebCore::Document*);
-  bool checkNodeSecurity(ExecState *exec, WebCore::Node *n);
-  JSValue *getRuntimeObject(ExecState *exec, WebCore::Node *n);
+  bool checkNodeSecurity(ExecState*, WebCore::Node*);
+  JSValue* getRuntimeObject(ExecState*, WebCore::Node*);
   JSValue* toJS(ExecState*, PassRefPtr<WebCore::Node>);
-  JSValue* toJS(ExecState*, WebCore::NamedNodeMap *);
+  JSValue* toJS(ExecState*, WebCore::NamedNodeMap*);
   JSValue* toJS(ExecState*, PassRefPtr<WebCore::NodeList>);
-  JSObject *getNodeConstructor(ExecState *exec);
-  JSObject *getDOMExceptionConstructor(ExecState *exec);
+  JSValue* toJS(ExecState*, WebCore::EventTarget*);
+  JSObject* getNodeConstructor(ExecState*);
+  JSObject* getDOMExceptionConstructor(ExecState*);
 
   // Internal class, used for the collection return by e.g. document.forms.myinput
   // when multiple nodes have the same name.
   class DOMNamedNodesCollection : public DOMObject {
   public:
-    DOMNamedNodesCollection(ExecState *exec, const WebCore::DeprecatedValueList< RefPtr<WebCore::Node> >& nodes );
+    DOMNamedNodesCollection(ExecState *exec, const Vector<RefPtr<WebCore::Node> >& nodes);
     virtual bool getOwnPropertySlot(ExecState *, const Identifier&, PropertySlot&);
     virtual const ClassInfo* classInfo() const { return &info; }
     static const ClassInfo info;
@@ -155,7 +155,7 @@ private:
     static JSValue *lengthGetter(ExecState* exec, JSObject *, const Identifier&, const PropertySlot& slot);
     static JSValue *indexGetter(ExecState* exec, JSObject *, const Identifier&, const PropertySlot& slot);
 
-    WebCore::DeprecatedValueList< RefPtr<WebCore::Node> > m_nodes;
+    Vector<RefPtr<WebCore::Node> > m_nodes;
   };
 
 } // namespace

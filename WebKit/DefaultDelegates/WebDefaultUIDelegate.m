@@ -203,10 +203,6 @@ static WebDefaultUIDelegate *sharedDelegate = nil;
 
 - (unsigned)webView:(WebView *)webView dragSourceActionMaskForPoint:(NSPoint)point;
 {
-    DOMElement *elementAtPoint = [[webView elementAtPoint:point] objectForKey:WebElementDOMNodeKey];
-    if ([elementAtPoint respondsToSelector:@selector(isContentEditable)] && [(id)elementAtPoint isContentEditable])
-        return (WebDragSourceActionAny & ~WebDragSourceActionLink);
-
     return WebDragSourceActionAny;
 }
 
@@ -219,6 +215,14 @@ static WebDefaultUIDelegate *sharedDelegate = nil;
 }
 
 - (void)webView:(WebView *)sender didScrollDocumentInFrameView:(WebFrameView *)frameView
+{
+}
+
+- (void)webView:(WebView *)sender willPopupMenu:(NSMenu *)menu
+{
+}
+
+- (void)webView:(WebView *)sender contextMenuItemSelected:(NSMenuItem *)item forElement:(NSDictionary *)element
 {
 }
 

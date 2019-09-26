@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2004 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2004-2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2006 Samuel Weinig <sam.weinig@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,22 +25,57 @@
  */
 
 #import <WebCore/DOMCSS.h>
-#import <WebCore/DOMHTML.h>
-#import <WebCore/DOMRange.h>
+#import <WebCore/DOMCSSStyleDeclaration.h>
+#import <WebCore/DOMElement.h>
 #import <WebCore/DOMEvents.h>
+#import <WebCore/DOMHTML.h>
+#import <WebCore/DOMHTMLDocument.h>
+#import <WebCore/DOMHTMLInputElement.h>
+#import <WebCore/DOMHTMLSelectElement.h>
+#import <WebCore/DOMNode.h>
+#import <WebCore/DOMRGBColor.h>
+#import <WebCore/DOMRange.h>
 
-@interface DOMRange (WebPrivate)
-// uses same algorithm as innerText
-- (NSString *)_text;
-@end
+#import <WebCore/DOMDocumentPrivate.h>
+#import <WebCore/DOMElementPrivate.h>
+#import <WebCore/DOMHTMLAnchorElementPrivate.h>
+#import <WebCore/DOMHTMLAreaElementPrivate.h>
+#import <WebCore/DOMHTMLBodyElementPrivate.h>
+#import <WebCore/DOMHTMLButtonElementPrivate.h>
+#import <WebCore/DOMHTMLFormElementPrivate.h>
+#import <WebCore/DOMHTMLImageElementPrivate.h>
+#import <WebCore/DOMHTMLInputElementPrivate.h>
+#import <WebCore/DOMHTMLLabelElementPrivate.h>
+#import <WebCore/DOMHTMLLegendElementPrivate.h>
+#import <WebCore/DOMHTMLLinkElementPrivate.h>
+#import <WebCore/DOMHTMLOptionsCollectionPrivate.h>
+#import <WebCore/DOMHTMLPreElementPrivate.h>
+#import <WebCore/DOMHTMLStyleElementPrivate.h>
+#import <WebCore/DOMHTMLTextAreaElementPrivate.h>
+#import <WebCore/DOMKeyboardEventPrivate.h>
+#import <WebCore/DOMMouseEventPrivate.h>
+#import <WebCore/DOMNodeIteratorPrivate.h>
+#import <WebCore/DOMNodePrivate.h>
+#import <WebCore/DOMProcessingInstructionPrivate.h>
+#import <WebCore/DOMRangePrivate.h>
+#import <WebCore/DOMUIEventPrivate.h>
+#import <WebCore/DOMWheelEventPrivate.h>
 
+// FIXME: this should be removed as soon as all internal Apple uses of it have been replaced with
+// calls to the public method - (NSColor *)color.
 @interface DOMRGBColor (WebPrivate)
-// fast and easy way of getting an NSColor for a DOMRGBColor
 - (NSColor *)_color;
 @end
 
-@interface DOMNode (WebPrivate)
-- (BOOL)isContentEditable;
+// FIXME: this should be removed as soon as all internal Apple uses of it have been replaced with
+// calls to the public method - (NSString *)text.
+@interface DOMRange (WebPrivate)
+- (NSString *)_text;
+@end
+
+@interface DOMRange (DOMRangeExtensions)
+- (NSRect)boundingBox;
+- (NSArray *)lineBoxRects;
 @end
 
 @interface DOMElement (WebPrivate)
@@ -79,12 +115,3 @@
 @interface DOMHTMLSelectElement(FormsAutoFillTransition)
 - (void)_activateItemAtIndex:(int)index;
 @end
-
-@interface DOMKeyboardEvent(PublicPending)
-- (void)initKeyboardEvent:(NSString *)typeArg :(BOOL)canBubbleArg :(BOOL)cancelableArg :(DOMAbstractView *)viewArg :(NSString *)keyIdentifierArg :(unsigned)keyLocationArg :(BOOL)ctrlKeyArg :(BOOL)altKeyArg :(BOOL)shiftKeyArg :(BOOL)metaKeyArg;
-@end
-
-@interface DOMWheelEvent(PublicPending)
-- (void)initWheelEvent:(BOOL)horizontal :(int)wheelDelta :(DOMAbstractView *)viewArg :(int)screenXArg :(int)screenYArg :(int)clientX :(int)clientY :(BOOL)ctrlKeyArg :(BOOL)altKeyArg :(BOOL)shiftKeyArg :(BOOL)metaKeyArg;
-@end
-

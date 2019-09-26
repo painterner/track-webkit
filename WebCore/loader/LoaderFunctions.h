@@ -24,43 +24,21 @@
  */
 
 #include <wtf/Vector.h>
-
-#ifdef __OBJC__
-@class NSDictionary;
-@class NSString;
-@class NSURLResponse;
-
-@interface NSDictionary (WebCore_Extras)
-+ (id)_webcore_dictionaryWithHeaderString:(NSString *)string;
-@end
-
-#else
-class NSDictionary;
-class NSString;
-class NSURLResponse;
-#endif
+#include <wtf/HashMap.h>
+#include "PlatformString.h"
+#include "HTTPHeaderMap.h"
 
 namespace WebCore {
 
 class CachedResource;
 class DeprecatedString;
 class DocLoader;
-class KURL;
 class Loader;
 class Request;
-class String;
-class ResourceLoader;
-
-Vector<char> ServeSynchronousRequest(Loader*, DocLoader*, ResourceLoader*, KURL& finalURL, DeprecatedString& headers);
+class ResourceRequest;
+class ResourceResponse;
 
 void CheckCacheObjectStatus(DocLoader*, CachedResource*);
 bool CheckIfReloading(DocLoader*);
-bool IsResponseURLEqualToURL(NSURLResponse*, const String& URL);
-DeprecatedString ResponseURL(NSURLResponse*);
-DeprecatedString ResponseMIMEType(NSURLResponse*);
-bool ResponseIsMultipart(NSURLResponse*);
-int NumberOfPendingOrLoadingRequests(DocLoader*);
-time_t CacheObjectExpiresTime(DocLoader*, NSURLResponse*);
-NSString* HeaderStringFromDictionary(NSDictionary* headers, int statusCode);
 
 }

@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -24,20 +24,20 @@
 #ifdef SVG_SUPPORT
 #include "SVGTextElement.h"
 
-#include "KCanvasRenderingStyle.h"
-#include "SVGAnimatedLengthList.h"
-#include "SVGAnimatedTransformList.h"
-#include "SVGMatrix.h"
+#include "AffineTransform.h"
+#include "FloatRect.h"
+#include "RenderSVGText.h"
+#include "SVGLengthList.h"
 #include "SVGRenderStyle.h"
 #include "SVGTSpanElement.h"
-#include "RenderStyle.h"
-#include <kcanvas/KCanvasCreator.h>
-#include <kcanvas/RenderSVGText.h>
+#include "SVGTransformList.h"
 
 namespace WebCore {
 
-SVGTextElement::SVGTextElement(const QualifiedName& tagName, Document *doc)
-: SVGTextPositioningElement(tagName, doc), SVGTransformable()
+SVGTextElement::SVGTextElement(const QualifiedName& tagName, Document* doc)
+    : SVGTextPositioningElement(tagName, doc)
+    , SVGTransformable()
+    , m_transform(new SVGTransformList)
 {
 }
 
@@ -45,36 +45,37 @@ SVGTextElement::~SVGTextElement()
 {
 }
 
-SVGAnimatedTransformList *SVGTextElement::transform() const
+ANIMATED_PROPERTY_DEFINITIONS(SVGTextElement, SVGTransformList*, TransformList, transformList, Transform, transform, SVGNames::transformAttr.localName(), m_transform.get())
+
+AffineTransform SVGTextElement::localMatrix() const
 {
-    return lazy_create<SVGAnimatedTransformList>(m_transform, this);
+    return m_localMatrix;
 }
 
-SVGMatrix *SVGTextElement::localMatrix() const
-{
-    return lazy_create<SVGMatrix>(m_localMatrix);
-}
-
-void SVGTextElement::parseMappedAttribute(MappedAttribute *attr)
+void SVGTextElement::parseMappedAttribute(MappedAttribute* attr)
 {
     if (attr->name() == SVGNames::transformAttr) {
-        SVGTransformList *localTransforms = transform()->baseVal();
-        localTransforms->clear();
-        
-        SVGTransformable::parseTransformAttribute(localTransforms, attr->value());
-        updateLocalTransform(localTransforms);
+        SVGTransformList* localTransforms = transformBaseValue();
+
+        ExceptionCode ec = 0;
+        localTransforms->clear(ec);
+
+        if (!SVGTransformable::parseTransformAttribute(localTransforms, attr->value()))
+            localTransforms->clear(ec);
+        else
+            updateLocalTransform(localTransforms);
     } else
         SVGTextPositioningElement::parseMappedAttribute(attr);
 }
 
-void SVGTextElement::updateLocalTransform(SVGTransformList *localTransforms)
+void SVGTextElement::updateLocalTransform(SVGTransformList* localTransforms)
 {
     // Update cached local matrix
     RefPtr<SVGTransform> localTransform = localTransforms->concatenate();
-    if(localTransform) {
+    if (localTransform) {
         m_localMatrix = localTransform->matrix();
         if (renderer()) {
-            renderer()->setLocalTransform(m_localMatrix->matrix());
+            renderer()->setLocalTransform(m_localMatrix);
             renderer()->setNeedsLayout(true);
         }
     }
@@ -84,16 +85,16 @@ void SVGTextElement::attach()
 {
     SVGStyledElement::attach();
 
-    if (renderer() && m_localMatrix)
-        renderer()->setLocalTransform(m_localMatrix->matrix());
+    if (renderer() && !m_localMatrix.isIdentity())
+        renderer()->setLocalTransform(m_localMatrix);
 }
 
-SVGElement *SVGTextElement::nearestViewportElement() const
+SVGElement* SVGTextElement::nearestViewportElement() const
 {
     return SVGTransformable::nearestViewportElement(this);
 }
 
-SVGElement *SVGTextElement::farthestViewportElement() const
+SVGElement* SVGTextElement::farthestViewportElement() const
 {
     return SVGTransformable::farthestViewportElement(this);
 }
@@ -103,22 +104,22 @@ FloatRect SVGTextElement::getBBox() const
     return SVGTransformable::getBBox(this);
 }
 
-SVGMatrix *SVGTextElement::getScreenCTM() const
+AffineTransform SVGTextElement::getScreenCTM() const
 {
-    return SVGLocatable::getScreenCTM(this);
+    return SVGTransformable::getScreenCTM(this);
 }
 
-SVGMatrix *SVGTextElement::getCTM() const
+AffineTransform SVGTextElement::getCTM() const
 {
-    return SVGLocatable::getScreenCTM(this);
+    return SVGTransformable::getCTM(this);
 }
 
-RenderObject *SVGTextElement::createRenderer(RenderArena *arena, RenderStyle *style)
+RenderObject* SVGTextElement::createRenderer(RenderArena* arena, RenderStyle* style)
 {
     return new (arena) RenderSVGText(this);
 }
 
-bool SVGTextElement::childShouldCreateRenderer(Node *child) const
+bool SVGTextElement::childShouldCreateRenderer(Node* child) const
 {
     if (child->isTextNode() || child->hasTagName(SVGNames::tspanTag) ||
         child->hasTagName(SVGNames::trefTag))

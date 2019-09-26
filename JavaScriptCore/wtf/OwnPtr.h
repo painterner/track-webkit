@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef KXMLCORE_OWN_PTR_H
-#define KXMLCORE_OWN_PTR_H
+#ifndef WTF_OwnPtr_h
+#define WTF_OwnPtr_h
 
 #include <algorithm>
 #include <wtf/Assertions.h>
@@ -36,7 +36,7 @@ namespace WTF {
         T* get() const { return m_ptr; }
         T* release() { T* ptr = m_ptr; m_ptr = 0; return ptr; }
 
-        void set(T* ptr) { ASSERT(m_ptr != ptr); safeDelete(); m_ptr = ptr; }
+        void set(T* ptr) { ASSERT(!ptr || m_ptr != ptr); safeDelete(); m_ptr = ptr; }
         void clear() { safeDelete(); m_ptr = 0; }
 
         T& operator*() const { ASSERT(m_ptr); return *m_ptr; }
@@ -58,8 +58,13 @@ namespace WTF {
     
     template <typename T> inline void swap(OwnPtr<T>& a, OwnPtr<T>& b) { a.swap(b); }
 
+    template <typename T> inline T* getPtr(const OwnPtr<T>& p)
+    {
+        return p.get();
+    }
+
 } // namespace WTF
 
 using WTF::OwnPtr;
 
-#endif // KXMLCORE_OWN_PTR_H
+#endif // WTF_OwnPtr_h

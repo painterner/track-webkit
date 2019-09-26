@@ -29,22 +29,20 @@
 #import "Document.h"
 #import "Event.h"
 #import "FrameMac.h"
+#import "Node.h"
+#import "PlatformString.h"
 #import "Range.h"
-#import "kjs_dom.h"
-#import "kjs_proxy.h"
+#import "RangeException.h"
+#import "SVGException.h"
 #import "WebScriptObjectPrivate.h"
 #import "XPathEvaluator.h"
-
-using namespace WebCore;
-
-using KJS::ExecState;
-using KJS::Interpreter;
-using KJS::JSObject;
-
-using KJS::Bindings::RootObject;
+#import "kjs_dom.h"
+#import "kjs_proxy.h"
 
 //------------------------------------------------------------------------------------------
-// Wrapping khtml implementation objects
+// Wrapping WebCore implementation objects
+
+namespace WebCore {
 
 static HashMap<DOMObjectInternal*, NSObject*>* wrapperCache;
 
@@ -69,48 +67,15 @@ void removeDOMWrapper(DOMObjectInternal* impl)
     wrapperCache->remove(impl);
 }
 
-//------------------------------------------------------------------------------------------
-// Exceptions
+} // namespace WebCore
 
-NSString * const DOMException = @"DOMException";
-NSString * const DOMRangeException = @"DOMRangeException";
-NSString * const DOMEventException = @"DOMEventException";
-#ifdef XPATH_SUPPORT
-NSString * const DOMXPathException = @"DOMXPathException";
-#endif // XPATH_SUPPORT
-
-void raiseDOMException(ExceptionCode ec)
-{
-    ASSERT(ec);
-
-    NSString *name = ::DOMException;
-
-    int code = ec;
-    if (ec >= RangeExceptionOffset && ec <= RangeExceptionMax) {
-        name = DOMRangeException;
-        code -= RangeExceptionOffset;
-    } else if (ec >= EventExceptionOffset && ec <= EventExceptionMax) {
-        name = DOMEventException;
-        code -= EventExceptionOffset;
-#ifdef XPATH_SUPPORT
-    } else if (ec >= XPathExceptionOffset && ec <= XPathExceptionMax) {
-        name = DOMXPathException;
-        code -= XPathExceptionOffset;
-#endif // XPATH_SUPPORT
-    }
-
-    NSString *reason = [NSString stringWithFormat:@"*** Exception received from DOM API: %d", code];
-    NSException *exception = [NSException exceptionWithName:name reason:reason
-        userInfo:[NSDictionary dictionaryWithObject:[NSNumber numberWithInt:code] forKey:name]];
-    [exception raise];
-}
 
 //------------------------------------------------------------------------------------------
 
 @implementation WebScriptObject (WebScriptObjectInternal)
 
 // Only called by DOMObject subclass.
-- _init
+- (id)_init
 {
     self = [super init];
 
@@ -138,19 +103,35 @@ void raiseDOMException(ExceptionCode ec)
     
     // Extract the WebCore::Node from the ObjectiveC wrapper.
     DOMNode *n = (DOMNode *)self;
-    Node *nodeImpl = [n _node];
+    WebCore::Node *nodeImpl = [n _node];
 
     // Dig up Interpreter and ExecState.
-    Frame *frame = nodeImpl->document()->frame();
-    Interpreter *interpreter = frame->jScript()->interpreter();
-    ExecState *exec = interpreter->globalExec();
+    WebCore::Frame *frame = nodeImpl->document()->frame();
+    KJS::Interpreter *interpreter = frame->scriptProxy()->interpreter();
+    KJS::ExecState *exec = interpreter->globalExec();
     
     // Get (or create) a cached JS object for the DOM node.
-    JSObject *scriptImp = static_cast<JSObject *>(toJS(exec, nodeImpl));
+    KJS::JSObject *scriptImp = static_cast<KJS::JSObject*>(KJS::toJS(exec, nodeImpl));
 
-    const RootObject *executionContext = Mac(frame)->bindingRootObject();
+    const KJS::Bindings::RootObject* rootObject = WebCore::Mac(frame)->bindingRootObject();
 
-    [self _initializeWithObjectImp:scriptImp originExecutionContext:executionContext executionContext:executionContext];
+    [self _initializeWithObjectImp:scriptImp originRootObject:rootObject rootObject:rootObject];
 }
 
 @end
+
+namespace WebCore {
+
+NSString* displayString(const String& string, const Node* node)
+{
+    if (!node)
+        return string;
+    Document* document = node->document();
+    if (!document)
+        return string;
+    String copy(string);
+    copy.replace('\\', document->backslashAsCurrencySymbol());
+    return copy;
+}
+
+} // namespace WebCore

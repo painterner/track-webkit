@@ -37,9 +37,9 @@
 
 namespace WebCore {
 
-CachedScript::CachedScript(DocLoader* dl, const String &url, CachePolicy cachePolicy, time_t _expireDate, const DeprecatedString& charset)
+CachedScript::CachedScript(DocLoader* dl, const String& url, CachePolicy cachePolicy, time_t _expireDate, const String& charset)
     : CachedResource(url, Script, cachePolicy, _expireDate)
-    , m_encoding(charset.latin1())
+    , m_encoding(charset)
 {
     // It's javascript we want.
     // But some websites think their scripts are <some wrong mimetype here>
@@ -47,44 +47,26 @@ CachedScript::CachedScript(DocLoader* dl, const String &url, CachePolicy cachePo
     setAccept("*/*");
     m_errorOccurred = false;
     // load the file
-    Cache::loader()->load(dl, this, false);
+    cache()->loader()->load(dl, this, false);
     m_loading = true;
     if (!m_encoding.isValid())
-        m_encoding = TextEncoding(Latin1Encoding);
-}
-
-CachedScript::CachedScript(const String &url, const DeprecatedString &script_data)
-    : CachedResource(url, Script, CachePolicyVerify, 0, script_data.length())
-    , m_encoding(InvalidEncoding)
-{
-    m_errorOccurred = false;
-    m_loading = false;
-    m_status = Persistent;
-    m_script = String(script_data);
+        m_encoding = Latin1Encoding();
 }
 
 CachedScript::~CachedScript()
 {
 }
 
-void CachedScript::ref(CachedResourceClient *c)
+void CachedScript::ref(CachedResourceClient* c)
 {
     CachedResource::ref(c);
-
-    if(!m_loading) c->notifyFinished(this);
+    if (!m_loading)
+        c->notifyFinished(this);
 }
 
-void CachedScript::deref(CachedResourceClient *c)
+void CachedScript::setEncoding(const String& chs)
 {
-    Cache::flush();
-    CachedResource::deref(c);
-    if ( canDelete() && m_free )
-      delete this;
-}
-
-void CachedScript::setCharset(const DeprecatedString &chs)
-{
-    TextEncoding encoding = TextEncoding(chs.latin1());
+    TextEncoding encoding(chs);
     if (encoding.isValid())
         m_encoding = encoding;
 }
@@ -95,7 +77,7 @@ void CachedScript::data(Vector<char>& data, bool allDataReceived)
         return;
 
     setSize(data.size());
-    m_script = String(m_encoding.toUnicode(data.data(), size()));
+    m_script = m_encoding.decode(data.data(), size());
     m_loading = false;
     checkNotify();
 }
@@ -106,7 +88,7 @@ void CachedScript::checkNotify()
         return;
 
     CachedResourceClientWalker w(m_clients);
-    while (CachedResourceClient *c = w.next())
+    while (CachedResourceClient* c = w.next())
         c->notifyFinished(this);
 }
 

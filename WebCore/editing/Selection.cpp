@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2004, 2005, 2006 Apple Computer, Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -44,32 +44,47 @@ Selection::Selection()
 {
 }
 
-Selection::Selection(const Position &pos, EAffinity affinity)
-    : m_base(pos), m_extent(pos)
+Selection::Selection(const Position& pos, EAffinity affinity)
+    : m_base(pos)
+    , m_extent(pos)
     , m_affinity(affinity)
     , m_granularity(CharacterGranularity)
-    , m_state(NONE)
-    , m_baseIsFirst(true)
 {
     validate();
 }
 
-Selection::Selection(const Position &base, const Position &extent, EAffinity affinity)
-    : m_base(base), m_extent(extent)
+Selection::Selection(const Position& base, const Position& extent, EAffinity affinity)
+    : m_base(base)
+    , m_extent(extent)
     , m_affinity(affinity)
     , m_granularity(CharacterGranularity)
-    , m_state(NONE)
-    , m_baseIsFirst(true)
 {
     validate();
 }
 
-Selection::Selection(const Range *range, EAffinity affinity)
-    : m_base(range->startPosition()), m_extent(range->endPosition())
+Selection::Selection(const VisiblePosition& pos)
+    : m_base(pos.deepEquivalent())
+    , m_extent(pos.deepEquivalent())
+    , m_affinity(pos.affinity())
+    , m_granularity(CharacterGranularity)
+{
+    validate();
+}
+
+Selection::Selection(const VisiblePosition& base, const VisiblePosition& extent)
+    : m_base(base.deepEquivalent())
+    , m_extent(extent.deepEquivalent())
+    , m_affinity(base.affinity())
+    , m_granularity(CharacterGranularity)
+{
+    validate();
+}
+
+Selection::Selection(const Range* range, EAffinity affinity)
+    : m_base(range->startPosition())
+    , m_extent(range->endPosition())
     , m_affinity(affinity)
     , m_granularity(CharacterGranularity)
-    , m_state(NONE)
-    , m_baseIsFirst(true)
 {
     validate();
 }
@@ -77,6 +92,30 @@ Selection::Selection(const Range *range, EAffinity affinity)
 Selection Selection::selectionFromContentsOfNode(Node* node)
 {
     return Selection(Position(node, 0), Position(node, maxDeepOffset(node)), DOWNSTREAM);
+}
+
+void Selection::setBase(const Position& position)
+{
+    m_base = position;
+    validate();
+}
+
+void Selection::setBase(const VisiblePosition& visiblePosition)
+{
+    m_base = visiblePosition.deepEquivalent();
+    validate();
+}
+
+void Selection::setExtent(const Position& position)
+{
+    m_extent = position;
+    validate();
+}
+
+void Selection::setExtent(const VisiblePosition& visiblePosition)
+{
+    m_extent = visiblePosition.deepEquivalent();
+    validate();
 }
 
 PassRefPtr<Range> Selection::toRange() const
@@ -239,7 +278,7 @@ void Selection::validate()
             else {
                 m_end = startOfNextParagraph.deepEquivalent();
                 // Stay within enclosing node, e.g. do not span end of table.
-                if (visibleParagraphEnd.deepEquivalent().node()->isAncestor(m_end.node()))
+                if (visibleParagraphEnd.deepEquivalent().node()->isDescendantOf(m_end.node()))
                     m_end = visibleParagraphEnd.deepEquivalent();
             }
             break;
@@ -299,9 +338,9 @@ void Selection::adjustForEditableContent()
     if (m_base.isNull() || m_start.isNull() || m_end.isNull())
         return;
 
-    Node *baseRoot = m_base.node()->rootEditableElement();
-    Node *startRoot = m_start.node()->rootEditableElement();
-    Node *endRoot = m_end.node()->rootEditableElement();
+    Node* baseRoot = highestEditableRoot(m_base);
+    Node* startRoot = highestEditableRoot(m_start);
+    Node* endRoot = highestEditableRoot(m_end);
     
     Node* baseEditableAncestor = lowestEditableAncestor(m_base.node());
     
@@ -317,6 +356,10 @@ void Selection::adjustForEditableContent()
         if (startRoot != baseRoot) {
             VisiblePosition first = firstEditablePositionAfterPositionInRoot(m_start, baseRoot);
             m_start = first.deepEquivalent();
+            if (m_start.isNull()) {
+                ASSERT_NOT_REACHED();
+                m_start = m_end;
+            }
         }
         // If the end is outside the base's editable root, cap it at the end of that root.
         // If the end is in non-editable content that is inside the base's root, put it
@@ -324,6 +367,10 @@ void Selection::adjustForEditableContent()
         if (endRoot != baseRoot) {
             VisiblePosition last = lastEditablePositionBeforePositionInRoot(m_end, baseRoot);
             m_end = last.deepEquivalent();
+            if (m_end.isNull()) {
+                ASSERT_NOT_REACHED();
+                m_end = m_start;
+            }
         }
     // The selection is based in non-editable content.
     } else {
@@ -336,14 +383,15 @@ void Selection::adjustForEditableContent()
         if (endRoot || endEditableAncestor != baseEditableAncestor) {
             
             Position p = previousVisuallyDistinctCandidate(m_end);
-            if (p.isNull() && endRoot && endRoot->isShadowNode())
-                p = Position(endRoot->shadowParentNode(), maxDeepOffset(endRoot->shadowParentNode()));
+            Node* shadowAncestor = endRoot ? endRoot->shadowAncestorNode() : 0;
+            if (p.isNull() && endRoot && (shadowAncestor != endRoot))
+                p = Position(shadowAncestor, maxDeepOffset(shadowAncestor));
             while (p.isNotNull() && !(lowestEditableAncestor(p.node()) == baseEditableAncestor && !isEditablePosition(p))) {
                 Node* root = editableRootForPosition(p);
-                Node* shadowParent = root && root->isShadowNode() ? root->shadowParentNode() : 0;
+                shadowAncestor = root ? root->shadowAncestorNode() : 0;
                 p = isAtomicNode(p.node()) ? positionBeforeNode(p.node()) : previousVisuallyDistinctCandidate(p);
-                if (p.isNull() && shadowParent)
-                    p = Position(shadowParent, maxDeepOffset(shadowParent));
+                if (p.isNull() && (shadowAncestor != root))
+                    p = Position(shadowAncestor, maxDeepOffset(shadowAncestor));
             }
             VisiblePosition previous(p);
             
@@ -362,14 +410,15 @@ void Selection::adjustForEditableContent()
         Node* startEditableAncestor = lowestEditableAncestor(m_start.node());      
         if (startRoot || startEditableAncestor != baseEditableAncestor) {
             Position p = nextVisuallyDistinctCandidate(m_start);
-            if (p.isNull() && startRoot && startRoot->isShadowNode())
-                p = Position(startRoot->shadowParentNode(), 0);
+            Node* shadowAncestor = startRoot ? startRoot->shadowAncestorNode() : 0;
+            if (p.isNull() && startRoot && (shadowAncestor != startRoot))
+                p = Position(shadowAncestor, 0);
             while (p.isNotNull() && !(lowestEditableAncestor(p.node()) == baseEditableAncestor && !isEditablePosition(p))) {
                 Node* root = editableRootForPosition(p);
-                Node* shadowParent = root && root->isShadowNode() ? root->shadowParentNode() : 0;
+                shadowAncestor = root ? root->shadowAncestorNode() : 0;
                 p = isAtomicNode(p.node()) ? positionAfterNode(p.node()) : nextVisuallyDistinctCandidate(p);
-                if (p.isNull() && shadowParent)
-                    p = Position(shadowParent, 0);
+                if (p.isNull() && (shadowAncestor != root))
+                    p = Position(shadowAncestor, 0);
             }
             VisiblePosition next(p);
             
@@ -451,8 +500,10 @@ void Selection::formatForDebugger(char* buffer, unsigned length) const
 
 void Selection::showTreeForThis() const
 {
-    if (start().node())
+    if (start().node()) {
         start().node()->showTreeAndMark(start().node(), "S", end().node(), "E");
+        fprintf(stderr, "start offset: %d, end offset: %d\n", start().offset(), end().offset());
+    }
 }
 
 #endif

@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -29,7 +29,7 @@
 namespace WebCore {
 
     class MappedAttribute;
-    class StringImpl;
+    class String;
     class SVGStringList;
 
     class SVGTests {
@@ -38,15 +38,15 @@ namespace WebCore {
         virtual ~SVGTests();
 
         // 'SVGTests' functions
-        SVGStringList *requiredFeatures() const;
-        SVGStringList *requiredExtensions() const;
-        SVGStringList *systemLanguage() const;
+        SVGStringList* requiredFeatures() const;
+        SVGStringList* requiredExtensions() const;
+        SVGStringList* systemLanguage() const;
 
-        bool hasExtension(StringImpl *extension) const;
+        bool hasExtension(const String&) const;
 
         bool isValid() const;
         
-        bool parseMappedAttribute(MappedAttribute *attr);
+        bool parseMappedAttribute(MappedAttribute*);
 
     private:
         mutable RefPtr<SVGStringList> m_features;

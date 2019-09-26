@@ -17,13 +17,15 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory="$(WebKitOutputDir)\$(ConfigurationName)"
-			IntermediateDirectory="$(WebKitOutputDir)\JavaScriptCore.intermediate\$(ConfigurationName)\testkjs.intermediate\"
+			OutputDirectory="$(WebKitOutputDir)\bin"
+			IntermediateDirectory="$(WebKitOutputDir)\obj\JavaScriptCore\$(ProjectName)\$(ConfigurationName)"
 			ConfigurationType="1"
+			InheritedPropertySheets="..\debug.vsprops"
 			CharacterSet="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
+				CommandLine="if not &quot;$(BuildBot)&quot;==&quot;&quot; exit /b&#x0D;&#x0A;&#x0D;&#x0A;mkdir 2&gt;NUL &quot;$(WebKitOutputDir)\bin&quot;&#x0D;&#x0A;if exist &quot;$(WebKitSDKDir)\bin\icudt36.dll&quot; xcopy /y /d &quot;$(WebKitSDKDir)\bin\icudt36.dll&quot; &quot;$(WebKitOutputDir)\bin&quot;&#x0D;&#x0A;if exist &quot;$(WebKitSDKDir)\bin\icudt36$(ConfigSuffix).dll&quot; xcopy /y /d &quot;$(WebKitSDKDir)\bin\icudt36$(ConfigSuffix).dll&quot; &quot;$(WebKitOutputDir)\bin&quot;&#x0D;&#x0A;if exist &quot;$(WebKitSDKDir)\bin\icuuc36$(ConfigSuffix).dll&quot; xcopy /y /d &quot;$(WebKitSDKDir)\bin\icuuc36$(ConfigSuffix).dll&quot; &quot;$(WebKitOutputDir)\bin&quot;&#x0D;&#x0A;if exist &quot;$(WebKitSDKDir)\bin\icuuc36$(ConfigSuffix).pdb&quot; xcopy /y /d &quot;$(WebKitSDKDir)\bin\icuuc36$(ConfigSuffix).pdb&quot; &quot;$(WebKitOutputDir)\bin&quot;&#x0D;&#x0A;"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -40,15 +42,18 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="&quot;$(WebKitOutputDir)\JavaScriptCore.intermediate\$(ConfigurationName)\JavaScriptCore.intermediate\DerivedSources\&quot;;../../;&quot;../../os-win32/&quot;;../../pcre/;../../kjs/;../../wtf/;../../../icu/include"
+				AdditionalIncludeDirectories="&quot;$(WebKitOutputDir)\obj\JavaScriptCore\$(ConfigurationName)\DerivedSources\&quot;;../../;&quot;../../os-win32/&quot;;../../pcre/;../../kjs/;../../wtf/;&quot;$(WebKitSDKDir)\include\icu&quot;;../../../icu/include"
 				PreprocessorDefinitions="_CRT_SECURE_NO_DEPRECATE; WIN32"
 				MinimalRebuild="true"
+				ExceptionHandling="0"
 				BasicRuntimeChecks="3"
-				RuntimeLibrary="3"
+				RuntimeLibrary="2"
 				UsePrecompiledHeader="0"
-				WarningLevel="1"
-				Detect64BitPortabilityProblems="false"
+				WarningLevel="4"
+				WarnAsError="true"
+				Detect64BitPortabilityProblems="true"
 				DebugInformationFormat="4"
+				DisableSpecificWarnings="4127;4355;4510;4512;4610;4706;4996"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -61,8 +66,11 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalOptions="&quot;$(WebKitOutputDir)\JavaScriptCore.intermediate\$(ConfigurationName)\JavaScriptCore.intermediate\JavaScriptCore.lib&quot; ..\..\..\icu\lib\icuuc.lib&#x0D;&#x0A;winmm.lib"
+				LinkLibraryDependencies="false"
+				AdditionalDependencies="JavaScriptCore$(ConfigSuffix).lib WTF$(ConfigSuffix).lib icuuc$(ConfigSuffix).lib winmm.lib"
+				OutputFile="$(OutDir)\$(ProjectName)$(ConfigSuffix).exe"
 				LinkIncremental="2"
+				AdditionalLibraryDirectories="&quot;$(WebKitOutputDir)\lib&quot;;..\..\..\icu\lib;&quot;$(WebKitSDKDir)\lib&quot;"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				TargetMachine="1"
@@ -95,14 +103,16 @@
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory="$(WebKitOutputDir)\$(ConfigurationName)"
-			IntermediateDirectory="$(WebKitOutputDir)\JavaScriptCore.intermediate\$(ConfigurationName)\testkjs.intermediate\"
+			OutputDirectory="$(WebKitOutputDir)\bin"
+			IntermediateDirectory="$(WebKitOutputDir)\obj\JavaScriptCore\$(ProjectName)\$(ConfigurationName)"
 			ConfigurationType="1"
+			InheritedPropertySheets="..\release.vsprops"
 			CharacterSet="1"
 			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
+				CommandLine="if not &quot;$(BuildBot)&quot;==&quot;&quot; exit /b&#x0D;&#x0A;&#x0D;&#x0A;mkdir 2&gt;NUL &quot;$(WebKitOutputDir)\bin&quot;&#x0D;&#x0A;if exist &quot;$(WebKitSDKDir)\bin\icudt36.dll&quot; xcopy /y /d &quot;$(WebKitSDKDir)\bin\icudt36.dll&quot; &quot;$(WebKitOutputDir)\bin&quot;&#x0D;&#x0A;if exist &quot;$(WebKitSDKDir)\bin\icudt36$(ConfigSuffix).dll&quot; xcopy /y /d &quot;$(WebKitSDKDir)\bin\icudt36$(ConfigSuffix).dll&quot; &quot;$(WebKitOutputDir)\bin&quot;&#x0D;&#x0A;if exist &quot;$(WebKitSDKDir)\bin\icuuc36$(ConfigSuffix).dll&quot; xcopy /y /d &quot;$(WebKitSDKDir)\bin\icuuc36$(ConfigSuffix).dll&quot; &quot;$(WebKitOutputDir)\bin&quot;&#x0D;&#x0A;if exist &quot;$(WebKitSDKDir)\bin\icuuc36$(ConfigSuffix).pdb&quot; xcopy /y /d &quot;$(WebKitSDKDir)\bin\icuuc36$(ConfigSuffix).pdb&quot; &quot;$(WebKitOutputDir)\bin&quot;&#x0D;&#x0A;"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -118,13 +128,16 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="&quot;$(WebKitOutputDir)\JavaScriptCore.intermediate\$(ConfigurationName)\JavaScriptCore.intermediate\DerivedSources\&quot;;../../;&quot;../../os-win32/&quot;;../../pcre/;../../kjs/;../../wtf/;../../../icu/include"
+				AdditionalIncludeDirectories="&quot;$(WebKitOutputDir)\obj\JavaScriptCore\$(ConfigurationName)\DerivedSources\&quot;;../../;&quot;../../os-win32/&quot;;../../pcre/;../../kjs/;../../wtf/;&quot;$(WebKitSDKDir)\include\icu&quot;;../../../icu/include"
 				PreprocessorDefinitions="_CRT_SECURE_NO_DEPRECATE; WIN32"
+				ExceptionHandling="0"
 				RuntimeLibrary="2"
 				UsePrecompiledHeader="0"
-				WarningLevel="1"
-				Detect64BitPortabilityProblems="false"
+				WarningLevel="4"
+				WarnAsError="true"
+				Detect64BitPortabilityProblems="true"
 				DebugInformationFormat="3"
+				DisableSpecificWarnings="4127;4355;4510;4512;4610;4706;4996"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -137,8 +150,11 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalOptions="&quot;$(WebKitOutputDir)\JavaScriptCore.intermediate\$(ConfigurationName)\JavaScriptCore.intermediate\JavaScriptCore.lib&quot; ..\..\..\icu\lib\icuuc.lib&#x0D;&#x0A;winmm.lib"
+				LinkLibraryDependencies="false"
+				AdditionalDependencies="JavaScriptCore$(ConfigSuffix).lib WTF$(ConfigSuffix).lib icuuc$(ConfigSuffix).lib winmm.lib"
+				OutputFile="$(OutDir)\$(ProjectName)$(ConfigSuffix).exe"
 				LinkIncremental="1"
+				AdditionalLibraryDirectories="&quot;$(WebKitOutputDir)\lib&quot;;..\..\..\icu\lib;&quot;$(WebKitSDKDir)\lib&quot;"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				OptimizeReferences="2"

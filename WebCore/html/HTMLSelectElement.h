@@ -26,19 +26,19 @@
 #ifndef HTML_HTMLSelectElementImpl_H
 #define HTML_HTMLSelectElementImpl_H
 
-#include "HTMLGenericFormElement.h"
+#include "Event.h"
 #include "HTMLCollection.h"
-#include "RenderStyle.h"
+#include "HTMLGenericFormElement.h"
 #include <wtf/Vector.h>
 
 namespace WebCore {
 
-class DeprecatedRenderSelect;
 class HTMLOptionElement;
 class HTMLOptionsCollection;
+class KeyboardEvent;
 
 class HTMLSelectElement : public HTMLGenericFormElement {
-    friend class DeprecatedRenderSelect;
+
 public:
     HTMLSelectElement(Document*, HTMLFormElement* = 0);
     HTMLSelectElement(const QualifiedName& tagName, Document*, HTMLFormElement* = 0);
@@ -49,13 +49,19 @@ public:
 
     virtual const AtomicString& type() const;
     
-    virtual bool isKeyboardFocusable() const;
+    virtual bool isKeyboardFocusable(KeyboardEvent*) const;
     virtual bool isMouseFocusable() const;
+    virtual bool canSelectAll() const;
+    virtual void selectAll();
 
     virtual void recalcStyle(StyleChange);
 
+    virtual void dispatchBlurEvent();
+
     int selectedIndex() const;
-    void setSelectedIndex(int index, bool = true);
+    void setSelectedIndex(int index, bool deselect = true, bool fireOnChange = false);
+    void notifyOptionSelected(HTMLOptionElement* selectedOption, bool selected);
+    int lastSelectedListIndex() const;
 
     virtual bool isEnumeratable() const { return true; }
 
@@ -105,7 +111,6 @@ public:
         return m_listItems;
     }
     virtual void reset();
-    void notifyOptionSelected(HTMLOptionElement* selectedOption, bool selected);
 
     virtual void defaultEventHandler(Event*);
     virtual void accessKeyAction(bool sendToAnyElement);
@@ -117,19 +122,43 @@ public:
     void setOption(unsigned index, HTMLOptionElement*, ExceptionCode&);
     void setLength(unsigned, ExceptionCode&);
 
-    virtual Node* namedItem(const String& name, bool caseSensitive = true);
+    Node* namedItem(const String& name, bool caseSensitive = true);
+    Node* item(unsigned index);
 
     HTMLCollection::CollectionInfo* collectionInfo() { return &m_collectionInfo; }
+    
+    void setActiveSelectionAnchorIndex(int index);
+    void setActiveSelectionEndIndex(int index) { m_activeSelectionEndIndex = index; }
+    void updateListBoxSelection(bool deselectOtherOptions);
+    void listBoxOnChange();
 
 private:
     void recalcListItems() const;
-    bool shouldUseMenuList() const { return !m_multiple && m_size <= 1; }
+    void deselectItems(HTMLOptionElement* excludeElement = 0);
+    bool usesMenuList() const { return !m_multiple && m_size <= 1; }
+    int nextSelectableListIndex(int startIndex);
+    int previousSelectableListIndex(int startIndex);
+    void menuListDefaultEventHandler(Event*);
+    void listBoxDefaultEventHandler(Event*);
+    void typeAheadFind(KeyboardEvent*);
 
     mutable Vector<HTMLElement*> m_listItems;
+    Vector<bool> m_cachedStateForActiveSelection;
+    Vector<bool> m_lastOnChangeSelection;
     int m_minwidth;
     int m_size;
     bool m_multiple;
     mutable bool m_recalcListItems;
+    int m_lastOnChangeIndex;
+    
+    int m_activeSelectionAnchorIndex;
+    int m_activeSelectionEndIndex;  
+    bool m_activeSelectionState;
+
+    // Instance variables for type-ahead find
+    UChar m_repeatingChar;
+    DOMTimeStamp m_lastCharTime;
+    String m_typedString;
 
     HTMLCollection::CollectionInfo m_collectionInfo;
 };

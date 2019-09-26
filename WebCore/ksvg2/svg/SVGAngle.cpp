@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,37 +20,33 @@
     Boston, MA 02111-1307, USA.
 */
 
-//#include "SVGAngle.h"
 #include "config.h"
 #ifdef SVG_SUPPORT
+#include "SVGAngle.h"
+
 #include <math.h>
 
-#include <ksvg2/ksvg.h>
-//#include <kdom/ecma/Ecma.h>
-
-#include "SVGAngle.h"
-#include "SVGHelper.h"
-
-using namespace WebCore;
+namespace WebCore {
 
 const double deg2rad = 0.017453292519943295769; // pi/180
 const double deg2grad = 400.0 / 360.0;
 
 #define rad2grad deg2grad / deg2rad
 
-SVGAngle::SVGAngle(const SVGStyledElement *context) : Shared<SVGAngle>()
+SVGAngle::SVGAngle(const SVGStyledElement* context)
+    : Shared<SVGAngle>()
+    , m_unitType(SVG_ANGLETYPE_UNKNOWN)
+    , m_value(0)
+    , m_valueInSpecifiedUnits(0)
+    , m_context(context)
 {
-    m_unitType = SVG_ANGLETYPE_UNKNOWN;
-    m_valueInSpecifiedUnits = 0;
-    m_value = 0;
-    m_context = context;
 }
 
 SVGAngle::~SVGAngle()
 {
 }
 
-unsigned short SVGAngle::unitType() const
+SVGAngle::SVGAngleType SVGAngle::unitType() const
 {
     return m_unitType;
 }
@@ -92,7 +88,7 @@ void SVGAngle::setValueAsString(const String& s)
     m_valueAsString = s;
 
     bool bOK;
-    m_valueInSpecifiedUnits = m_valueAsString.deprecatedString().toDouble(&bOK);
+    m_valueInSpecifiedUnits = m_valueAsString.toDouble(&bOK);
     m_unitType = SVG_ANGLETYPE_UNSPECIFIED;
 
     if (!bOK) {
@@ -111,7 +107,7 @@ String SVGAngle::valueAsString() const
 {
     m_valueAsString = String::number(m_valueInSpecifiedUnits);
 
-    switch(m_unitType) {
+    switch (m_unitType) {
         case SVG_ANGLETYPE_UNSPECIFIED:
         case SVG_ANGLETYPE_DEG:
             m_valueAsString += "deg";
@@ -122,6 +118,8 @@ String SVGAngle::valueAsString() const
         case SVG_ANGLETYPE_GRAD:
             m_valueAsString += "grad";
             break;
+        case SVG_ANGLETYPE_UNKNOWN:
+            break;
     }
     
     return m_valueAsString;
@@ -129,7 +127,7 @@ String SVGAngle::valueAsString() const
 
 void SVGAngle::newValueSpecifiedUnits(unsigned short unitType, float valueInSpecifiedUnits)
 {
-    m_unitType = unitType;
+    m_unitType = (SVGAngleType)unitType;
     m_valueInSpecifiedUnits = valueInSpecifiedUnits;
     calculate();
 }
@@ -152,7 +150,7 @@ void SVGAngle::convertToSpecifiedUnits(unsigned short unitType)
     else if (m_unitType == SVG_ANGLETYPE_GRAD && unitType == SVG_ANGLETYPE_DEG)
         m_valueInSpecifiedUnits /= deg2grad;
 
-    m_unitType = unitType;
+    m_unitType = (SVGAngleType)unitType;
 }
 
 // Helpers
@@ -176,16 +174,17 @@ double SVGAngle::shortestArcBisector(double angle1, double angle2)
     return bisector;
 }
 
-const SVGStyledElement *SVGAngle::context() const
+const SVGStyledElement* SVGAngle::context() const
 {
     return m_context;
 }
 
-void SVGAngle::setContext(const SVGStyledElement *context)
+void SVGAngle::setContext(const SVGStyledElement* context)
 {
     m_context = context;
 }
 
+}
 
 // vim:ts=4:noet
 #endif // SVG_SUPPORT

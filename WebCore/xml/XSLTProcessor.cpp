@@ -2,6 +2,7 @@
  * This file is part of the XSL implementation.
  *
  * Copyright (C) 2004, 2005, 2006 Apple Computer, Inc.
+ * Copyright (C) 2005, 2006 Alexey Proskuryakov <ap@webkit.org>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -21,21 +22,27 @@
 
 #include "config.h"
 
-#ifdef KHTML_XSLT
+#ifdef XSLT_SUPPORT
 
 #include "XSLTProcessor.h"
 
+#include "CString.h"
 #include "Cache.h"
 #include "DOMImplementation.h"
-#include "Decoder.h"
 #include "DocLoader.h"
 #include "DocumentFragment.h"
 #include "Frame.h"
+#include "FrameLoader.h"
+#include "FrameView.h"
 #include "HTMLDocument.h"
 #include "HTMLTokenizer.h"
 #include "LoaderFunctions.h"
-#include "ResourceLoader.h"
+#include "ResourceHandle.h"
+#include "ResourceRequest.h"
+#include "ResourceResponse.h"
 #include "Text.h"
+#include "TextResourceDecoder.h"
+#include "XMLTokenizer.h"
 #include "loader.h"
 #include "markup.h"
 #include <libxslt/imports.h>
@@ -83,14 +90,15 @@ static xmlDocPtr docLoaderFunc(const xmlChar *uri,
             xmlChar *base = xmlNodeGetBase(context->document->doc, context->node);
             KURL url((const char*)base, (const char*)uri);
             xmlFree(base);
-            KURL finalURL;
-            ResourceLoader* job = new ResourceLoader(0, "GET", url);
-            DeprecatedString headers;
+            ResourceResponse response;
             xmlGenericErrorFunc oldErrorFunc = xmlGenericError;
             void *oldErrorContext = xmlGenericErrorContext;
-            
-            Vector<char> data = ServeSynchronousRequest(Cache::loader(), globalDocLoader, job, finalURL, headers);
-        
+
+            Vector<char> data;
+                
+            if (globalDocLoader->frame()) 
+                globalDocLoader->frame()->loader()->loadResourceSynchronously(url, response, data);
+
             xmlSetGenericErrorFunc(0, parseErrorFunc);
             // We don't specify an encoding here. Neither Gecko nor WinIE respects
             // the encoding specified in the HTTP headers.
@@ -135,7 +143,7 @@ static bool saveResultToString(xmlDocPtr resultDoc, xsltStylesheetPtr sheet, Dep
     return (retval >= 0);
 }
 
-static inline void transformTextStringToXHTMLDocumentString(DeprecatedString &text)
+static inline void transformTextStringToXHTMLDocumentString(String &text)
 {
     // Modify the output so that it is a well-formed XHTML document with a <pre> tag enclosing the text.
     text.replace('&', "&amp;");
@@ -160,8 +168,8 @@ static const char **xsltParamArrayFromParameterMap(XSLTProcessor::ParameterMap& 
     XSLTProcessor::ParameterMap::iterator end = parameters.end();
     unsigned index = 0;
     for (XSLTProcessor::ParameterMap::iterator it = parameters.begin(); it != end; ++it) {
-        parameterArray[index++] = strdup(String(it->first.get()).deprecatedString().utf8().data());
-        parameterArray[index++] = strdup(String(it->second.get()).deprecatedString().utf8().data());
+        parameterArray[index++] = strdup(it->first.utf8());
+        parameterArray[index++] = strdup(it->second.utf8());
     }
     parameterArray[index] = 0;
 
@@ -182,11 +190,12 @@ static void freeXsltParamArray(const char **params)
 }
 
 
-RefPtr<Document> XSLTProcessor::createDocumentFromSource(const DeprecatedString &sourceString, const DeprecatedString &sourceEncoding, const DeprecatedString &sourceMIMEType, Node *sourceNode, FrameView *view)
+RefPtr<Document> XSLTProcessor::createDocumentFromSource(const DeprecatedString& sourceString,
+    const DeprecatedString& sourceEncoding, const DeprecatedString& sourceMIMEType, Node* sourceNode, FrameView* view)
 {
     RefPtr<Document> ownerDocument = sourceNode->document();
     bool sourceIsDocument = (sourceNode == ownerDocument.get());
-    DeprecatedString documentSource = sourceString;
+    String documentSource = sourceString;
 
     RefPtr<Document> result;
     if (sourceMIMEType == "text/html")
@@ -212,14 +221,14 @@ RefPtr<Document> XSLTProcessor::createDocumentFromSource(const DeprecatedString 
     }
     result->determineParseMode(documentSource); // Make sure we parse in the correct mode.
     
-    RefPtr<Decoder> decoder = new Decoder;
-    decoder->setEncodingName(sourceEncoding.isEmpty() ? "UTF-8" : sourceEncoding.latin1(), Decoder::EncodingFromXMLHeader);
+    RefPtr<TextResourceDecoder> decoder = new TextResourceDecoder(sourceMIMEType);
+    decoder->setEncoding(sourceEncoding.isEmpty() ? UTF8Encoding() : TextEncoding(sourceEncoding), TextResourceDecoder::EncodingFromXMLHeader);
     result->setDecoder(decoder.get());
     
     result->write(documentSource);
     result->finishParsing();
     if (view)
-        view->frame()->checkCompleted();
+        view->frame()->loader()->checkCompleted();
     else
         result->close(); // FIXME: Even viewless docs can load subresources. onload will fire too early.
                          // This is probably a bug in XMLHttpRequestObjects as well.
@@ -248,7 +257,7 @@ static inline RefPtr<DocumentFragment> createFragmentFromSource(DeprecatedString
 static xsltStylesheetPtr xsltStylesheetPointer(RefPtr<XSLStyleSheet> &cachedStylesheet, Node *stylesheetRootNode)
 {
     if (!cachedStylesheet && stylesheetRootNode) {
-        cachedStylesheet = new XSLStyleSheet(stylesheetRootNode->parent() ? stylesheetRootNode->parent() : stylesheetRootNode);
+        cachedStylesheet = new XSLStyleSheet(stylesheetRootNode->parent() ? stylesheetRootNode->parent() : stylesheetRootNode, stylesheetRootNode->document()->URL());
         cachedStylesheet->parseString(createMarkup(stylesheetRootNode));
     }
     
@@ -295,19 +304,26 @@ static inline DeprecatedString resultMIMEType(xmlDocPtr resultDoc, xsltStyleshee
 bool XSLTProcessor::transformToString(Node *sourceNode, DeprecatedString &mimeType, DeprecatedString &resultString, DeprecatedString &resultEncoding)
 {
     RefPtr<Document> ownerDocument = sourceNode->document();
-    RefPtr<XSLStyleSheet> cachedStylesheet = m_stylesheet;
     
     setXSLTLoadCallBack(docLoaderFunc, this, ownerDocument->docLoader());
-    xsltStylesheetPtr sheet = xsltStylesheetPointer(cachedStylesheet, m_stylesheetRootNode.get());
+    xsltStylesheetPtr sheet = xsltStylesheetPointer(m_stylesheet, m_stylesheetRootNode.get());
     if (!sheet) {
         setXSLTLoadCallBack(0, 0, 0);
         return false;
     }
-    cachedStylesheet->clearDocuments();
-    
+    m_stylesheet->clearDocuments();
+
+    xmlChar* origMethod = sheet->method;
+    if (!origMethod && mimeType == "text/html")
+        sheet->method = (xmlChar*)"html";
+
     bool success = false;
     bool shouldFreeSourceDoc = false;
     if (xmlDocPtr sourceDoc = xmlDocPtrFromNode(sourceNode, shouldFreeSourceDoc)) {
+        // The XML declaration would prevent parsing the result as a fragment, and it's not needed even for documents, 
+        // as the result of this function is always immediately parsed.
+        sheet->omitXmlDeclaration = true;
+
         xsltTransformContextPtr transformContext = xsltNewTransformContext(sheet, sourceDoc);
 
         // This is a workaround for a bug in libxslt. 
@@ -332,8 +348,10 @@ bool XSLTProcessor::transformToString(Node *sourceNode, DeprecatedString &mimeTy
         xmlFreeDoc(resultDoc);
     }
     
+    sheet->method = origMethod;
     setXSLTLoadCallBack(0, 0, 0);
     xsltFreeStylesheet(sheet);
+    m_stylesheet = 0;
 
     return success;
 }
@@ -348,31 +366,36 @@ RefPtr<Document> XSLTProcessor::transformToDocument(Node *sourceNode)
     return createDocumentFromSource(resultString, resultEncoding, resultMIMEType, sourceNode);
 }
 
-RefPtr<DocumentFragment> XSLTProcessor::transformToFragment(Node *sourceNode, Document *outputDoc)
+RefPtr<DocumentFragment> XSLTProcessor::transformToFragment(Node* sourceNode, Document* outputDoc)
 {
     DeprecatedString resultMIMEType;
     DeprecatedString resultString;
     DeprecatedString resultEncoding;
+
+    // If the output document is HTML, default to HTML method.
+    if (outputDoc->isHTMLDocument())
+        resultMIMEType = "text/html";
+    
     if (!transformToString(sourceNode, resultMIMEType, resultString, resultEncoding))
         return 0;
     return createFragmentFromSource(resultString, resultMIMEType, sourceNode, outputDoc);
 }
 
-void XSLTProcessor::setParameter(StringImpl *namespaceURI, StringImpl *localName, StringImpl *value)
+void XSLTProcessor::setParameter(const String& namespaceURI, const String& localName, const String& value)
 {
     // FIXME: namespace support?
     // should make a QualifiedName here but we'd have to expose the impl
     m_parameters.set(localName, value);
 }
 
-RefPtr<StringImpl> XSLTProcessor::getParameter(StringImpl *namespaceURI, StringImpl *localName) const
+String XSLTProcessor::getParameter(const String& namespaceURI, const String& localName) const
 {
     // FIXME: namespace support?
     // should make a QualifiedName here but we'd have to expose the impl
     return m_parameters.get(localName);
 }
 
-void XSLTProcessor::removeParameter(StringImpl *namespaceURI, StringImpl *localName)
+void XSLTProcessor::removeParameter(const String& namespaceURI, const String& localName)
 {
     // FIXME: namespace support?
     m_parameters.remove(localName);
@@ -380,4 +403,4 @@ void XSLTProcessor::removeParameter(StringImpl *namespaceURI, StringImpl *localN
 
 } // namespace WebCore
 
-#endif // KHTML_XSLT
+#endif // XSLT_SUPPORT

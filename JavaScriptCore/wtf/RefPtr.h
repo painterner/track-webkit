@@ -20,8 +20,8 @@
  *
  */
 
-#ifndef KXMLCORE_REF_PTR_H
-#define KXMLCORE_REF_PTR_H
+#ifndef WTF_RefPtr_h
+#define WTF_RefPtr_h
 
 #include <algorithm>
 
@@ -68,7 +68,7 @@ namespace WTF {
     };
     
     template <typename T> template <typename U> inline RefPtr<T>::RefPtr(const PassRefPtr<U>& o)
-        : m_ptr(o.release())
+        : m_ptr(o.releaseRef())
     {
     }
 
@@ -110,7 +110,7 @@ namespace WTF {
     template <typename T> inline RefPtr<T>& RefPtr<T>::operator=(const PassRefPtr<T>& o)
     {
         T* ptr = m_ptr;
-        m_ptr = o.release();
+        m_ptr = o.releaseRef();
         if (ptr)
             ptr->deref();
         return *this;
@@ -119,7 +119,7 @@ namespace WTF {
     template <typename T> template <typename U> inline RefPtr<T>& RefPtr<T>::operator=(const PassRefPtr<U>& o)
     {
         T* ptr = m_ptr;
-        m_ptr = o.release();
+        m_ptr = o.releaseRef();
         if (ptr)
             ptr->deref();
         return *this;
@@ -175,10 +175,15 @@ namespace WTF {
         return RefPtr<T>(const_cast<T *>(p.get())); 
     }
 
+    template <typename T> inline T* getPtr(const RefPtr<T>& p)
+    {
+        return p.get();
+    }
+
 } // namespace WTF
 
 using WTF::RefPtr;
 using WTF::static_pointer_cast;
 using WTF::const_pointer_cast;
 
-#endif // KXMLCORE_REF_PTR_H
+#endif // WTF_RefPtr_h

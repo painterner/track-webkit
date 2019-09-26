@@ -56,6 +56,15 @@ supporting internal functions that are not used by other modules. */
 #endif
 
 
+/* When DEBUG is defined, we need the pcre_printint() function, which is also
+used by pcretest. DEBUG is not defined when building a production library. */
+
+#ifdef DEBUG
+#include "pcre_printint.src"
+#endif
+
+
+
 /*************************************************
 *      Code parameters and static tables         *
 *************************************************/
@@ -346,7 +355,7 @@ static const unsigned char ebcdic_chartab[] = { /* chartable partial dup */
 /* Definition to allow mutual recursion */
 
 static BOOL
-  compile_regex(int, int, int *, uschar **, const pcre_uchar **, int *, BOOL, int,
+  compile_regex(int, int, int *, uschar **, const pcre_uchar **, const pcre_uchar *, int *, BOOL, int,
     int *, int *, branch_chain *, compile_data *);
 
 
@@ -374,7 +383,7 @@ Returns:         zero or positive => a data character
 */
 
 static int
-check_escape(const pcre_uchar **ptrptr, int *errorcodeptr, int bracount,
+check_escape(const pcre_uchar **ptrptr, const pcre_uchar *patternEnd, int *errorcodeptr, int bracount,
   int options, BOOL isclass)
 {
 const pcre_uchar *ptr = *ptrptr;
@@ -382,19 +391,24 @@ int c, i;
 
 /* If backslash is at the end of the pattern, it's an error. */
 
-c = *(++ptr);
-if (c == 0) *errorcodeptr = ERR1;
+if (++ptr == patternEnd) {
+    *errorcodeptr = ERR1;
+    *ptrptr = ptr;
+    return 0;
+}
+
+c = *ptr;
 
 /* Non-alphamerics are literals. For digits or letters, do an initial lookup in
 a table. A non-zero result is something that can be returned immediately.
 Otherwise further processing may be required. */
 
 #if !EBCDIC    /* ASCII coding */
-else if (c < '0' || c > 'z') {}                           /* Not alphameric */
+if (c < '0' || c > 'z') {}                           /* Not alphameric */
 else if ((i = escapes[c - '0']) != 0) c = i;
 
 #else          /* EBCDIC coding */
-else if (c < 'a' || (ebcdic_chartab[c] & 0x0E) == 0) {}   /* Not alphameric */
+if (c < 'a' || (ebcdic_chartab[c] & 0x0E) == 0) {}   /* Not alphameric */
 else if ((i = escapes[c - 0x48]) != 0)  c = i;
 #endif
 
@@ -435,7 +449,7 @@ else
       {
       oldptr = ptr;
       c -= '0';
-      while ((DIGITAB(ptr[1]) & ctype_digit) != 0)
+      while (ptr + 1 < patternEnd && (DIGITAB(ptr[1]) & ctype_digit) != 0)
         c = c * 10 + *(++ptr) - '0';
       if (c < 10 || c <= bracount)
         {
@@ -461,7 +475,7 @@ else
 
     case '0':
     c -= '0';
-    while(i++ < 2 && ptr[1] >= '0' && ptr[1] <= '7')
+    while (i++ < 2 && ptr + 1 < patternEnd && ptr[1] >= '0' && ptr[1] <= '7')
         c = c * 8 + *(++ptr) - '0';
     c &= 255;     /* Take least significant 8 bits */
     break;
@@ -471,12 +485,12 @@ else
 
     case 'x':
 #ifdef SUPPORT_UTF8
-    if (ptr[1] == '{' && (options & PCRE_UTF8) != 0)
+    if (ptr + 1 < patternEnd && ptr[1] == '{' && (options & PCRE_UTF8) != 0)
       {
       const pcre_uchar *pt = ptr + 2;
       register int count = 0;
       c = 0;
-      while ((DIGITAB(*pt) & ctype_xdigit) != 0)
+      while (pt < patternEnd && (DIGITAB(*pt) & ctype_xdigit) != 0)
         {
         int cc = *pt++;
         count++;
@@ -488,7 +502,7 @@ else
         c = c * 16 + cc - ((cc >= '0')? '0' : ('A' - 10));
 #endif
         }
-      if (*pt == '}')
+      if (pt < patternEnd && *pt == '}')
         {
         if (c < 0 || count > 8 || (c >= 0xd800 && c <= 0xdbff) || (c >= 0xfdd0 && c <= 0xfdef) || c == 0xfffe || c == 0xffff || c > 0x10FFFF) *errorcodeptr = ERR34;
         ptr = pt;
@@ -502,7 +516,7 @@ else
     /* Read just a single hex char */
 
     c = 0;
-    while (i++ < 2 && (DIGITAB(ptr[1]) & ctype_xdigit) != 0)
+    while (i++ < 2 && ptr + 1 < patternEnd && (DIGITAB(ptr[1]) & ctype_xdigit) != 0)
       {
       int cc;                               /* Some compilers don't like ++ */
       cc = *(++ptr);                        /* in initializers */
@@ -519,12 +533,12 @@ else
     /* Other special escapes not starting with a digit are straightforward */
 
     case 'c':
-    c = *(++ptr);
-    if (c == 0)
+    if (++ptr == patternEnd)
       {
       *errorcodeptr = ERR2;
       return 0;
       }
+    c = *ptr;
 
     /* A letter is upper-cased; then the 0x40 bit is flipped. This coding
     is ASCII-specific, but then the whole concept of \cx is ASCII-specific.
@@ -581,14 +595,14 @@ Returns:     value from ucp_type_table, or -1 for an invalid type
 */
 
 static int
-get_ucp(const pcre_uchar **ptrptr, BOOL *negptr, int *errorcodeptr)
+get_ucp(const pcre_uchar **ptrptr, const pcre_uchar *patternEnd, BOOL *negptr, int *errorcodeptr)
 {
 int c, i, bot, top;
 const pcre_uchar *ptr = *ptrptr;
 char name[4];
 
-c = *(++ptr);
-if (c == 0) goto ERROR_RETURN;
+if (++ptr == patternEnd) goto ERROR_RETURN;
+c = *ptr;
 
 *negptr = FALSE;
 
@@ -597,22 +611,23 @@ preceded by ^ for negation. */
 
 if (c == '{')
   {
-  if (ptr[1] == '^')
+  if (ptr + 1 < patternEnd && ptr[1] == '^')
     {
     *negptr = TRUE;
     ptr++;
     }
   for (i = 0; i <= 2; i++)
     {
-    c = *(++ptr);
-    if (c == 0) goto ERROR_RETURN;
+    if (++ptr == patternEnd) goto ERROR_RETURN;
+    c = *ptr;
     if (c == '}') break;
     if (c > 127) goto ERROR_RETURN;
     name[i] = c;
     }
   if (c !='}')   /* Try to distinguish error cases */
     {
-    while (*(++ptr) != 0 && *ptr != '}');
+    while (++ptr < patternEnd && *ptr != '}')
+        ;
     if (*ptr == '}') goto UNKNOWN_RETURN; else goto ERROR_RETURN;
     }
   name[i] = 0;
@@ -673,21 +688,28 @@ Returns:    TRUE or FALSE
 */
 
 static BOOL
-is_counted_repeat(const pcre_uchar *p)
+is_counted_repeat(const pcre_uchar *p, const pcre_uchar *patternEnd)
 {
-if ((DIGITAB(*p) & ctype_digit) == 0) return FALSE;
+if (p >= patternEnd || (DIGITAB(*p) & ctype_digit) == 0)
+    return FALSE;
 p++;
-while ((DIGITAB(*p) & ctype_digit) != 0) p++;
-if (*p == '}') return TRUE;
+while (p < patternEnd && (DIGITAB(*p) & ctype_digit) != 0)
+    p++;
+if (p < patternEnd && *p == '}')
+    return TRUE;
 
-if (*p++ != ',') return FALSE;
-if (*p == '}') return TRUE;
+if (p >= patternEnd || *p++ != ',')
+    return FALSE;
+if (p < patternEnd && *p == '}')
+    return TRUE;
 
-if ((DIGITAB(*p) & ctype_digit) == 0) return FALSE;
+if (p >= patternEnd || (DIGITAB(*p) & ctype_digit) == 0)
+    return FALSE;
 p++;
-while ((DIGITAB(*p) & ctype_digit) != 0) p++;
+while (p < patternEnd && (DIGITAB(*p) & ctype_digit) != 0)
+    p++;
 
-return (*p == '}');
+return (p < patternEnd && *p == '}');
 }
 
 
@@ -717,12 +739,18 @@ read_repeat_counts(const pcre_uchar *p, int *minp, int *maxp, int *errorcodeptr)
 int min = 0;
 int max = -1;
 
+/* Read the minimum value and do a paranoid check: a negative value indicates
+an integer overflow. */
+
 while ((DIGITAB(*p) & ctype_digit) != 0) min = min * 10 + *p++ - '0';
 if (min < 0 || min > 65535)
   {
     *errorcodeptr = ERR5;
     return p;
   }
+
+/* Read the maximum value if there is one, and again do a paranoid on its size.
+Also, max must not be less than min. */
 
 if (*p == '}') max = min; else
   {
@@ -1344,13 +1372,14 @@ Returns:   TRUE or FALSE
 */
 
 static BOOL
-check_posix_syntax(const pcre_uchar *ptr, const pcre_uchar **endptr, compile_data *cd)
+check_posix_syntax(const pcre_uchar *ptr, const pcre_uchar *patternEnd, const pcre_uchar **endptr, compile_data *cd)
 {
 int terminator;          /* Don't combine these lines; the Solaris cc */
 terminator = *(++ptr);   /* compiler warns about "non-constant" initializer. */
 if (*(++ptr) == '^') ptr++;
-while ((CTYPES(cd, *ptr) & ctype_letter) != 0) ptr++;
-if (*ptr == terminator && ptr[1] == ']')
+while (ptr < patternEnd && (CTYPES(cd, *ptr) & ctype_letter) != 0)
+    ptr++;
+if (ptr + 1 < patternEnd && *ptr == terminator && ptr[1] == ']')
   {
   *endptr = ptr;
   return TRUE;
@@ -1488,7 +1517,7 @@ Returns:             nothing
 static void
 complete_callout(uschar *previous_callout, const pcre_uchar *ptr, compile_data *cd)
 {
-int length = ptr - cd->start_pattern - GET(previous_callout, 2);
+int length = INT_CAST(ptr - cd->start_pattern - GET(previous_callout, 2));
 PUT(previous_callout, 2 + LINK_SIZE, length);
 }
 
@@ -1516,7 +1545,7 @@ Yield:        TRUE when range returned; FALSE when no more
 static BOOL
 get_othercase_range(int *cptr, int d, int *ocptr, int *odptr)
 {
-int c, chartype, othercase, next;
+int c, chartype, othercase = 0, next;
 
 for (c = *cptr; c <= d; c++)
   {
@@ -1570,7 +1599,7 @@ Returns:         TRUE on success
 
 static BOOL
 compile_branch(int *optionsptr, int *brackets, uschar **codeptr,
-  const pcre_uchar **ptrptr, int *errorcodeptr, int *firstbyteptr,
+  const pcre_uchar **ptrptr, const pcre_uchar *patternEnd, int *errorcodeptr, int *firstbyteptr,
   int *reqbyteptr, branch_chain *bcptr, compile_data *cd)
 {
 int repeat_type, op_type;
@@ -1646,13 +1675,13 @@ for (;; ptr++)
 
   /* Next byte in the pattern */
 
-  c = *ptr;
+  c = ptr < patternEnd ? *ptr : 0;
 
   /* If in \Q...\E, check for the end; if not, we have a literal */
 
-  if (inescq && c != 0)
+  if (inescq && ptr < patternEnd)
     {
-    if (c == '\\' && ptr[1] == 'E')
+    if (c == '\\' && ptr + 1 < patternEnd && ptr[1] == 'E')
       {
       inescq = FALSE;
       ptr++;
@@ -1678,7 +1707,7 @@ for (;; ptr++)
   a quantifier. */
 
   is_quantifier = c == '*' || c == '+' || c == '?' ||
-    (c == '{' && is_counted_repeat(ptr+1));
+    (c == '{' && is_counted_repeat(ptr+1, patternEnd));
 
   if (!is_quantifier && previous_callout != NULL &&
        after_manual_callout-- <= 0)
@@ -1694,10 +1723,11 @@ for (;; ptr++)
     if ((CTYPES(cd, c) & ctype_space) != 0) continue;
     if (c == '#')
       {
-      /* The space before the ; is to avoid a warning on a silly compiler
-      on the Macintosh. */
-      while ((c = *(++ptr)) != 0 && c != NEWLINE) ;
-      if (c != 0) continue;   /* Else fall through to handle end of string */
+      while (++ptr < patternEnd && (c = *ptr) != NEWLINE)
+          ;
+      if (ptr < patternEnd)
+          continue;   /* Else fall through to handle end of string */
+      c = 0;
       }
     }
 
@@ -1714,6 +1744,9 @@ for (;; ptr++)
     /* The branch terminates at end of string, |, or ). */
 
     case 0:
+        if (ptr < patternEnd)
+            goto NORMAL_CHAR;
+        // End of string; fall through
     case '|':
     case ')':
     *firstbyteptr = firstbyte;
@@ -1769,7 +1802,7 @@ for (;; ptr++)
     they are encountered at the top level, so we'll do that too. */
 
     if ((ptr[1] == ':' || ptr[1] == '.' || ptr[1] == '=') &&
-        check_posix_syntax(ptr, &tempptr, cd))
+        check_posix_syntax(ptr, patternEnd, &tempptr, cd))
       {
       *errorcodeptr = (ptr[1] == ':')? ERR13 : ERR31;
       goto FAILED;
@@ -1842,10 +1875,10 @@ for (;; ptr++)
 
       if (c == '[' &&
           (ptr[1] == ':' || ptr[1] == '.' || ptr[1] == '=') &&
-          check_posix_syntax(ptr, &tempptr, cd))
+          check_posix_syntax(ptr, patternEnd, &tempptr, cd))
         {
         BOOL local_negate = FALSE;
-        int posix_class, i;
+        int posix_class, i, namelen;
         register const uschar *cbits = cd->cbits;
 
         if (ptr[1] != ':')
@@ -1861,7 +1894,8 @@ for (;; ptr++)
           ptr++;
           }
 
-        posix_class = check_posix_name(ptr, tempptr - ptr);
+        namelen = INT_CAST(tempptr - ptr);
+        posix_class = check_posix_name(ptr, namelen);
         if (posix_class < 0)
           {
           *errorcodeptr = ERR30;
@@ -1883,7 +1917,7 @@ for (;; ptr++)
         posix_class *= 3;
         for (i = 0; i < 3; i++)
           {
-          BOOL blankclass = STREQUAL(ptr, 5, "blank");
+          BOOL blankclass = ptr + 5 <= patternEnd && STREQUAL(ptr, 5, "blank");
           int taboffset = posix_class_maps[posix_class + i];
           if (taboffset < 0) break;
           if (local_negate)
@@ -1916,13 +1950,13 @@ for (;; ptr++)
 
       if (c == '\\')
         {
-        c = check_escape(&ptr, errorcodeptr, *brackets, options, TRUE);
+        c = check_escape(&ptr, patternEnd, errorcodeptr, *brackets, options, TRUE);
 
         if (-c == ESC_b) c = '\b';       /* \b is backslash in a class */
         else if (-c == ESC_X) c = 'X';   /* \X is literal X in a class */
         else if (-c == ESC_Q)            /* Handle start of quoted string */
           {
-          if (ptr[1] == '\\' && ptr[2] == 'E')
+          if (ptr + 2 < patternEnd && ptr[1] == '\\' && ptr[2] == 'E')
             {
             ptr += 2; /* avoid empty string */
             }
@@ -1969,7 +2003,7 @@ for (;; ptr++)
             case ESC_P:
               {
               BOOL negated;
-              int property = get_ucp(&ptr, &negated, errorcodeptr);
+              int property = get_ucp(&ptr, patternEnd, &negated, errorcodeptr);
               if (property < 0) goto FAILED;
               class_utf8 = TRUE;
               *class_utf8data++ = ((-c == ESC_p) != negated)?
@@ -2025,7 +2059,7 @@ for (;; ptr++)
         if (d == '\\')
           {
           const pcre_uchar *oldptr = ptr;
-          d = check_escape(&ptr, errorcodeptr, *brackets, options, TRUE);
+          d = check_escape(&ptr, patternEnd, errorcodeptr, *brackets, options, TRUE);
 
           /* \b is backslash; \X is literal X; any other special means the '-'
           was literal */
@@ -2275,7 +2309,7 @@ for (;; ptr++)
 
       else
         {
-        int len = class_utf8data - (code + 33);
+        int len = INT_CAST(class_utf8data - (code + 33));
         memmove(code + 1, code + 33, len);
         code += len + 1;
         }
@@ -2359,13 +2393,13 @@ for (;; ptr++)
     but if PCRE_UNGREEDY is set, it works the other way round. We change the
     repeat type to the non-default. */
 
-    if (ptr[1] == '+')
+    if (ptr + 1 < patternEnd && ptr[1] == '+')
       {
       repeat_type = 0;                  /* Force greedy */
       possessive_quantifier = TRUE;
       ptr++;
       }
-    else if (ptr[1] == '?')
+    else if (ptr + 1 < patternEnd && ptr[1] == '?')
       {
       repeat_type = greedy_non_default;
       ptr++;
@@ -2404,7 +2438,7 @@ for (;; ptr++)
         {
         uschar *lastchar = code - 1;
         while((*lastchar & 0xc0) == 0x80) lastchar--;
-        c = code - lastchar;            /* Length of UTF-8 character */
+        c = INT_CAST(code - lastchar);            /* Length of UTF-8 character */
         memcpy(utf8_char, lastchar, c); /* Save the char */
         c |= 0x80;                      /* Flag c as a length */
         }
@@ -2617,7 +2651,7 @@ for (;; ptr++)
       {
       register int i;
       int ketoffset = 0;
-      int len = code - previous;
+      int len = INT_CAST(code - previous);
       uschar *bralink = NULL;
 
       /* If the maximum repeat count is unlimited, find the end of the bracket
@@ -2630,7 +2664,7 @@ for (;; ptr++)
         {
         register uschar *ket = previous;
         do ket += GET(ket, 1); while (*ket != OP_KET);
-        ketoffset = code - ket;
+        ketoffset = INT_CAST(code - ket);
         }
 
       /* The case of a zero minimum is special because of the need to stick
@@ -2676,7 +2710,7 @@ for (;; ptr++)
 
         else
           {
-          int offset;
+          int offset, tmpoffset;
           *code = OP_END;
           adjust_recurse(previous, 2 + LINK_SIZE, utf8, cd);
           memmove(previous + 2 + LINK_SIZE, previous, len);
@@ -2687,7 +2721,8 @@ for (;; ptr++)
           /* We chain together the bracket offset fields that have to be
           filled in later when the ends of the brackets are reached. */
 
-          offset = (bralink == NULL)? 0 : previous - bralink;
+          tmpoffset = INT_CAST(previous - bralink);
+          offset = (bralink == NULL)? 0 : tmpoffset;
           bralink = previous;
           PUTINC(previous, 0, offset);
           }
@@ -2731,9 +2766,10 @@ for (;; ptr++)
 
           if (i != 0)
             {
-            int offset;
+            int offset, tmpoffset;
             *code++ = OP_BRA;
-            offset = (bralink == NULL)? 0 : code - bralink;
+            tmpoffset = INT_CAST(code - bralink);
+            offset = (bralink == NULL)? 0 : tmpoffset;
             bralink = code;
             PUTINC(code, 0, offset);
             }
@@ -2748,7 +2784,7 @@ for (;; ptr++)
         while (bralink != NULL)
           {
           int oldlinkoffset;
-          int offset = code - bralink + 1;
+          int offset = INT_CAST(code - bralink + 1);
           uschar *bra = code - offset;
           oldlinkoffset = GET(bra, 1);
           bralink = (oldlinkoffset == 0)? NULL : bralink - oldlinkoffset;
@@ -2782,7 +2818,7 @@ for (;; ptr++)
 
     if (possessive_quantifier)
       {
-      int len = code - tempcode;
+      int len = INT_CAST(code - tempcode);
       memmove(tempcode + 1+LINK_SIZE, tempcode, len);
       code += 1 + LINK_SIZE;
       len += 1 + LINK_SIZE;
@@ -2930,7 +2966,7 @@ for (;; ptr++)
           name = ++ptr;           /* grumble at autoincrement in declaration */
 
           while (*ptr++ != '>');
-          namelen = ptr - name - 1;
+          namelen = INT_CAST(ptr - name - 1);
 
           /* FIXME: This won't work for UTF-16. */
           for (i = 0; i < cd->names_found; i++)
@@ -2969,7 +3005,7 @@ for (;; ptr++)
           uschar *slot = cd->name_table;
 
           while (*ptr != ')') ptr++;
-          namelen = ptr - name;
+          namelen = INT_CAST(ptr - name);
 
           for (i = 0; i < cd->names_found; i++)
             {
@@ -3158,6 +3194,7 @@ for (;; ptr++)
          brackets,                     /* Extracting bracket count */
          &tempcode,                    /* Where to put code (updated) */
          &ptr,                         /* Input pointer (updated) */
+         patternEnd,
          errorcodeptr,                 /* Where to put an error message */
          (bravalue == OP_ASSERTBACK ||
           bravalue == OP_ASSERTBACK_NOT), /* TRUE if back assert */
@@ -3257,7 +3294,7 @@ for (;; ptr++)
 
     /* Error if hit end of pattern */
 
-    if (*ptr != ')')
+    if (ptr > patternEnd || *ptr != ')')
       {
       *errorcodeptr = ERR14;
       goto FAILED;
@@ -3270,7 +3307,7 @@ for (;; ptr++)
 
     case '\\':
     tempptr = ptr;
-    c = check_escape(&ptr, errorcodeptr, *brackets, options, FALSE);
+    c = check_escape(&ptr, patternEnd, errorcodeptr, *brackets, options, FALSE);
 
     /* Handle metacharacters introduced by \. For ones like \d, the ESC_ values
     are arranged to be the negation of the corresponding OP_values. For the
@@ -3283,7 +3320,7 @@ for (;; ptr++)
       {
       if (-c == ESC_Q)            /* Handle start of quoted string */
         {
-        if (ptr[1] == '\\' && ptr[2] == 'E') ptr += 2; /* avoid empty string */
+        if (ptr + 2 < patternEnd && ptr[1] == '\\' && ptr[2] == 'E') ptr += 2; /* avoid empty string */
           else inescq = TRUE;
         continue;
         }
@@ -3316,7 +3353,7 @@ for (;; ptr++)
       else if (-c == ESC_P || -c == ESC_p)
         {
         BOOL negated;
-        int value = get_ucp(&ptr, &negated, errorcodeptr);
+        int value = get_ucp(&ptr, patternEnd, &negated, errorcodeptr);
         previous = code;
         *code++ = ((-c == ESC_p) != negated)? OP_PROP : OP_NOTPROP;
         *code++ = value;
@@ -3372,7 +3409,7 @@ for (;; ptr++)
 #ifdef SUPPORT_UTF8
     if (utf8 && (c & 0xc0) == 0xc0)
       {
-      while ((ptr[1] & 0xc0) == 0x80)
+      while (ptr + 1 < patternEnd && (ptr[1] & 0xc0) == 0x80)
         mcbuffer[mclength++] = *(++ptr);
       }
 #endif
@@ -3465,7 +3502,7 @@ Returns:      TRUE on success
 
 static BOOL
 compile_regex(int options, int oldims, int *brackets, uschar **codeptr,
-  const pcre_uchar **ptrptr, int *errorcodeptr, BOOL lookbehind, int skipbytes,
+  const pcre_uchar **ptrptr, const pcre_uchar *patternEnd, int *errorcodeptr, BOOL lookbehind, int skipbytes,
   int *firstbyteptr, int *reqbyteptr, branch_chain *bcptr, compile_data *cd)
 {
 const pcre_uchar *ptr = *ptrptr;
@@ -3510,7 +3547,7 @@ for (;;)
 
   /* Now compile the branch */
 
-  if (!compile_branch(&options, brackets, &code, &ptr, errorcodeptr,
+  if (!compile_branch(&options, brackets, &code, &ptr, patternEnd, errorcodeptr,
         &branchfirstbyte, &branchreqbyte, &bc, cd))
     {
     *ptrptr = ptr;
@@ -3584,9 +3621,9 @@ for (;;)
   following, except at the very end of the pattern. Return leaving the pointer
   at the terminating char. */
 
-  if (*ptr != '|')
+  if (ptr >= patternEnd || *ptr != '|')
     {
-    int length = code - last_branch;
+    int length = INT_CAST(code - last_branch);
     do
       {
       int prev_length = GET(last_branch, 1);
@@ -3604,7 +3641,7 @@ for (;;)
 
     /* Resetting option if needed */
 
-    if ((options & PCRE_IMS) != oldims && *ptr == ')')
+    if ((options & PCRE_IMS) != oldims && ptr < patternEnd && *ptr == ')')
       {
       *code++ = OP_OPT;
       *code++ = oldims;
@@ -3884,16 +3921,16 @@ Returns:        pointer to compiled data block, or NULL on error,
                 with errorptr and erroroffset set
 */
 
-EXPORT pcre *
-pcre_compile(const pcre_char *pattern, int options, const char **errorptr,
+PCRE_EXPORT pcre *
+pcre_compile(const pcre_char *pattern, int patternLength, int options, const char **errorptr,
   int *erroroffset, const unsigned char *tables)
 {
-return pcre_compile2(pattern, options, NULL, errorptr, erroroffset, tables);
+return pcre_compile2(pattern, patternLength, options, NULL, errorptr, erroroffset, tables);
 }
 
 
-EXPORT pcre *
-pcre_compile2(const pcre_char *pattern, int options, int *errorcodeptr,
+PCRE_EXPORT pcre *
+pcre_compile2(const pcre_char *pattern, int patternLength, int options, int *errorcodeptr,
   const char **errorptr, int *erroroffset, const unsigned char *tables)
 {
 real_pcre *re;
@@ -3912,11 +3949,13 @@ BOOL utf8;
 BOOL class_utf8;
 #endif
 BOOL inescq = FALSE;
+BOOL capturing;
 unsigned int brastackptr = 0;
 size_t size;
 uschar *code;
 const uschar *codestart;
 const pcre_uchar *ptr;
+const pcre_uchar *patternEnd;
 compile_data compile_block;
 int brastack[BRASTACK_SIZE];
 uschar bralenstack[BRASTACK_SIZE];
@@ -4007,13 +4046,17 @@ for any counted white space if an "extended" flag setting appears late in the
 pattern. We can't be so clever for #-comments. */
 
 ptr = (const pcre_uchar *)(pattern - 1);
-while ((c = *(++ptr)) != 0)
+patternEnd = (const pcre_uchar *)(pattern + patternLength);
+
+while (++ptr < patternEnd)
   {
   int min, max;
   int class_optcount;
   int bracket_length;
   int duplength;
 
+  c = *ptr;
+  
   /* If we are inside a \Q...\E sequence, all chars are literal */
 
   if (inescq)
@@ -4029,10 +4072,10 @@ while ((c = *(++ptr)) != 0)
     if ((CTYPES(&compile_block, c) & ctype_space) != 0) continue;
     if (c == '#')
       {
-      /* The space before the ; is to avoid a warning on a silly compiler
-      on the Macintosh. */
-      while ((c = *(++ptr)) != 0 && c != NEWLINE) ;
-      if (c == 0) break;
+      while (++ptr < patternEnd && (c = *ptr) != NEWLINE)
+        ;
+      if (ptr == patternEnd)
+        break;
       continue;
       }
     }
@@ -4043,7 +4086,7 @@ while ((c = *(++ptr)) != 0)
 
   if ((options & PCRE_AUTO_CALLOUT) != 0 &&
        c != '*' && c != '+' && c != '?' &&
-       (c != '{' || !is_counted_repeat(ptr + 1)))
+       (c != '{' || !is_counted_repeat(ptr + 1, patternEnd)))
     length += 2 + 2*LINK_SIZE;
 
   switch(c)
@@ -4052,7 +4095,7 @@ while ((c = *(++ptr)) != 0)
     character type. */
 
     case '\\':
-    c = check_escape(&ptr, &errorcode, bracount, options, FALSE);
+    c = check_escape(&ptr, patternEnd, &errorcode, bracount, options, FALSE);
     if (errorcode != 0) goto PCRE_ERROR_RETURN;
 
     lastitemlength = 1;     /* Default length of last item for repeats */
@@ -4102,7 +4145,7 @@ while ((c = *(++ptr)) != 0)
       BOOL negated;
       length += 2;
       lastitemlength = 2;
-      if (get_ucp(&ptr, &negated, &errorcode) < 0) goto PCRE_ERROR_RETURN;
+      if (get_ucp(&ptr, patternEnd, &negated, &errorcode) < 0) goto PCRE_ERROR_RETURN;
       continue;
 #else
       errorcode = ERR45;
@@ -4125,7 +4168,7 @@ while ((c = *(++ptr)) != 0)
       if (refnum > compile_block.top_backref)
         compile_block.top_backref = refnum;
       length += 2;   /* For single back reference */
-      if (ptr[1] == '{' && is_counted_repeat(ptr+2))
+      if (ptr + 1 < patternEnd && ptr[1] == '{' && is_counted_repeat(ptr+2, patternEnd))
         {
         ptr = read_repeat_counts(ptr+2, &min, &max, &errorcode);
         if (errorcode != 0) goto PCRE_ERROR_RETURN;
@@ -4133,7 +4176,8 @@ while ((c = *(++ptr)) != 0)
           (min == 1 && max == -1))
             length++;
         else length += 5;
-        if (ptr[1] == '?') ptr++;
+        if (ptr + 1 < patternEnd && ptr[1] == '?')
+            ptr++;
         }
       }
     continue;
@@ -4155,7 +4199,8 @@ while ((c = *(++ptr)) != 0)
     class, or back reference. */
 
     case '{':
-    if (!is_counted_repeat(ptr+1)) goto NORMAL_CHAR;
+    if (!is_counted_repeat(ptr+1, patternEnd))
+        goto NORMAL_CHAR;
     ptr = read_repeat_counts(ptr+1, &min, &max, &errorcode);
     if (errorcode != 0) goto PCRE_ERROR_RETURN;
 
@@ -4177,10 +4222,11 @@ while ((c = *(++ptr)) != 0)
       length += lastitemlength + ((max > 0)? 3 : 1);
       }
 
-    if (ptr[1] == '?') ptr++;      /* Needs no extra length */
+    if (ptr + 1 < patternEnd && ptr[1] == '?')
+        ptr++;                     /* Needs no extra length */
 
     POSESSIVE:                     /* Test for possessive quantifier */
-    if (ptr[1] == '+')
+    if (ptr + 1 < patternEnd && ptr[1] == '+')
       {
       ptr++;
       length += 2 + 2*LINK_SIZE;   /* Allow for atomic brackets */
@@ -4205,7 +4251,7 @@ while ((c = *(++ptr)) != 0)
     where we can. (In UTF-8 mode we can do this only for chars < 128.) */
 
     case '[':
-    if (*(++ptr) == '^')
+    if (++ptr < patternEnd && *ptr == '^')
       {
       class_optcount = 10;  /* Greater than one */
       ptr++;
@@ -4218,13 +4264,14 @@ while ((c = *(++ptr)) != 0)
 
     /* Written as a "do" so that an initial ']' is taken as data */
 
-    if (*ptr != 0) do
+    if (ptr < patternEnd) do
       {
       /* Inside \Q...\E everything is literal except \E */
 
       if (inescq)
         {
-        if (*ptr != '\\' || ptr[1] != 'E') goto GET_ONE_CHARACTER;
+        if (*ptr != '\\' || ptr + 1 >= patternEnd || ptr[1] != 'E')
+            goto GET_ONE_CHARACTER;
         inescq = FALSE;
         ptr += 1;
         continue;
@@ -4234,7 +4281,7 @@ while ((c = *(++ptr)) != 0)
 
       if (*ptr == '\\')
         {
-        c = check_escape(&ptr, &errorcode, bracount, options, TRUE);
+        c = check_escape(&ptr, patternEnd, &errorcode, bracount, options, TRUE);
         if (errorcode != 0) goto PCRE_ERROR_RETURN;
 
         /* \b is backspace inside a class; \X is literal */
@@ -4277,7 +4324,7 @@ while ((c = *(++ptr)) != 0)
       /* Check the syntax for POSIX stuff. The bits we actually handle are
       checked during the real compile phase. */
 
-      else if (*ptr == '[' && check_posix_syntax(ptr, &ptr, &compile_block))
+      else if (*ptr == '[' && ptr + 2 < patternEnd && check_posix_syntax(ptr, patternEnd, &ptr, &compile_block))
         {
         ptr++;
         class_optcount = 10;    /* Make sure > 1 */
@@ -4299,7 +4346,7 @@ while ((c = *(++ptr)) != 0)
         if (utf8)
           {
           int extra = 0;
-          GETCHARLEN(c, ptr, extra);
+          GETCHARLENEND(c, ptr, patternEnd, extra);
           ptr += extra;
           }
         else c = *ptr;
@@ -4313,31 +4360,33 @@ while ((c = *(++ptr)) != 0)
         class_optcount++;
 
         d = -1;
-        if (ptr[1] == '-')
+        if (ptr + 1 < patternEnd && ptr[1] == '-')
           {
           pcre_uchar const *hyptr = ptr++;
-          if (ptr[1] == '\\')
-            {
-            ptr++;
-            d = check_escape(&ptr, &errorcode, bracount, options, TRUE);
-            if (errorcode != 0) goto PCRE_ERROR_RETURN;
-            if (-d == ESC_b) d = '\b';        /* backspace */
-            else if (-d == ESC_X) d = 'X';    /* literal X in a class */
-            }
-          else if (ptr[1] != 0 && ptr[1] != ']')
-            {
-            ptr++;
-#ifdef SUPPORT_UTF8
-            if (utf8)
-              {
-              int extra = 0;
-              GETCHARLEN(d, ptr, extra);
-              ptr += extra;
-              }
-            else
-#endif
-            d = *ptr;
-            }
+          if (ptr + 1 < patternEnd) {
+              if (ptr[1] == '\\')
+                {
+                ptr++;
+                d = check_escape(&ptr, patternEnd, &errorcode, bracount, options, TRUE);
+                if (errorcode != 0) goto PCRE_ERROR_RETURN;
+                if (-d == ESC_b) d = '\b';        /* backspace */
+                else if (-d == ESC_X) d = 'X';    /* literal X in a class */
+                }
+              else if (ptr[1] != ']')
+                {
+                ptr++;
+    #ifdef SUPPORT_UTF8
+                if (utf8)
+                  {
+                  int extra = 0;
+                  GETCHARLENEND(d, ptr, patternEnd, extra);
+                  ptr += extra;
+                  }
+                else
+    #endif
+                d = *ptr;
+                }
+          }
           if (d < 0) ptr = hyptr;      /* go back to hyphen as data */
           }
 
@@ -4434,9 +4483,9 @@ while ((c = *(++ptr)) != 0)
           }
         }
       }
-    while (*(++ptr) != 0 && (inescq || *ptr != ']')); /* Concludes "do" above */
+    while (++ptr < patternEnd && (inescq || *ptr != ']')); /* Concludes "do" above */
 
-    if (*ptr == 0)                          /* Missing terminating ']' */
+    if (ptr >= patternEnd)                          /* Missing terminating ']' */
       {
       errorcode = ERR6;
       goto PCRE_ERROR_RETURN;
@@ -4453,7 +4502,7 @@ while ((c = *(++ptr)) != 0)
       /* A repeat needs either 1 or 5 bytes. If it is a possessive quantifier,
       we also need extra for wrapping the whole thing in a sub-pattern. */
 
-      if (*ptr != 0 && ptr[1] == '{' && is_counted_repeat(ptr+2))
+      if (ptr + 1 < patternEnd && ptr[1] == '{' && is_counted_repeat(ptr+2, patternEnd))
         {
         ptr = read_repeat_counts(ptr+2, &min, &max, &errorcode);
         if (errorcode != 0) goto PCRE_ERROR_RETURN;
@@ -4461,12 +4510,15 @@ while ((c = *(++ptr)) != 0)
           (min == 1 && max == -1))
             length++;
         else length += 5;
-        if (ptr[1] == '+')
-          {
-          ptr++;
-          length += 2 + 2*LINK_SIZE;
-          }
-        else if (ptr[1] == '?') ptr++;
+        if (ptr + 1 < patternEnd) {
+            if (ptr[1] == '+')
+              {
+              ptr++;
+              length += 2 + 2*LINK_SIZE;
+              }
+            else if (ptr[1] == '?')
+                ptr++;
+        }
         }
       }
     continue;
@@ -4476,21 +4528,23 @@ while ((c = *(++ptr)) != 0)
     case '(':
     branch_newextra = 0;
     bracket_length = 1 + LINK_SIZE;
+    capturing = FALSE;
 
     /* Handle special forms of bracket, which all start (? */
 
-    if (ptr[1] == '?')
+    if (ptr + 1 < patternEnd && ptr[1] == '?')
       {
       int set, unset;
       int *optset;
 
-      switch (c = ptr[2])
+      switch (c = (ptr + 2 < patternEnd ? ptr[2] : 0))
         {
         /* Skip over comments entirely */
         case '#':
         ptr += 3;
-        while (*ptr != 0 && *ptr != ')') ptr++;
-        if (*ptr == 0)
+        while (ptr < patternEnd && *ptr != ')')
+            ptr++;
+        if (ptr == patternEnd)
           {
           errorcode = ERR18;
           goto PCRE_ERROR_RETURN;
@@ -4526,10 +4580,10 @@ while ((c = *(++ptr)) != 0)
         if (c != 'R')
           {
           ++ptr;
-          while ((DIGITAB(*ptr) & ctype_digit) != 0)
+          while (ptr < patternEnd && (DIGITAB(*ptr) & ctype_digit) != 0)
             ++ptr;
           }
-        if (*ptr != ')')
+        if (ptr >= patternEnd || *ptr != ')')
           {
           errorcode = ERR29;
           goto PCRE_ERROR_RETURN;
@@ -4540,7 +4594,7 @@ while ((c = *(++ptr)) != 0)
         as to use the code for quantified brackets. We jump down and use the
         code that handles this for real brackets. */
 
-        if (ptr[1] == '+' || ptr[1] == '*' || ptr[1] == '?' || ptr[1] == '{')
+        if (ptr + 1 < patternEnd && (ptr[1] == '+' || ptr[1] == '*' || ptr[1] == '?' || ptr[1] == '{'))
           {
           length += 2 + 2 * LINK_SIZE;       /* to make bracketed */
           duplength = 5 + 3 * LINK_SIZE;
@@ -4554,9 +4608,9 @@ while ((c = *(++ptr)) != 0)
 
         case 'C':
         ptr += 3;
-        while ((DIGITAB(*ptr) & ctype_digit) != 0)
+        while (ptr < patternEnd && (DIGITAB(*ptr) & ctype_digit) != 0)
           ++ptr;
-        if (*ptr != ')')
+        if (ptr >= patternEnd || *ptr != ')')
           {
           errorcode = ERR39;
           goto PCRE_ERROR_RETURN;
@@ -4568,33 +4622,42 @@ while ((c = *(++ptr)) != 0)
 
         case 'P':
         ptr += 3;
-        if (*ptr == '<')
-          {
-          const pcre_uchar *p;    /* Don't amalgamate; some compilers */
-          p = ++ptr;          /* grumble at autoincrement in declaration */
-          while ((CTYPES(&compile_block, *ptr) & ctype_word) != 0) ptr++;
-          if (*ptr != '>')
-            {
-            errorcode = ERR42;
-            goto PCRE_ERROR_RETURN;
-            }
-          name_count++;
-          if (ptr - p > max_name_size) max_name_size = (ptr - p);
-          break;
-          }
 
-        if (*ptr == '=' || *ptr == '>')
-          {
-          ++ptr;
-          while ((CTYPES(&compile_block, *ptr) & ctype_word) != 0)
-            ++ptr;
-          if (*ptr != ')')
-            {
-            errorcode = ERR42;
-            goto PCRE_ERROR_RETURN;
-            }
-          break;
-          }
+        /* Handle the definition of a named subpattern */
+
+        if (ptr < patternEnd) {
+            if (*ptr == '<')
+              {
+              const pcre_uchar *p;    /* Don't amalgamate; some compilers */
+              p = ++ptr;          /* grumble at autoincrement in declaration */
+              while (ptr < patternEnd && (CTYPES(&compile_block, *ptr) & ctype_word) != 0)
+                  ptr++;
+              if (ptr >= patternEnd || *ptr != '>')
+                {
+                errorcode = ERR42;
+                goto PCRE_ERROR_RETURN;
+                }
+              name_count++;
+              if (ptr - p > max_name_size) max_name_size = INT_CAST(ptr - p);
+              capturing = TRUE;   /* Named parentheses are always capturing */
+              break;
+              }
+
+            /* Handle back references and recursive calls to named subpatterns */
+
+            if (*ptr == '=' || *ptr == '>')
+              {
+              ++ptr;
+              while (ptr < patternEnd && (CTYPES(&compile_block, *ptr) & ctype_word) != 0)
+                ++ptr;
+              if (ptr >= patternEnd || *ptr != ')')
+                {
+                errorcode = ERR42;
+                goto PCRE_ERROR_RETURN;
+                }
+              break;
+              }
+        }
 
         /* Unknown character after (?P */
 
@@ -4605,7 +4668,7 @@ while ((c = *(++ptr)) != 0)
 
         case '<':
         ptr += 3;
-        if (*ptr == '=' || *ptr == '!')
+        if (ptr < patternEnd && (*ptr == '=' || *ptr == '!'))
           {
           branch_newextra = 1 + LINK_SIZE;
           length += 1 + LINK_SIZE;         /* For the first branch */
@@ -4619,17 +4682,18 @@ while ((c = *(++ptr)) != 0)
         group, or (a PCRE extension) by 'R' for a recursion test. */
 
         case '(':
-        if (ptr[3] == 'R' && ptr[4] == ')')
+        if (ptr + 4 < patternEnd && ptr[3] == 'R' && ptr[4] == ')')
           {
           ptr += 4;
           length += 3;
           }
-        else if ((DIGITAB(ptr[3]) & ctype_digit) != 0)
+        else if (ptr + 3 < patternEnd && (DIGITAB(ptr[3]) & ctype_digit) != 0)
           {
           ptr += 4;
           length += 3;
-          while ((DIGITAB(*ptr) & ctype_digit) != 0) ptr++;
-          if (*ptr != ')')
+          while (ptr < patternEnd && (DIGITAB(*ptr) & ctype_digit) != 0)
+              ptr++;
+          if (ptr >= patternEnd || *ptr != ')')
             {
             errorcode = ERR26;
             goto PCRE_ERROR_RETURN;
@@ -4638,7 +4702,7 @@ while ((c = *(++ptr)) != 0)
         else   /* An assertion must follow */
           {
           ptr++;   /* Can treat like ':' as far as spacing is concerned */
-          if (ptr[2] != '?' ||
+          if (ptr + 3 >= patternEnd || ptr[2] != '?' ||
              (ptr[3] != '=' && ptr[3] != '!' && ptr[3] != '<') )
             {
             ptr += 2;    /* To get right offset in message */
@@ -4660,7 +4724,7 @@ while ((c = *(++ptr)) != 0)
 
         for (;; ptr++)
           {
-          c = *ptr;
+          c = ptr < patternEnd ? *ptr : 0;
           switch (c)
             {
             case 'i':
@@ -4768,18 +4832,24 @@ while ((c = *(++ptr)) != 0)
           continue;
           }
 
-        /* If options were terminated by ':' control comes here. Fall through
-        to handle the group below. */
+        /* If options were terminated by ':' control comes here. This is a
+        non-capturing group with an options change. There is nothing more that
+        needs to be done because "capturing" is already set FALSE by default;
+        we can just fall through. */
+
         }
       }
 
-    /* Extracting brackets must be counted so we can process escapes in a
-    Perlish way. If the number exceeds EXTRACT_BASIC_MAX we are going to
-    need an additional 3 bytes of store per extracting bracket. However, if
-    PCRE_NO_AUTO)CAPTURE is set, unadorned brackets become non-capturing, so we
-    must leave the count alone (it will aways be zero). */
+    /* Ordinary parentheses, not followed by '?', are capturing unless
+    PCRE_NO_AUTO_CAPTURE is set. */
 
-    else if ((options & PCRE_NO_AUTO_CAPTURE) == 0)
+    else capturing = (options & PCRE_NO_AUTO_CAPTURE) == 0;
+
+    /* Capturing brackets must be counted so we can process escapes in a
+    Perlish way. If the number exceeds EXTRACT_BASIC_MAX we are going to need
+    an additional 3 bytes of memory per capturing bracket. */
+
+    if (capturing)
       {
       bracount++;
       if (bracount > EXTRACT_BASIC_MAX) bracket_length += 3;
@@ -4828,7 +4898,7 @@ while ((c = *(++ptr)) != 0)
     /* Leave ptr at the final char; for read_repeat_counts this happens
     automatically; for the others we need an increment. */
 
-    if ((c = ptr[1]) == '{' && is_counted_repeat(ptr+2))
+    if (ptr + 1 < patternEnd && (c = ptr[1]) == '{' && is_counted_repeat(ptr+2, patternEnd))
       {
       ptr = read_repeat_counts(ptr+2, &min, &max, &errorcode);
       if (errorcode != 0) goto PCRE_ERROR_RETURN;
@@ -4865,7 +4935,7 @@ while ((c = *(++ptr)) != 0)
 
     /* Allow space for once brackets for "possessive quantifier" */
 
-    if (ptr[1] == '+')
+    if (ptr + 1 < patternEnd && ptr[1] == '+')
       {
       ptr++;
       length += 2 + 2*LINK_SIZE;
@@ -4879,7 +4949,7 @@ while ((c = *(++ptr)) != 0)
     default:
     NORMAL_CHAR:
 
-    if (inescq && c == '\\' && ptr[1] == 'E')
+    if (inescq && c == '\\' && ptr + 1 < patternEnd && ptr[1] == 'E')
       {
       inescq = FALSE;
       ptr++;
@@ -4896,7 +4966,7 @@ while ((c = *(++ptr)) != 0)
       {
         if (IS_LEADING_SURROGATE(c))
           {
-          c = DECODE_SURROGATE_PAIR(c, *ptr);
+          c = DECODE_SURROGATE_PAIR(c, ptr < patternEnd ? *ptr : 0);
           ++ptr;
           }
 
@@ -4912,7 +4982,7 @@ while ((c = *(++ptr)) != 0)
 #ifdef SUPPORT_UTF8
     if (utf8 && (c & 0xc0) == 0xc0)
       {
-      while ((ptr[1] & 0xc0) == 0x80)         /* Can't flow over the end */
+      while (ptr + 1 < patternEnd && (ptr[1] & 0xc0) == 0x80)         /* Can't flow over the end */
         {                                     /* because the end is marked */
         lastitemlength++;                     /* by a zero byte. */
         length++;
@@ -4954,8 +5024,8 @@ pointer. NULL is used for the default character tables. The nullpad field is at
 the end; it's there to help in the case when a regex compiled on a system with
 4-byte pointers is run on another with 8-byte pointers. */
 
-re->magic_number = MAGIC_NUMBER;
-re->size = size;
+re->magic_number = (pcre_uint32)MAGIC_NUMBER;
+re->size = (pcre_uint32)size;
 re->options = options;
 re->dummy1 = 0;
 re->name_table_offset = sizeof(real_pcre);
@@ -4985,7 +5055,7 @@ ptr = (const pcre_uchar *)pattern;
 code = (uschar *)codestart;
 *code = OP_BRA;
 bracount = 0;
-(void)compile_regex(options, options & PCRE_IMS, &bracount, &code, &ptr,
+(void)compile_regex(options, options & PCRE_IMS, &bracount, &code, &ptr, patternEnd,
   &errorcode, FALSE, 0, &firstbyte, &reqbyte, NULL, &compile_block);
 re->top_bracket = bracount;
 re->top_backref = compile_block.top_backref;
@@ -4994,7 +5064,7 @@ if (compile_block.nopartial) re->options |= PCRE_NOPARTIAL;
 
 /* If not reached end of pattern on success, there's an excess bracket. */
 
-if (errorcode == 0 && *ptr != 0) errorcode = ERR22;
+if (errorcode == 0 && ptr < patternEnd) errorcode = ERR22;
 
 /* Fill in the terminating state and check for disastrous overflow, but
 if debugging, leave the test till after things are printed out. */
@@ -5016,7 +5086,7 @@ if (errorcode != 0)
   {
   (pcre_free)(re);
   PCRE_ERROR_RETURN:
-  *erroroffset = ptr - (const pcre_uchar *)pattern;
+  *erroroffset = INT_CAST(ptr - (const pcre_uchar *)pattern);
   PCRE_EARLY_ERROR_RETURN:
   *errorptr = error_texts[errorcode];
   if (errorcodeptr != NULL) *errorcodeptr = errorcode;
@@ -5077,7 +5147,8 @@ if (reqbyte >= 0 &&
     }
   }
 
-/* Print out the compiled data for debugging */
+/* Print out the compiled data if debugging is enabled. This is never the
+case when building a production library. */
 
 #ifdef DEBUG
 
@@ -5115,7 +5186,7 @@ if ((re->options & PCRE_REQCHSET) != 0)
     else printf("Req char = \\x%02x%s\n", ch, caseless);
   }
 
-_pcre_printint(re, stdout);
+pcre_printint(re, stdout);
 
 /* This check is done here in the debugging case so that the code that
 was compiled can be seen. */

@@ -33,13 +33,13 @@
 #include "Document.h"
 #include "HTMLNames.h"
 #include "MediaList.h"
+#include "MediaQuery.h"
+#include "MediaQueryExp.h"
 #include "PlatformString.h"
 #include "cssparser.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include "MediaQuery.h"
-#include "MediaQueryExp.h"
 
 #ifdef SVG_SUPPORT
 #include "ksvgcssproperties.h"
@@ -49,7 +49,6 @@
 using namespace WebCore;
 using namespace HTMLNames;
 
-//
 // The following file defines the function
 //     const struct props *findProp(const char *word, int len)
 //
@@ -227,7 +226,9 @@ static int cssyylex(YYSTYPE *yylval) { return CSSParser::current()->lex(yylval);
 
 %type <relation> combinator
 
+%type <rule> charset
 %type <rule> ruleset
+%type <rule> ruleset_or_import
 %type <rule> media
 %type <rule> import
 %type <rule> page
@@ -297,8 +298,13 @@ stylesheet:
   | webkit_mediaquery maybe_space
   ;
 
+ruleset_or_import:
+   ruleset |
+   import
+;
+
 webkit_rule:
-    WEBKIT_RULE_SYM '{' maybe_space ruleset maybe_space '}' {
+    WEBKIT_RULE_SYM '{' maybe_space ruleset_or_import maybe_space '}' {
         static_cast<CSSParser*>(parser)->rule = $4;
     }
 ;
@@ -343,10 +349,22 @@ maybe_sgml:
 
 maybe_charset:
    /* empty */
-  | CHARSET_SYM maybe_space STRING maybe_space ';'
-  | CHARSET_SYM error invalid_block
-  | CHARSET_SYM error ';'
- ;
+  | charset {
+  }
+;
+
+charset:
+  CHARSET_SYM maybe_space STRING maybe_space ';' {
+     CSSParser* p = static_cast<CSSParser*>(parser);
+     $$ = static_cast<CSSParser *>(parser)->createCharsetRule($3);
+     if ($$ && p->styleElement && p->styleElement->isCSSStyleSheet())
+         p->styleElement->append($$);
+  }
+  | CHARSET_SYM error invalid_block {
+  }
+  | CHARSET_SYM error ';' {
+  }
+;
 
 import_list:
  /* empty */

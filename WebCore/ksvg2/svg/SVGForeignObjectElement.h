@@ -19,8 +19,9 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGForeignObjectElementImpl_H
-#define KSVG_SVGForeignObjectElementImpl_H
+#ifndef SVGForeignObjectElement_H
+#define SVGForeignObjectElement_H
+
 #ifdef SVG_SUPPORT
 
 #include "SVGTests.h"
@@ -31,7 +32,7 @@
 
 namespace WebCore
 {
-    class SVGAnimatedLength;
+    class SVGLength;
     class SVGDocument;
 
     class SVGForeignObjectElement : public SVGStyledTransformableElement,
@@ -45,24 +46,23 @@ namespace WebCore
         virtual ~SVGForeignObjectElement();
         
         virtual bool isValid() const { return SVGTests::isValid(); }
+        virtual void parseMappedAttribute(MappedAttribute*);
 
-        SVGAnimatedLength *x() const;
-        SVGAnimatedLength *y() const;
+        virtual bool rendererIsNeeded(RenderStyle* style) { return StyledElement::rendererIsNeeded(style); }
+        bool childShouldCreateRenderer(Node*) const;
+        virtual RenderObject* createRenderer(RenderArena* arena, RenderStyle* style);
 
-        SVGAnimatedLength *width() const;
-        SVGAnimatedLength *height() const;
-
-        virtual void parseMappedAttribute(MappedAttribute *attr);
-
-        virtual bool rendererIsNeeded(RenderStyle *style) { return StyledElement::rendererIsNeeded(style); }
-        bool childShouldCreateRenderer(Node *child) const;
-        virtual RenderObject *createRenderer(RenderArena *arena, RenderStyle *style);
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedLength> m_x;
-        mutable RefPtr<SVGAnimatedLength> m_y;
-        mutable RefPtr<SVGAnimatedLength> m_width;
-        mutable RefPtr<SVGAnimatedLength> m_height;
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGExternalResourcesRequired, bool, ExternalResourcesRequired, externalResourcesRequired) 
+        ANIMATED_PROPERTY_FORWARD_DECLARATIONS(SVGURIReference, String, Href, href)
+
+        ANIMATED_PROPERTY_DECLARATIONS(SVGForeignObjectElement, SVGLength, SVGLength, X, x)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGForeignObjectElement, SVGLength, SVGLength, Y, y)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGForeignObjectElement, SVGLength, SVGLength, Width, width)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGForeignObjectElement, SVGLength, SVGLength, Height, height)
     };
 
 } // namespace WebCore

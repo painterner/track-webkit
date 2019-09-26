@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2006 Samuel Weinig (sam.weinig@gmail.com)
  * Copyright (C) 2006 Apple Computer, Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,24 +28,30 @@
 #include "WebKitDLL.h"
 
 #include "IWebURLResponse.h"
-#include "WebMutableURLRequest.h"
-#include "WebFrame.h"
-#include "WebView.h"
 #include "WebDataSource.h"
+#include "WebFrame.h"
 #include "WebHistoryItem.h"
+#include "WebMutableURLRequest.h"
+#include "WebView.h"
 
 #pragma warning( push, 0 )
 #include "Cache.h"
+#include "cairo.h"
+#include "cairo-win32.h"
+#include "ChromeClientWin.h"
+#include "ContextMenuClientWin.h"
 #include "Document.h"
+#include "EditorClientWin.h"
+#include "FrameLoader.h"
 #include "FrameView.h"
 #include "FrameWin.h"
 #include "GraphicsContext.h"
 #include "Page.h"
 #include "RenderFrame.h"
-#include "cairo.h"
-#include "cairo-win32.h"
-#include "ResourceLoader.h"
-#include "ResourceLoaderWin.h"
+#include "ResourceHandle.h"
+#include "ResourceHandleWin.h"
+#include "ResourceRequest.h"
+#include "SubresourceLoader.h"
 #pragma warning(pop)
 
 using namespace WebCore;
@@ -65,6 +72,9 @@ public:
 
 WebFrame::WebFrame()
 : m_refCount(0)
+#pragma warning(push, 0) // allow initializers with 'this'
+, m_frameLoaderClient(this)
+#pragma warning(pop)
 , d(new WebFrame::WebFramePrivate)
 , m_dataSource(0)
 , m_provisionalDataSource(0)
@@ -133,25 +143,23 @@ HRESULT STDMETHODCALLTYPE WebFrame::initWithName(
     if (FAILED(hr))
         return hr;
 
-    Page* page = new Page();
-    Frame* frame = new FrameWin(page, 0, this);
+    Page* page = new Page(new ChromeClientWin(), new ContextMenuClientWin(), new EditorClientWin());
+    Frame* frame = new FrameWin(page, 0, this, &m_frameLoaderClient);
 
     // FIXME: This is one-time initialization, but it gets the value of the setting from the
     // current WebView. That's a mismatch and not good!
     static bool initializedObjectCacheSize = false;
     if (!initializedObjectCacheSize) {
-        Cache::setSize(getObjectCacheSize());
+        cache()->setMaximumSize(getObjectCacheSize());
         initializedObjectCacheSize = true;
     }
 
     d->frame = frame;
-    frame->deref(); // Frames are created with a refcount of 1.  Release this ref, since we've assigned it to a RefPtr
-    page->setMainFrame(frame);
     FrameView* frameView = new FrameView(frame);
     d->frameView = frameView;
     frameView->deref(); // FrameViews are created with a refcount of 1.  Release this ref, since we've assigned it to a RefPtr
     d->frame->setView(frameView);
-    d->frameView->setWindowHandle(windowHandle);
+    d->frameView->setContainingWindow(windowHandle);
 
     return S_OK;
 }
@@ -226,12 +234,12 @@ HRESULT STDMETHODCALLTYPE WebFrame::loadHTMLString(
 
     if (baseURL) {
         DeprecatedString baseURLString((DeprecatedChar*)baseURL, SysStringLen(baseURL));
-        d->frame->begin(KURL(baseURLString));
+        d->frame->loader()->begin(KURL(baseURLString));
     }
     else
-        d->frame->begin();
-    d->frame->write(htmlString);
-    d->frame->end();
+        d->frame->loader()->begin();
+    d->frame->loader()->write(htmlString);
+    d->frame->loader()->end();
 
     return S_OK;
 }
@@ -274,14 +282,14 @@ HRESULT STDMETHODCALLTYPE WebFrame::provisionalDataSource(
 
 HRESULT STDMETHODCALLTYPE WebFrame::stopLoading( void)
 {
-//    DebugBreak();
+    d->frame->loader()->stopLoading(false);
     return E_NOTIMPL;
 }
 
 HRESULT STDMETHODCALLTYPE WebFrame::reload( void)
 {
-    if (!d->frame->url().url().startsWith("javascript:", false))
-        d->frame->scheduleLocationChange(d->frame->url().url(), d->frame->referrer(), true/*lock history*/, true/*userGesture*/);
+    if (!d->frame->loader()->url().url().startsWith("javascript:", false))
+        d->frame->loader()->scheduleLocationChange(d->frame->loader()->url().url(), d->frame->loader()->outgoingReferrer(), true/*lock history*/, true/*userGesture*/);
     return S_OK;
 }
 
@@ -371,20 +379,17 @@ HRESULT WebFrame::loadDataSource(WebDataSource* dataSource)
             hr = request->HTTPMethod(&method);
             if (SUCCEEDED(hr)) {
                 KURL kurl(DeprecatedString((DeprecatedChar*)url, SysStringLen(url)));
-                d->frame->didOpenURL(kurl);
-                d->frame->begin(kurl);
+                d->frame->loader()->didOpenURL(kurl);
                 String methodString(method, SysStringLen(method));
-                ResourceLoader* job;
                 const FormData* formData = 0;
                 if (wcscmp(method, TEXT("GET"))) {
                     WebMutableURLRequest* requestImpl = static_cast<WebMutableURLRequest*>(request);
                     formData = requestImpl->formData();
                 }
-                if (formData)
-                    job = new ResourceLoader(this, methodString, kurl, *formData);
-                else
-                    job = new ResourceLoader(this, methodString, kurl);
-                job->start(d->frame->document()->docLoader());
+
+                ResourceRequest resourceRequest(kurl);
+                RefPtr<SubresourceLoader> loader = SubresourceLoader::create(d->frame.get(), this, resourceRequest);
+
                 IWebFrameLoadDelegate* frameLoadDelegate;
                 if (SUCCEEDED(d->webView->frameLoadDelegate(&frameLoadDelegate))) {
                     frameLoadDelegate->didStartProvisionalLoadForFrame(d->webView, this);
@@ -462,67 +467,34 @@ int WebFrame::getObjectCacheSize()
     return cacheSize * multiplier;
 }
 
-// ResourceLoaderClient
+// ResourceHandleClient
 
-void WebFrame::receivedRedirect(ResourceLoader*, const KURL&)
+void WebFrame::didReceiveData(WebCore::ResourceHandle*, const char* data, int length)
 {
-    //FIXME
-}
+    // Ensure that WebFrame::receivedResponse was called.
+    _ASSERT(m_dataSource && !m_provisionalDataSource);
 
-void WebFrame::receivedResponse(ResourceLoader*, PlatformResponse)
-{
-    if (m_provisionalDataSource) {
-        m_dataSource = m_provisionalDataSource;
-        m_provisionalDataSource = 0;
-    }
-}
-
-void WebFrame::receivedData(ResourceLoader*, const char* data, int length)
-{
-    d->frame->write(data, length);
-}
-
-void WebFrame::receivedAllData(ResourceLoader* /*job*/)
-{
-    m_quickRedirectComing = false;
-    m_loadType = WebFrameLoadTypeStandard;
-}
-
-void WebFrame::receivedAllData(ResourceLoader* job, PlatformData data)
-{
-    IWebFrameLoadDelegate* frameLoadDelegate;
-    if (SUCCEEDED(d->webView->frameLoadDelegate(&frameLoadDelegate))) {
-
-        if (data->loaded) {
-            frameLoadDelegate->didFinishLoadForFrame(d->webView, this);
-
-            if (m_loadType != WebFrameLoadTypeBack && m_loadType != WebFrameLoadTypeForward && m_loadType != WebFrameLoadTypeIndexedBackForward && !m_quickRedirectComing) {
-                DeprecatedString urlStr = job->url().url();
-                BSTR urlBStr = SysAllocStringLen((LPCOLESTR)urlStr.unicode(), urlStr.length());
-                WebHistoryItem* historyItem = WebHistoryItem::createInstance();
-                if (SUCCEEDED(historyItem->initWithURLString(urlBStr, 0/*FIXME*/))) {
-                    IWebBackForwardList* backForwardList;
-                    if (SUCCEEDED(d->webView->backForwardList(&backForwardList))) {
-                        backForwardList->addItem(historyItem);
-                        backForwardList->Release();
-                    }
-                    historyItem->Release();
-                }
-            }
-        }
-        else {
-            frameLoadDelegate->didFailLoadWithError(d->webView, 0/*FIXME*/, this);
-            m_quickRedirectComing = false;
-            m_loadType = WebFrameLoadTypeStandard;
-        }
-
-        frameLoadDelegate->Release();
-    }
-
-    d->frame->end();
+    d->frame->loader()->write(data, length);
 }
 
 // FrameWinClient
+
+void WebFrame::createNewWindow(const WebCore::ResourceRequest&, const WebCore::WindowFeatures&, WebCore::Frame*& newFrame)
+{
+    IWebUIDelegate* uiDelegate = NULL;
+    if (FAILED(d->webView->uiDelegate(&uiDelegate)) || !uiDelegate)
+        return;
+    IWebView* new_view = NULL;
+    if (FAILED(uiDelegate->createWebViewWithRequest(d->webView, NULL, &new_view)) || !new_view)
+        return;
+
+    IWebFrame* new_iwebframe = NULL;
+    if (FAILED(new_view->mainFrame(&new_iwebframe)) || !new_iwebframe)
+      return;
+
+    WebFrame* new_frame = static_cast<WebFrame*>(new_iwebframe);
+    newFrame = new_frame->d->frame.get();
+}
 
 void WebFrame::openURL(const DeprecatedString& url, bool lockHistory)
 {

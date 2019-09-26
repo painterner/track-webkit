@@ -27,16 +27,17 @@
 #include "Attr.h"
 #include "PlatformString.h"
 #include "SVGFitToViewBox.h"
-#include "SVGHelper.h"
 #include "SVGNames.h"
 #include "SVGStringList.h"
 #include "SVGZoomAndPan.h"
 
-using namespace WebCore;
+namespace WebCore {
 
 SVGViewElement::SVGViewElement(const QualifiedName& tagName, Document *doc)
-: SVGStyledElement(tagName, doc), SVGExternalResourcesRequired(),
-SVGFitToViewBox(), SVGZoomAndPan()
+    : SVGStyledElement(tagName, doc)
+    , SVGExternalResourcesRequired()
+    , SVGFitToViewBox()
+    , SVGZoomAndPan()
 {
 }
 
@@ -44,17 +45,20 @@ SVGViewElement::~SVGViewElement()
 {
 }
 
-SVGStringList *SVGViewElement::viewTarget() const
+SVGStringList* SVGViewElement::viewTarget() const
 {
-    return lazy_create<SVGStringList>(m_viewTarget);
+    if (!m_viewTarget)
+        m_viewTarget = new SVGStringList();
+
+    return m_viewTarget.get();
 }
 
 void SVGViewElement::parseMappedAttribute(MappedAttribute *attr)
 {
     const String& value = attr->value();
-    if (attr->name() == SVGNames::viewTargetAttr) {
-        viewTarget()->reset(value.deprecatedString());
-    } else {
+    if (attr->name() == SVGNames::viewTargetAttr)
+        viewTarget()->reset(value);
+    else {
         if(SVGExternalResourcesRequired::parseMappedAttribute(attr)
            || SVGFitToViewBox::parseMappedAttribute(attr)
            || SVGZoomAndPan::parseMappedAttribute(attr))
@@ -62,6 +66,8 @@ void SVGViewElement::parseMappedAttribute(MappedAttribute *attr)
 
         SVGStyledElement::parseMappedAttribute(attr);
     }
+}
+
 }
 
 #endif // SVG_SUPPORT

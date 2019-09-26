@@ -29,6 +29,7 @@
 #import "BlockExceptions.h"
 #import "FoundationExtras.h"
 #import "Image.h"
+#import "IntPoint.h"
 
 @interface WebCoreCursorBundle : NSObject { }
 @end
@@ -41,14 +42,14 @@ namespace WebCore {
 // Simple NSCursor calls shouldn't need protection,
 // but creating a cursor with a bad image might throw.
 
-static NSCursor* createCustomCursor(Image* image)
+static NSCursor* createCustomCursor(Image* image, const IntPoint& hotspot)
 {
     // FIXME: The cursor won't animate.  Not sure if that's a big deal.
     NSImage* img = image->getNSImage();
     if (!img)
         return 0;
     BEGIN_BLOCK_OBJC_EXCEPTIONS;
-    return [[NSCursor alloc] initWithImage:img hotSpot:NSZeroPoint];
+    return [[NSCursor alloc] initWithImage:img hotSpot:hotspot];
     END_BLOCK_OBJC_EXCEPTIONS;
     return 0;
 }
@@ -61,7 +62,7 @@ static NSCursor* leakNamedCursor(const char* name, int x, int y)
     NSString* resourceName = [[NSString alloc] initWithUTF8String:name];
     NSImage* cursorImage = [[NSImage alloc] initWithContentsOfFile:
         [[NSBundle bundleForClass:[WebCoreCursorBundle class]]
-        pathForResource:resourceName ofType:@"tiff"]];
+        pathForResource:resourceName ofType:@"png"]];
     [resourceName release];
     NSCursor* cursor = 0;
     if (cursorImage) {
@@ -74,8 +75,8 @@ static NSCursor* leakNamedCursor(const char* name, int x, int y)
     return 0;
 }
 
-Cursor::Cursor(Image* image)
-    : m_impl(HardRetainWithNSRelease(createCustomCursor(image)))
+Cursor::Cursor(Image* image, const IntPoint& hotspot)
+    : m_impl(HardRetainWithNSRelease(createCustomCursor(image, hotspot)))
 {
 }
 
@@ -102,6 +103,12 @@ Cursor::Cursor(NSCursor* c)
 {
 }
 
+const Cursor& pointerCursor()
+{
+    static Cursor c = [NSCursor arrowCursor];
+    return c;
+}
+
 const Cursor& crossCursor()
 {
     static Cursor c = [NSCursor crosshairCursor];
@@ -110,7 +117,6 @@ const Cursor& crossCursor()
 
 const Cursor& handCursor()
 {
-    // FIXME: Use [NSCursor pointingHandCursor]?
     static Cursor c = leakNamedCursor("linkCursor", 6, 1);
     return c;
 }
@@ -118,6 +124,54 @@ const Cursor& handCursor()
 const Cursor& moveCursor()
 {
     static Cursor c = leakNamedCursor("moveCursor", 7, 7);
+    return c;
+}
+
+const Cursor& verticalTextCursor()
+{
+    static Cursor c = leakNamedCursor("verticalTextCursor", 7, 7);
+    return c;
+}
+
+const Cursor& cellCursor()
+{
+    static Cursor c = leakNamedCursor("cellCursor", 7, 7);
+    return c;
+}
+
+const Cursor& contextMenuCursor()
+{
+    static Cursor c = leakNamedCursor("contextMenuCursor", 1, 1);
+    return c;
+}
+
+const Cursor& aliasCursor()
+{
+    static Cursor c = leakNamedCursor("aliasCursor", 11, 3);
+    return c;
+}
+
+const Cursor& copyCursor()
+{
+    static Cursor c = leakNamedCursor("copyCursor", 1, 1);
+    return c;
+}
+
+const Cursor& noneCursor()
+{
+    static Cursor c = leakNamedCursor("noneCursor", 7, 7);
+    return c;
+}
+
+const Cursor& progressCursor()
+{
+    static Cursor c = leakNamedCursor("progressCursor", 1, 1);
+    return c;
+}
+
+const Cursor& noDropCursor()
+{
+    static Cursor c = leakNamedCursor("noDropCursor", 1, 1);
     return c;
 }
 

@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -24,14 +24,11 @@
 #define KSVG_SVGFEBlendElementImpl_H
 #ifdef SVG_SUPPORT
 
+#include "SVGFEBlend.h"
 #include "SVGFilterPrimitiveStandardAttributes.h"
-#include "KCanvasFilters.h"
 
 namespace WebCore
 {
-    class SVGAnimatedString;
-    class SVGAnimatedEnumeration;
-
     class SVGFEBlendElement : public SVGFilterPrimitiveStandardAttributes
     {
     public:
@@ -39,20 +36,19 @@ namespace WebCore
         virtual ~SVGFEBlendElement();
 
         // 'SVGFEBlendElement' functions
-        SVGAnimatedString *in1() const;
-        SVGAnimatedString *in2() const;
-        SVGAnimatedEnumeration *mode() const;
-
         // Derived from: 'Element'
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute* attr);
 
-        virtual KCanvasFEBlend *filterEffect() const;
+        virtual SVGFEBlend* filterEffect() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedString> m_in1;
-        mutable RefPtr<SVGAnimatedString> m_in2;
-        mutable RefPtr<SVGAnimatedEnumeration> m_mode;
-        mutable KCanvasFEBlend *m_filterEffect;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEBlendElement, String, String, In1, in1)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEBlendElement, String, String, In2, in2)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEBlendElement, int, int, Mode, mode)
+        mutable SVGFEBlend* m_filterEffect;
     };
 
 } // namespace WebCore

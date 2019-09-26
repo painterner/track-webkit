@@ -1,6 +1,6 @@
 /*
-    Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+    Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -20,23 +20,24 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGPathSegMovetoImpl_H
-#define KSVG_SVGPathSegMovetoImpl_H
+#ifndef SVGPathSegMoveto_H
+#define SVGPathSegMoveto_H
+
 #ifdef SVG_SUPPORT
 
-#include <ksvg2/svg/SVGPathSeg.h>
+#include "SVGPathSeg.h"
 
 namespace WebCore
 {
     class SVGPathSegMovetoAbs : public SVGPathSeg
     { 
     public:
-        SVGPathSegMovetoAbs(const SVGStyledElement *context = 0);
+        SVGPathSegMovetoAbs(double x, double y);
         virtual ~SVGPathSegMovetoAbs();
 
         virtual unsigned short pathSegType() const { return PATHSEG_MOVETO_ABS; }
         virtual String pathSegTypeAsLetter() const { return "M"; }
-        virtual String toString() const { return String::sprintf("M %.6lg %.6lg", m_x, m_y); }
+        virtual String toString() const { return String::format("M %.6lg %.6lg", m_x, m_y); }
 
         void setX(double);
         double x() const;
@@ -52,12 +53,12 @@ namespace WebCore
     class SVGPathSegMovetoRel : public SVGPathSeg
     { 
     public:
-        SVGPathSegMovetoRel(const SVGStyledElement *context = 0);
+        SVGPathSegMovetoRel(double x, double y);
         virtual ~SVGPathSegMovetoRel();
 
         virtual unsigned short pathSegType() const { return PATHSEG_MOVETO_REL; }
         virtual String pathSegTypeAsLetter() const { return "m"; }
-        virtual String toString() const { return String::sprintf("m %.6lg %.6lg", m_x, m_y); }
+        virtual String toString() const { return String::format("m %.6lg %.6lg", m_x, m_y); }
 
         void setX(double);
         double x() const;

@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -24,14 +24,12 @@
 #define KSVG_SVGFEColorMatrixElementImpl_H
 #ifdef SVG_SUPPORT
 
+#include "SVGFEColorMatrix.h"
 #include "SVGFilterPrimitiveStandardAttributes.h"
-#include "KCanvasFilters.h"
 
 namespace WebCore
 {
-    class SVGAnimatedString;
-    class SVGAnimatedNumberList;
-    class SVGAnimatedEnumeration;
+    class SVGNumberList;
 
     class SVGFEColorMatrixElement : public SVGFilterPrimitiveStandardAttributes
     {
@@ -40,20 +38,19 @@ namespace WebCore
         virtual ~SVGFEColorMatrixElement();
 
         // 'SVGFEColorMatrixElement' functions
-        SVGAnimatedString *in1() const;
-        SVGAnimatedEnumeration *type() const;
-        SVGAnimatedNumberList *values() const;
-
         // Derived from: 'Element'
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute* attr);
         
-        virtual KCanvasFEColorMatrix *filterEffect() const;
+        virtual SVGFEColorMatrix* filterEffect() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
 
     private:
-        mutable RefPtr<SVGAnimatedString> m_in1;
-        mutable RefPtr<SVGAnimatedEnumeration> m_type;
-        mutable RefPtr<SVGAnimatedNumberList> m_values;
-        mutable KCanvasFEColorMatrix *m_filterEffect;
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEColorMatrixElement, String, String, In1, in1)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEColorMatrixElement, int, int, Type, type)
+        ANIMATED_PROPERTY_DECLARATIONS(SVGFEColorMatrixElement, SVGNumberList*, RefPtr<SVGNumberList>, Values, values)
+        mutable SVGFEColorMatrix* m_filterEffect;
     };
 
 } // namespace WebCore

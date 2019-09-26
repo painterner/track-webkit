@@ -1,6 +1,6 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
 
     This file is part of the KDE project
 
@@ -21,18 +21,16 @@
 */
 
 #include "config.h"
-#ifdef SVG_SUPPORT
-#include "DeprecatedStringList.h"
 
-#include "SVGMatrix.h"
-#include "SVGNumber.h"
-#include "SVGSVGElement.h"
+#ifdef SVG_SUPPORT
 #include "SVGNumberList.h"
 
-using namespace WebCore;
+#include "SVGParserUtilities.h"
 
-SVGNumberList::SVGNumberList(const SVGStyledElement *context)
-: SVGList<SVGNumber>(context)
+namespace WebCore {
+
+SVGNumberList::SVGNumberList()
+    : SVGList<double>()
 {
 }
 
@@ -40,15 +38,21 @@ SVGNumberList::~SVGNumberList()
 {
 }
 
-void SVGNumberList::parse(const DeprecatedString &value, const SVGStyledElement *context)
+void SVGNumberList::parse(const String& value)
 {
-    DeprecatedStringList numbers = DeprecatedStringList::split(' ', value);
-    for(unsigned int i = 0;i < numbers.count();i++)
-    {
-        SVGNumber *number = new SVGNumber(context);
-        number->setValue(numbers[i].toDouble());
-        appendItem(number);
+    ExceptionCode ec = 0;
+
+    double number = 0;
+   
+    const UChar* ptr = value.characters();
+    const UChar* end = ptr + value.length();
+    while (ptr < end) {
+        if (!parseNumber(ptr, end, number))
+            return;
+        appendItem(number, ec);
     }
+}
+
 }
 
 // vim:ts=4:noet

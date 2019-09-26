@@ -116,7 +116,10 @@ void* Collector::allocate(size_t s)
 
   // collect if needed
   size_t numLiveObjects = heap.numLiveObjects;
-  if (numLiveObjects - heap.numLiveObjectsAtLastCollect >= ALLOCATIONS_PER_COLLECTION) {
+  size_t numLiveObjectsAtLastCollect = heap.numLiveObjectsAtLastCollect;
+  size_t numNewObjects = numLiveObjects - numLiveObjectsAtLastCollect;
+
+  if (numNewObjects >= ALLOCATIONS_PER_COLLECTION && numNewObjects >= numLiveObjectsAtLastCollect) {
     collect();
     numLiveObjects = heap.numLiveObjects;
   }
@@ -184,7 +187,7 @@ allocateNewBlock:
   // could avoid the casts by using a cell offset, but this avoids a relatively-slow multiply
   targetBlock->freeList = reinterpret_cast<CollectorCell *>(reinterpret_cast<char *>(newCell + 1) + newCell->u.freeCell.next);
 
-  targetBlock->usedCells = targetBlockUsedCells + 1;
+  targetBlock->usedCells = static_cast<uint32_t>(targetBlockUsedCells + 1);
   heap.numLiveObjects = numLiveObjects + 1;
 
   return newCell;
@@ -297,7 +300,14 @@ gotGoodPointer:
 void Collector::markCurrentThreadConservatively()
 {
     jmp_buf registers;
+#if COMPILER(MSVC)
+#pragma warning(push)
+#pragma warning(disable: 4611)
+#endif
     setjmp(registers);
+#if COMPILER(MSVC)
+#pragma warning(pop)
+#endif
 
 #if PLATFORM(DARWIN)
     pthread_t thread = pthread_self();
@@ -322,10 +332,11 @@ void Collector::markCurrentThreadConservatively()
         // FIXME: this function is non-portable; other POSIX systems may have different np alternatives
         pthread_getattr_np(thread, &sattr);
 #endif
-        // Should work but fails on Linux (?)
-        //  pthread_attr_getstack(&sattr, &stackBase, &stackSize);
-        pthread_attr_getstackaddr(&sattr, &stackBase);
+        size_t stackSize;
+        int rc = pthread_attr_getstack(&sattr, &stackBase, &stackSize);
+        (void)rc; // FIXME: deal with error code somehow?  seems fatal...
         assert(stackBase);
+        stackBase = (void*)(size_t(stackBase) + stackSize);
         stackThread = thread;
     }
 #else
@@ -490,6 +501,11 @@ bool Collector::collect()
         if (imp->m_marked) {
           imp->m_marked = false;
         } else if (currentThreadIsMainThread || imp->m_destructorIsThreadSafe) {
+          // special case for allocated but uninitialized object
+          // (We don't need this check earlier because nothing prior this point assumes the object has a valid vptr.)
+          if (cell->u.freeCell.zeroIfFree == 0)
+            continue;
+
           imp->~JSCell();
           --usedCells;
           --numLiveObjects;
@@ -502,7 +518,7 @@ bool Collector::collect()
       }
     } else {
       size_t minimumCellsToProcess = usedCells;
-      for (size_t i = 0; i < minimumCellsToProcess; i++) {
+      for (size_t i = 0; (i < minimumCellsToProcess) & (i < CELLS_PER_BLOCK); i++) {
         CollectorCell *cell = curBlock->cells + i;
         if (cell->u.freeCell.zeroIfFree == 0) {
           ++minimumCellsToProcess;
@@ -524,7 +540,7 @@ bool Collector::collect()
       }
     }
     
-    curBlock->usedCells = usedCells;
+    curBlock->usedCells = static_cast<uint32_t>(usedCells);
     curBlock->freeList = freeList;
 
     if (usedCells == 0) {

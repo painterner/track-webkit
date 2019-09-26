@@ -1,7 +1,8 @@
 /*
     Copyright (C) 2004, 2005 Nikolas Zimmermann <wildfox@kde.org>
-                  2004, 2005 Rob Buis <buis@kde.org>
-
+                  2004, 2005, 2006 Rob Buis <buis@kde.org>
+    Copyright (C) 2007 Eric Seidel <eric@webkit.org>
+    
     This file is part of the KDE project
 
     This library is free software; you can redistribute it and/or
@@ -20,44 +21,53 @@
     Boston, MA 02111-1307, USA.
 */
 
-#ifndef KSVG_SVGAnimateTransformElementImpl_H
-#define KSVG_SVGAnimateTransformElementImpl_H
+#ifndef SVGAnimateTransformElement_H
+#define SVGAnimateTransformElement_H
 #ifdef SVG_SUPPORT
 
-#include "ksvg.h"
 #include "SVGAnimationElement.h"
-#include <kcanvas/KCanvasMatrix.h>
+#include "SVGTransform.h"
 
 namespace WebCore {
 
-    class SVGTransform;
+    class AffineTransform;
 
     class SVGAnimateTransformElement : public SVGAnimationElement {
     public:
         SVGAnimateTransformElement(const QualifiedName&, Document*);
         virtual ~SVGAnimateTransformElement();
+        
+        virtual bool hasValidTarget() const;
 
-        virtual void parseMappedAttribute(MappedAttribute *attr);
+        virtual void parseMappedAttribute(MappedAttribute*);
 
-        virtual void handleTimerEvent(double timePercentage);
+        void applyAnimationToValue(SVGTransformList*);
 
         // Helpers
-        RefPtr<SVGTransform> parseTransformValue(const DeprecatedString &data) const;
-        void calculateRotationFromMatrix(const AffineTransform &matrix, double &angle, double &cx, double &cy) const;
+        RefPtr<SVGTransform> parseTransformValue(const String&) const;
+        void calculateRotationFromMatrix(const AffineTransform&, double& angle, double& cx, double& cy) const;
 
-        SVGMatrix *initialMatrix() const;
-        SVGMatrix *transformMatrix() const;
+        AffineTransform currentTransform() const;
+
+    protected:
+        virtual const SVGElement* contextElement() const { return this; }
+        void storeInitialValue();
+        virtual void resetValues();
+        
+        virtual bool updateCurrentValue(double timePercentage);
+        virtual bool handleStartCondition();
+        virtual void updateLastValueWithCurrent();
 
     private:
         int m_currentItem;
-        SVGTransformType m_type;
+        SVGTransform::SVGTransformType m_type;
 
         RefPtr<SVGTransform> m_toTransform;
         RefPtr<SVGTransform> m_fromTransform;
         RefPtr<SVGTransform> m_initialTransform;
 
-        RefPtr<SVGMatrix> m_lastMatrix;
-        RefPtr<SVGMatrix> m_transformMatrix;
+        AffineTransform m_lastTransform;
+        AffineTransform m_currentTransform;
 
         mutable bool m_rotateSpecialCase : 1;
         bool m_toRotateSpecialCase : 1;
@@ -67,6 +77,6 @@ namespace WebCore {
 } // namespace WebCore
 
 #endif // SVG_SUPPORT
-#endif // KSVG_SVGAnimateTransformElementImpl_H
+#endif // SVGAnimateTransformElement_H
 
 // vim:ts=4:noet

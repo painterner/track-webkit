@@ -38,8 +38,6 @@ namespace DOM {
   class AtomicString;
 }
 class KJScript;
-class QString;
-class QConstString;
 
 namespace KJS {
 
@@ -75,11 +73,11 @@ namespace KJS {
     /**
      * @return The higher byte of the character.
      */
-    unsigned char high() const { return uc >> 8; }
+    unsigned char high() const { return static_cast<unsigned char>(uc >> 8); }
     /**
      * @return The lower byte of the character.
      */
-    unsigned char low() const { return uc; }
+    unsigned char low() const { return static_cast<unsigned char>(uc); }
     /**
      * @return the 16 bit Unicode value of the character
      */
@@ -127,11 +125,11 @@ namespace KJS {
     /**
      * @return Lower byte.
      */
-    unsigned char low() const { return ref().uc; }
+    unsigned char low() const { return static_cast<unsigned char>(ref().uc); }
     /**
      * @return Higher byte.
      */
-    unsigned char high() const { return ref().uc >> 8; }
+    unsigned char high() const { return static_cast<unsigned char>(ref().uc >> 8); }
 
   private:
     // not implemented, can only be constructed from UString
@@ -222,11 +220,7 @@ namespace KJS {
      */
     UString();
     /**
-     * Constructs a string from the single character c.
-     */
-    explicit UString(char c);
-    /**
-     * Constructs a string from a classical zero determined char string.
+     * Constructs a string from a classical zero-terminated char string.
      */
     UString(const char *c);
     /**
@@ -247,18 +241,14 @@ namespace KJS {
     UString(const UString &s) : m_rep(s.m_rep) {}
     /**
      * Convenience declaration only ! You'll be on your own to write the
-     * implementation for a construction from QString.
+     * implementation for a construction from DOM::DOMString.
      *
      * Note: feel free to contact me if you want to see a dummy header for
      * your favorite FooString class here !
      */
-    UString(const QString&);
-    /**
-     * Convenience declaration only ! See UString(const QString&).
-     */
     UString(const DOM::DOMString&);
     /**
-     * Convenience declaration only ! See UString(const QString&).
+     * Convenience declaration only ! See UString(const DOM::DOMString&).
      */
     UString(const DOM::AtomicString&);
 
@@ -330,17 +320,9 @@ namespace KJS {
     CString UTF8String() const;
 
     /**
-     * @see UString(const QString&).
+     * @see UString(const DOM::DOMString&).
      */
     DOM::DOMString domString() const;
-    /**
-     * @see UString(const QString&).
-     */
-    QString qstring() const;
-    /**
-     * @see UString(const QString&).
-     */
-    QConstString qconststring() const;
 
     /**
      * Assignment operator.

@@ -28,6 +28,7 @@
 
 #include "Document.h"
 #include "DocumentFragment.h"
+#include "Editor.h"
 #include "Element.h"
 #include "Frame.h"
 #include "Logging.h"
@@ -57,8 +58,8 @@ DeleteSelectionCommand::DeleteSelectionCommand(Document *document, bool smartDel
 {
 }
 
-DeleteSelectionCommand::DeleteSelectionCommand(Document *document, const Selection &selection, bool smartDelete, bool mergeBlocksAfterDelete, bool replace)
-    : CompositeEditCommand(document), 
+DeleteSelectionCommand::DeleteSelectionCommand(const Selection& selection, bool smartDelete, bool mergeBlocksAfterDelete, bool replace)
+    : CompositeEditCommand(selection.start().node()->document()), 
       m_hasSelectionToDelete(true), 
       m_smartDelete(smartDelete), 
       m_mergeBlocksAfterDelete(mergeBlocksAfterDelete),
@@ -72,21 +73,21 @@ DeleteSelectionCommand::DeleteSelectionCommand(Document *document, const Selecti
 }
 
 void DeleteSelectionCommand::initializeStartEnd()
- {
+{
     Node* startSpecialContainer = 0;
     Node* endSpecialContainer = 0;
  
     Position start = m_selectionToDelete.start();
     Position end = m_selectionToDelete.end();
  
-    // For HR's, we'll get a position at (HR,1) when hitting delete from the beginning of the previous line, or (HR,0) when forward deleting,
+    // For HRs, we'll get a position at (HR,1) when hitting delete from the beginning of the previous line, or (HR,0) when forward deleting,
     // but in these cases, we want to delete it, so manually expand the selection
     if (start.node()->hasTagName(hrTag))
         start = Position(start.node(), 0);
     else if (end.node()->hasTagName(hrTag))
         end = Position(end.node(), 1);
     
-    while (1) {
+    while (VisiblePosition(start) == m_selectionToDelete.visibleStart() && VisiblePosition(end) == m_selectionToDelete.visibleEnd()) {
         startSpecialContainer = 0;
         endSpecialContainer = 0;
     
@@ -96,8 +97,18 @@ void DeleteSelectionCommand::initializeStartEnd()
         if (!startSpecialContainer || !endSpecialContainer)
             break;
         
-        start = s;
-        end = e;
+        if (startSpecialContainer->isDescendantOf(endSpecialContainer))
+            // Don't adjust the end yet, it is the end of a special element that contains the start
+            // special element (which may or may not be fully selected).
+            start = s;
+        else if (endSpecialContainer->isDescendantOf(startSpecialContainer))
+            // Don't adjust the start yet, it is the start of a special element that contains the end
+            // special element (which may or may not be fully selected).
+            end = e;
+        else {
+            start = s;
+            end = e;
+        }
     }
  
     m_upstreamStart = start.upstream();
@@ -194,15 +205,16 @@ bool DeleteSelectionCommand::handleSpecialCaseBRDelete()
     bool isBROnLineByItself = upstreamStartIsBR && downstreamStartIsBR && m_downstreamStart.node() == m_upstreamEnd.node();
     if (isBROnLineByItself) {
         removeNode(m_downstreamStart.node());
-        m_mergeBlocksAfterDelete = false;
         return true;
     }
 
     // Not a special-case delete per se, but we can detect that the merging of content between blocks
     // should not be done.
-    if (upstreamStartIsBR && downstreamStartIsBR)
+    if (upstreamStartIsBR && downstreamStartIsBR) {
         m_mergeBlocksAfterDelete = false;
-
+        m_endingPosition = m_downstreamEnd;
+    }
+    
     return false;
 }
 
@@ -212,7 +224,7 @@ static void updatePositionForNodeRemoval(Node* node, Position& position)
         return;
     if (node->parent() == position.node() && node->nodeIndex() < (unsigned)position.offset())
         position = Position(position.node(), position.offset() - 1);
-    if (position.node() == node || position.node()->isAncestor(node))
+    if (position.node() == node || position.node()->isDescendantOf(node))
         position = positionBeforeNode(node);
 }
 
@@ -333,7 +345,7 @@ void DeleteSelectionCommand::handleGeneralDelete()
             if (Range::compareBoundaryPoints(Position(node, 0), m_downstreamEnd) >= 0) {
                 // traverseNextSibling just blew past the end position, so stop deleting
                 node = 0;
-            } else if (!m_downstreamEnd.node()->isAncestor(node)) {
+            } else if (!m_downstreamEnd.node()->isDescendantOf(node)) {
                 Node *nextNode = node->traverseNextSibling();
                 // if we just removed a node from the end container, update end position so the
                 // check above will work
@@ -353,14 +365,14 @@ void DeleteSelectionCommand::handleGeneralDelete()
             }
         }
         
-        if (m_downstreamEnd.node() != startNode && !m_upstreamStart.node()->isAncestor(m_downstreamEnd.node()) && m_downstreamEnd.node()->inDocument() && m_downstreamEnd.offset() >= m_downstreamEnd.node()->caretMinOffset()) {
+        if (m_downstreamEnd.node() != startNode && !m_upstreamStart.node()->isDescendantOf(m_downstreamEnd.node()) && m_downstreamEnd.node()->inDocument() && m_downstreamEnd.offset() >= m_downstreamEnd.node()->caretMinOffset()) {
             if (m_downstreamEnd.offset() >= maxDeepOffset(m_downstreamEnd.node())) {
                 // need to delete whole node
                 // we can get here if this is the last node in the block
                 // remove an ancestor of m_downstreamEnd.node(), and thus m_downstreamEnd.node() itself
                 if (!m_upstreamStart.node()->inDocument() ||
                     m_upstreamStart.node() == m_downstreamEnd.node() ||
-                    m_upstreamStart.node()->isAncestor(m_downstreamEnd.node())) {
+                    m_upstreamStart.node()->isDescendantOf(m_downstreamEnd.node())) {
                     m_upstreamStart = Position(m_downstreamEnd.node()->parentNode(), m_downstreamEnd.node()->nodeIndex());
                 }
                 
@@ -375,7 +387,7 @@ void DeleteSelectionCommand::handleGeneralDelete()
                     }
                 } else {
                     int offset = 0;
-                    if (m_upstreamStart.node()->isAncestor(m_downstreamEnd.node())) {
+                    if (m_upstreamStart.node()->isDescendantOf(m_downstreamEnd.node())) {
                         Node *n = m_upstreamStart.node();
                         while (n && n->parentNode() != m_downstreamEnd.node())
                             n = n->parentNode();
@@ -430,7 +442,7 @@ void DeleteSelectionCommand::mergeParagraphs()
     VisiblePosition mergeDestination(m_upstreamStart);
     
     // We need to merge into m_upstreamStart's block, but it's been emptied out and collapsed by deletion.
-    if (!mergeDestination.deepEquivalent().node()->isAncestor(m_upstreamStart.node()->enclosingBlockFlowElement())) {
+    if (!mergeDestination.deepEquivalent().node()->isDescendantOf(m_upstreamStart.node()->enclosingBlockFlowElement())) {
         insertNodeAt(createBreakElement(document()).get(), m_upstreamStart.node(), m_upstreamStart.offset());
         mergeDestination = VisiblePosition(m_upstreamStart);
     }
@@ -508,6 +520,22 @@ void DeleteSelectionCommand::clearTransientState()
     m_trailingWhitespace.clear();
 }
 
+void DeleteSelectionCommand::saveFullySelectedAnchor()
+{
+    // If we're deleting an entire anchor element, save it away so that it can be restored
+    // when the user begins entering text.
+    VisiblePosition visibleStart = m_selectionToDelete.visibleStart();
+    VisiblePosition visibleEnd = m_selectionToDelete.visibleEnd();
+    Node* startAnchor = enclosingNodeWithTag(visibleStart.deepEquivalent().downstream().node(), aTag);
+    Node* endAnchor = enclosingNodeWithTag(visibleEnd.deepEquivalent().upstream().node(), aTag);
+
+    Node* beforeStartAnchor = enclosingNodeWithTag(visibleStart.previous().deepEquivalent().downstream().node(), aTag);
+    Node* afterEndAnchor = enclosingNodeWithTag(visibleEnd.next().deepEquivalent().upstream().node(), aTag);
+
+    if (startAnchor && startAnchor == endAnchor && startAnchor != beforeStartAnchor && endAnchor != afterEndAnchor)
+        document()->frame()->editor()->setRemovedAnchor(startAnchor->cloneNode(false));
+}
+
 void DeleteSelectionCommand::doApply()
 {
     // If selection has not been set to a custom selection when the command was created,
@@ -522,7 +550,7 @@ void DeleteSelectionCommand::doApply()
     if (!m_replace) {
         Node* startNode = m_selectionToDelete.start().node();
         Node* ancestorNode = startNode ? startNode->shadowAncestorNode() : 0;
-        if (ancestorNode && ancestorNode->hasTagName(inputTag) && static_cast<HTMLInputElement*>(ancestorNode)->isNonWidgetTextField())
+        if (ancestorNode && ancestorNode->hasTagName(inputTag) && static_cast<HTMLInputElement*>(ancestorNode)->isTextField())
             document()->frame()->textWillBeDeletedInTextField(static_cast<Element*>(ancestorNode));
     }
 
@@ -552,6 +580,8 @@ void DeleteSelectionCommand::doApply()
 
     saveTypingStyleState();
     
+    saveFullySelectedAnchor();
+    
     // deleting just a BR is handled specially, at least because we do not
     // want to replace it with a placeholder BR!
     if (handleSpecialCaseBRDelete()) {
@@ -573,9 +603,10 @@ void DeleteSelectionCommand::doApply()
     if (placeholder)
         insertNodeAt(placeholder.get(), m_endingPosition.node(), m_endingPosition.offset());
 
+    rebalanceWhitespaceAt(m_endingPosition);
+
     calculateTypingStyleAfterDelete(placeholder.get());
     
-    rebalanceWhitespaceAt(m_endingPosition);
     setEndingSelection(Selection(m_endingPosition, affinity));
     clearTransientState();
 }

@@ -31,17 +31,21 @@
 #include "CanvasRenderingContext2D.h"
 #include "CanvasStyle.h"
 #include "Document.h"
-#include "FrameView.h"
+#include "Frame.h"
 #include "GraphicsContext.h"
 #include "HTMLNames.h"
+#include "Page.h"
 #include "RenderHTMLCanvas.h"
+#include "Chrome.h"
+#include "Settings.h"
+#include "Screen.h"
 #include <math.h>
 
 namespace WebCore {
 
 using namespace HTMLNames;
 
-// These value come from the specification.
+// These values come from the WhatWG spec.
 const int defaultWidth = 300;
 const int defaultHeight = 150;
 
@@ -60,6 +64,22 @@ HTMLCanvasElement::~HTMLCanvasElement()
         m_2DContext->detachCanvas();
     fastFree(m_data);
     delete m_drawingContext;
+}
+
+HTMLTagStatus HTMLCanvasElement::endTagRequirement() const 
+{ 
+    if (document()->frame() && document()->frame()->settings()->usesDashboardBackwardCompatibilityMode())
+        return TagStatusForbidden; 
+
+    return HTMLElement::endTagRequirement();
+}
+
+int HTMLCanvasElement::tagPriority() const 
+{ 
+    if (document()->frame() && document()->frame()->settings()->usesDashboardBackwardCompatibilityMode())
+        return 0; 
+
+    return HTMLElement::tagPriority();
 }
 
 void HTMLCanvasElement::parseMappedAttribute(MappedAttribute* attr)
@@ -137,7 +157,7 @@ void HTMLCanvasElement::paint(GraphicsContext* p, const IntRect& r)
 {
     if (p->paintingDisabled())
         return;
-#if __APPLE__
+#if PLATFORM(CG)
     if (CGImageRef image = createPlatformImage()) {
         CGContextDrawImage(p->platformContext(), p->roundToDevicePixels(r), image);
         CGImageRelease(image);
@@ -154,9 +174,9 @@ void HTMLCanvasElement::createDrawingContext() const
 
     float unscaledWidth = width();
     float unscaledHeight = height();
-    float scaleFactor = document()->view() ? document()->view()->scaleFactor() : 1.0f;
-    float wf = ceilf(unscaledWidth * scaleFactor);
-    float hf = ceilf(unscaledHeight * scaleFactor);
+    float pageScaleFactor = document()->frame() ? document()->frame()->page()->chrome()->scaleFactor() : 1.0f;
+    float wf = ceilf(unscaledWidth * pageScaleFactor);
+    float hf = ceilf(unscaledHeight * pageScaleFactor);
     
     if (!(wf > 0 && wf < UINT_MAX && hf > 0 && hf < UINT_MAX))
         return;
@@ -170,7 +190,7 @@ void HTMLCanvasElement::createDrawingContext() const
     m_data = fastCalloc(h, bytesPerRow);
     if (!m_data)
         return;
-#if __APPLE__
+#if PLATFORM(CG)
     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
     CGContextRef bitmapContext = CGBitmapContextCreate(m_data, w, h, 8, bytesPerRow, colorSpace, kCGImageAlphaPremultipliedLast);
     CGContextScaleCTM(bitmapContext, w / unscaledWidth, h / unscaledHeight);
@@ -187,7 +207,7 @@ GraphicsContext* HTMLCanvasElement::drawingContext() const
     return m_drawingContext;
 }
 
-#if __APPLE__
+#if PLATFORM(CG)
 
 CGImageRef HTMLCanvasElement::createPlatformImage() const
 {

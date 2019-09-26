@@ -1,9 +1,10 @@
-// -*- c-basic-offset: 2 -*-
+// -*- c-basic-offset: 4 -*-
 /*
  *  This file is part of the KDE libraries
  *  Copyright (C) 2000 Harri Porten (porten@kde.org)
  *  Copyright (C) 2006 Jon Shier (jshier@iastate.edu)
  *  Copyright (C) 2003, 2004, 2005, 2006 Apple Computer, Inc.
+ *  Copyright (C) 2006 Alexey Proskuryakov (ap@webkit.org)
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -23,13 +24,20 @@
 #include "config.h"
 #include "kjs_window.h"
 
+#include "Base64.h"
+#include "Chrome.h"
+#include "CString.h"
 #include "DOMWindow.h"
 #include "Element.h"
 #include "EventListener.h"
 #include "EventNames.h"
+#include "ExceptionCode.h"
 #include "FloatRect.h"
 #include "Frame.h"
+#include "FrameLoadRequest.h"
+#include "FrameLoader.h"
 #include "FrameTree.h"
+#include "FrameView.h"
 #include "HTMLDocument.h"
 #include "JSCSSRule.h"
 #include "JSCSSValue.h"
@@ -41,13 +49,14 @@
 #include "JSNodeFilter.h"
 #include "JSRange.h"
 #include "JSXMLHttpRequest.h"
-#include "Settings.h"
 #include "Logging.h"
 #include "Page.h"
 #include "PlugInInfoStore.h"
 #include "RenderView.h"
 #include "Screen.h"
 #include "SelectionController.h"
+#include "Settings.h"
+#include "WindowFeatures.h"
 #include "htmlediting.h"
 #include "kjs_css.h"
 #include "kjs_events.h"
@@ -56,7 +65,7 @@
 #include "kjs_traversal.h"
 #include <wtf/MathExtras.h>
 
-#if KHTML_XSLT
+#if XSLT_SUPPORT
 #include "JSXSLTProcessor.h"
 #endif
 
@@ -67,13 +76,21 @@ namespace KJS {
 
 static int lastUsedTimeoutId;
 
+static int timerNestingLevel = 0;
+const int cMaxTimerNestingLevel = 5;
+const double cMinimumTimerInterval = 0.010;
+
 class DOMWindowTimer : public TimerBase {
 public:
-    DOMWindowTimer(int timeoutId, Window* o, ScheduledAction* a)
-        : m_timeoutId(timeoutId), m_object(o), m_action(a) { }
+    DOMWindowTimer(int timeoutId, int nestingLevel, Window* o, ScheduledAction* a)
+        : m_timeoutId(timeoutId), m_nestingLevel(nestingLevel), m_object(o), m_action(a) { }
     virtual ~DOMWindowTimer() { delete m_action; }
 
     int timeoutId() const { return m_timeoutId; }
+    
+    int nestingLevel() const { return m_nestingLevel; }
+    void setNestingLevel(int n) { m_nestingLevel = n; }
+    
     ScheduledAction* action() const { return m_action; }
     ScheduledAction* takeAction() { ScheduledAction* a = m_action; m_action = 0; return a; }
 
@@ -81,6 +98,7 @@ private:
     virtual void fired();
 
     int m_timeoutId;
+    int m_nestingLevel;
     Window* m_object;
     ScheduledAction* m_action;
 };
@@ -88,6 +106,7 @@ private:
 class PausedTimeout {
 public:
     int timeoutId;
+    int nestingLevel;
     double nextFireInterval;
     double repeatInterval;
     ScheduledAction *action;
@@ -163,9 +182,9 @@ const ClassInfo Screen::info = { "Screen", 0, &ScreenTable, 0 };
 
 // We set the object prototype so that toString is implemented
 Screen::Screen(ExecState* exec, Frame* f)
-  : m_frame(f)
+    : m_frame(f)
 {
-     setPrototype(exec->lexicalInterpreter()->builtinObjectPrototype());
+    setPrototype(exec->lexicalInterpreter()->builtinObjectPrototype());
 }
 
 bool Screen::getOwnPropertySlot(ExecState *exec, const Identifier& propertyName, PropertySlot& slot)
@@ -175,7 +194,7 @@ bool Screen::getOwnPropertySlot(ExecState *exec, const Identifier& propertyName,
 
 JSValue* Screen::getValueProperty(ExecState*, int token) const
 {
-  Widget* widget = m_frame ? m_frame->view() : 0;
+  Widget* widget = m_frame ? m_frame->view() : 0;  
 
   switch (token) {
   case Height:
@@ -186,13 +205,13 @@ JSValue* Screen::getValueProperty(ExecState*, int token) const
   case PixelDepth:
     return jsNumber(screenDepth(widget));
   case AvailLeft:
-    return jsNumber(usableScreenRect(widget).x() - screenRect(widget).x());
+    return jsNumber(screenAvailableRect(widget).x());
   case AvailTop:
-    return jsNumber(usableScreenRect(widget).y() - screenRect(widget).y());
+    return jsNumber(screenAvailableRect(widget).y());
   case AvailHeight:
-    return jsNumber(usableScreenRect(widget).height());
+    return jsNumber(screenAvailableRect(widget).height());
   case AvailWidth:
-    return jsNumber(usableScreenRect(widget).width());
+    return jsNumber(screenAvailableRect(widget).width());
   default:
     return jsUndefined();
   }
@@ -204,6 +223,8 @@ const ClassInfo Window::info = { "Window", 0, &WindowTable, 0 };
 
 /*
 @begin WindowTable 103
+  atob          Window::AToB            DontDelete|Function 1
+  btoa          Window::BToA            DontDelete|Function 1
   closed        Window::Closed          DontDelete|ReadOnly
   crypto        Window::Crypto          DontDelete|ReadOnly
   defaultStatus Window::DefaultStatus   DontDelete
@@ -355,14 +376,14 @@ DOMWindow* Window::impl() const
 
 ScriptInterpreter *Window::interpreter() const
 {
-    return m_frame->jScript()->interpreter();
+    return m_frame->scriptProxy()->interpreter();
 }
 
 Window *Window::retrieveWindow(Frame *f)
 {
     JSObject *o = retrieve(f)->getObject();
 
-    ASSERT(o || !f->jScriptEnabled());
+    ASSERT(o || !f->settings()->isJavaScriptEnabled());
     return static_cast<Window *>(o);
 }
 
@@ -376,7 +397,7 @@ Window *Window::retrieveActive(ExecState *exec)
 JSValue *Window::retrieve(Frame *p)
 {
     ASSERT(p);
-    if (KJSProxy *proxy = p->jScript())
+    if (KJSProxy *proxy = p->scriptProxy())
         return proxy->interpreter()->globalObject(); // the Global object is the "window"
   
     return jsUndefined(); // This can happen with JS disabled on the domain of that window
@@ -482,10 +503,10 @@ static HashMap<String, String> parseModalDialogFeatures(ExecState *exec, JSValue
 {
     HashMap<String, String> map;
 
-    DeprecatedStringList features = DeprecatedStringList::split(';', featuresArg->toString(exec));
-    DeprecatedStringList::ConstIterator end = features.end();
-    for (DeprecatedStringList::ConstIterator it = features.begin(); it != end; ++it) {
-        DeprecatedString s = *it;
+    Vector<String> features = String(featuresArg->toString(exec)).split(';');
+    Vector<String>::const_iterator end = features.end();
+    for (Vector<String>::const_iterator it = features.begin(); it != end; ++it) {
+        String s = *it;
         int pos = s.find('=');
         int colonPos = s.find(':');
         if (pos >= 0 && colonPos >= 0)
@@ -496,8 +517,8 @@ static HashMap<String, String> parseModalDialogFeatures(ExecState *exec, JSValue
             // null string for value means key without value
             map.set(s.stripWhiteSpace().lower(), String());
         } else {
-            DeprecatedString key = s.left(pos).stripWhiteSpace().lower();
-            DeprecatedString val = s.mid(pos + 1).stripWhiteSpace().lower();
+            String key = s.left(pos).stripWhiteSpace().lower();
+            String val = s.substring(pos + 1).stripWhiteSpace().lower();
             int spacePos = val.find(' ');
             if (spacePos != -1)
                 val = val.left(spacePos);
@@ -522,12 +543,11 @@ static float floatFeature(const HashMap<String, String> &features, const char *k
     HashMap<String, String>::const_iterator it = features.find(key);
     if (it == features.end())
         return defaultValue;
-    DeprecatedString value = it->second.deprecatedString();
     // FIXME: Can't distinguish "0q" from string with no digits in it -- both return d == 0 and ok == false.
     // Would be good to tell them apart somehow since string with no digits should be default value and
     // "0q" should be minimum value.
     bool ok;
-    double d = value.toDouble(&ok);
+    double d = it->second.toDouble(&ok);
     if ((d == 0 && !ok) || isnan(d))
         return defaultValue;
     if (d < min || max <= min)
@@ -537,18 +557,16 @@ static float floatFeature(const HashMap<String, String> &features, const char *k
     return static_cast<int>(d);
 }
 
-static Frame *createNewWindow(ExecState *exec, Window *openerWindow, const DeprecatedString &URL,
-    const DeprecatedString &frameName, const WindowArgs &windowArgs, JSValue *dialogArgs)
+static Frame* createNewWindow(ExecState* exec, Window* openerWindow, const DeprecatedString &URL,
+    const String& frameName, const WindowFeatures& windowFeatures, JSValue* dialogArgs)
 {
-    Frame* openerPart = openerWindow->frame();
-    Frame* activePart = Window::retrieveActive(exec)->frame();
+    Frame* openerFrame = openerWindow->frame();
+    Frame* activeFrame = Window::retrieveActive(exec)->frame();
 
-    ResourceRequest request(KURL(""));
-    request.frameName = frameName;
-    if (activePart)
-        request.setReferrer(activePart->referrer());
-    // FIXME: is this needed?
-    request.m_responseMIMEType = "text/html";
+    ResourceRequest request = ResourceRequest(KURL(""));
+    if (activeFrame)
+        request.setHTTPReferrer(activeFrame->loader()->outgoingReferrer());
+    FrameLoadRequest frameRequest(request, frameName);
 
     // FIXME: It's much better for client API if a new window starts with a URL, here where we
     // know what URL we are going to open. Unfortunately, this code passes the empty string
@@ -557,25 +575,23 @@ static Frame *createNewWindow(ExecState *exec, Window *openerWindow, const Depre
     // do an isSafeScript call using the window we create, which can't be done before creating it.
     // We'd have to resolve all those issues to pass the URL instead of "".
 
-    Frame* newFrame = 0;
-    openerPart->browserExtension()->createNewWindow(request, windowArgs, newFrame);
-
+    Frame* newFrame = openerFrame->loader()->createWindow(frameRequest, windowFeatures);
     if (!newFrame)
         return 0;
 
     Window* newWindow = Window::retrieveWindow(newFrame);
 
-    newFrame->setOpener(openerPart);
-    newFrame->setOpenedByJS(true);
+    newFrame->loader()->setOpener(openerFrame);
+    newFrame->loader()->setOpenedByJavaScript();
     if (dialogArgs)
         newWindow->putDirect("dialogArguments", dialogArgs);
 
-    Document *activeDoc = activePart ? activePart->document() : 0;
+    Document *activeDoc = activeFrame ? activeFrame->document() : 0;
     if (!URL.isEmpty() && activeDoc) {
         DeprecatedString completedURL = activeDoc->completeURL(URL);
         if (!completedURL.startsWith("javascript:", false) || newWindow->isSafeScript(exec)) {
             bool userGesture = static_cast<ScriptInterpreter *>(exec->dynamicInterpreter())->wasRunByUserGesture();
-            newFrame->changeLocation(completedURL, activePart->referrer(), false, userGesture);
+            newFrame->loader()->changeLocation(completedURL, activeFrame->loader()->outgoingReferrer(), false, userGesture);
         }
     }
 
@@ -584,14 +600,16 @@ static Frame *createNewWindow(ExecState *exec, Window *openerWindow, const Depre
 
 static bool canShowModalDialog(const Window *window)
 {
-    Frame *frame = window->frame();
-    return frame && static_cast<BrowserExtension *>(frame->browserExtension())->canRunModal();
+    if (Frame* frame = window->frame())
+        return frame->page()->chrome()->canRunModal();
+    return false;
 }
 
 static bool canShowModalDialogNow(const Window *window)
 {
-    Frame *frame = window->frame();
-    return frame && static_cast<BrowserExtension *>(frame->browserExtension())->canRunModalNow();
+    if (Frame* frame = window->frame())
+        return frame->page()->chrome()->canRunModalNow();
+    return false;
 }
 
 static JSValue* showModalDialog(ExecState* exec, Window* openerWindow, const List& args)
@@ -605,7 +623,7 @@ static JSValue* showModalDialog(ExecState* exec, Window* openerWindow, const Lis
 
     bool trusted = false;
 
-    WindowArgs wargs;
+    WindowFeatures wargs;
 
     // The following features from Microsoft's documentation are not implemented:
     // - default font settings
@@ -615,7 +633,7 @@ static JSValue* showModalDialog(ExecState* exec, Window* openerWindow, const Lis
     // - help: boolFeature(features, "help", true), makes help icon appear in dialog (what does it do on Windows?)
     // - unadorned: trusted && boolFeature(features, "unadorned");
 
-    FloatRect screenRect = usableScreenRect(openerWindow->frame()->view());
+    FloatRect screenRect = screenAvailableRect(openerWindow->frame()->view());
 
     wargs.width = floatFeature(features, "dialogwidth", 100, screenRect.width(), 620); // default here came from frame size of dialog in MacIE
     wargs.widthSet = true;
@@ -640,7 +658,7 @@ static JSValue* showModalDialog(ExecState* exec, Window* openerWindow, const Lis
 
     wargs.dialog = true;
     wargs.resizable = boolFeature(features, "resizable");
-    wargs.scrollBarsVisible = boolFeature(features, "scroll", true);
+    wargs.scrollbarsVisible = boolFeature(features, "scroll", true);
     wargs.statusBarVisible = boolFeature(features, "status", !trusted);
     wargs.menuBarVisible = false;
     wargs.toolBarVisible = false;
@@ -657,7 +675,7 @@ static JSValue* showModalDialog(ExecState* exec, Window* openerWindow, const Lis
     // properties (in Window::clear), or when on return from runModal.
     JSValue* returnValue = 0;
     dialogWindow->setReturnValueSlot(&returnValue);
-    static_cast<BrowserExtension *>(dialogFrame->browserExtension())->runModal();
+    dialogFrame->page()->chrome()->runModal();
     dialogWindow->setReturnValueSlot(0);
 
     // If we don't have a return value, get it now.
@@ -727,14 +745,13 @@ JSValue *Window::getValueProperty(ExecState *exec, int token) const
     case OffscreenBuffering:
       return jsBoolean(true);
     case Opener:
-      if (m_frame->opener())
-        return retrieve(m_frame->opener());
-      else
-        return jsNull();
+      if (m_frame->loader()->opener())
+        return retrieve(m_frame->loader()->opener());
+      return jsNull();
     case OuterHeight:
-        return jsNumber(m_frame->page()->windowRect().height());
+        return jsNumber(m_frame->page()->chrome()->windowRect().height());
     case OuterWidth:
-        return jsNumber(m_frame->page()->windowRect().width());
+        return jsNumber(m_frame->page()->chrome()->windowRect().width());
     case PageXOffset:
       if (!m_frame->view())
         return jsUndefined();
@@ -751,10 +768,10 @@ JSValue *Window::getValueProperty(ExecState *exec, int token) const
       return personalbar(exec);
     case ScreenLeft:
     case ScreenX:
-      return jsNumber(m_frame->page()->windowRect().x());
+      return jsNumber(m_frame->page()->chrome()->windowRect().x());
     case ScreenTop:
     case ScreenY:
-      return jsNumber(m_frame->page()->windowRect().y());
+      return jsNumber(m_frame->page()->chrome()->windowRect().y());
     case ScrollX:
       if (!m_frame->view())
         return jsUndefined();
@@ -788,7 +805,7 @@ JSValue *Window::getValueProperty(ExecState *exec, int token) const
       return new JSHTMLOptionElementConstructor(exec, m_frame->document());
     case XMLHttpRequest:
       return new JSXMLHttpRequestConstructorImp(exec, m_frame->document());
-#ifdef KHTML_XSLT
+#ifdef XSLT_SUPPORT
     case XSLTProcessor_:
       return new XSLTProcessorConstructorImp(exec);
 #else
@@ -1014,7 +1031,7 @@ void Window::put(ExecState* exec, const Identifier &propertyName, JSValue *value
         if (!dstUrl.startsWith("javascript:", false) || isSafeScript(exec)) {
           bool userGesture = static_cast<ScriptInterpreter *>(exec->dynamicInterpreter())->wasRunByUserGesture();
           // We want a new history item if this JS was called via a user gesture
-          m_frame->scheduleLocationChange(dstUrl, p->referrer(), !userGesture, userGesture);
+          m_frame->loader()->scheduleLocationChange(dstUrl, p->loader()->outgoingReferrer(), !userGesture, userGesture);
         }
       }
       return;
@@ -1159,17 +1176,17 @@ bool Window::isSafeScript(const ScriptInterpreter *origin, const ScriptInterpret
     if (origin == target)
         return true;
         
-    Frame *originPart = origin->frame();
-    Frame *targetPart = target->frame();
+    Frame* originFrame = origin->frame();
+    Frame* targetFrame = target->frame();
 
     // JS may be attempting to access the "window" object, which should be valid,
     // even if the document hasn't been constructed yet.  If the document doesn't
     // exist yet allow JS to access the window object.
-    if (!targetPart->document())
+    if (!targetFrame->document())
         return true;
 
-    WebCore::Document *originDocument = originPart->document();
-    WebCore::Document *targetDocument = targetPart->document();
+    WebCore::Document *originDocument = originFrame->document();
+    WebCore::Document *targetDocument = targetFrame->document();
 
     if (!targetDocument) {
         return false;
@@ -1186,14 +1203,12 @@ bool Window::isSafeScript(const ScriptInterpreter *origin, const ScriptInterpret
     // if this document is being initially loaded as empty by its parent
     // or opener, allow access from any document in the same domain as
     // the parent or opener.
-    if (shouldLoadAsEmptyDocument(targetPart->url())) {
-        Frame *ancestorPart = targetPart->opener() ? targetPart->opener() : targetPart->tree()->parent();
-        while (ancestorPart && shouldLoadAsEmptyDocument(ancestorPart->url())) {
-            ancestorPart = ancestorPart->tree()->parent();
-        }
-
-        if (ancestorPart)
-            originDomain = ancestorPart->document()->domain();
+    if (shouldLoadAsEmptyDocument(targetFrame->loader()->url())) {
+        Frame* ancestorFrame = targetFrame->loader()->opener() ? targetFrame->loader()->opener() : targetFrame->tree()->parent();
+        while (ancestorFrame && shouldLoadAsEmptyDocument(ancestorFrame->loader()->url()))
+            ancestorFrame = ancestorFrame->tree()->parent();
+        if (ancestorFrame)
+            originDomain = ancestorFrame->document()->domain();
     }
 
     if ( targetDomain == originDomain )
@@ -1203,9 +1218,10 @@ bool Window::isSafeScript(const ScriptInterpreter *origin, const ScriptInterpret
         printf("Unsafe JavaScript attempt to access frame with URL %s from frame with URL %s. Domains must match.\n", 
              targetDocument->URL().latin1(), originDocument->URL().latin1());
     }
-    String message = String::sprintf("Unsafe JavaScript attempt to access frame with URL %s from frame with URL %s. Domains must match.\n", 
+    String message = String::format("Unsafe JavaScript attempt to access frame with URL %s from frame with URL %s. Domains must match.\n", 
                   targetDocument->URL().latin1(), originDocument->URL().latin1());
-    targetPart->addMessageToConsole(message, 1, String()); //fixme: provide a real line number and sourceurl
+    if (Page* page = targetFrame->page())
+        page->chrome()->addMessageToConsole(message, 1, String()); //fixme: provide a real line number and sourceurl
 
     return false;
 }
@@ -1214,10 +1230,10 @@ bool Window::isSafeScript(ExecState *exec) const
 {
   if (!m_frame) // frame deleted ? can't grant access
     return false;
-  Frame *activePart = static_cast<ScriptInterpreter *>( exec->dynamicInterpreter() )->frame();
-  if (!activePart)
+  Frame* activeFrame = static_cast<ScriptInterpreter*>(exec->dynamicInterpreter())->frame();
+  if (!activeFrame)
     return false;
-  if ( activePart == m_frame ) // Not calling from another frame, no problem.
+  if (activeFrame == m_frame) // Not calling from another frame, no problem.
     return true;
 
   // JS may be attempting to access the "window" object, which should be valid,
@@ -1227,12 +1243,12 @@ bool Window::isSafeScript(ExecState *exec) const
       return true;
 
   WebCore::Document* thisDocument = m_frame->document();
-  WebCore::Document* actDocument = activePart->document();
+  WebCore::Document* actDocument = activeFrame->document();
 
   WebCore::String actDomain;
 
   if (!actDocument)
-    actDomain = activePart->url().host();
+    actDomain = activeFrame->loader()->url().host();
   else
     actDomain = actDocument->domain();
   
@@ -1246,14 +1262,13 @@ bool Window::isSafeScript(ExecState *exec) const
   // if this document is being initially loaded as empty by its parent
   // or opener, allow access from any document in the same domain as
   // the parent or opener.
-  if (shouldLoadAsEmptyDocument(m_frame->url())) {
-    Frame *ancestorPart = m_frame->opener() ? m_frame->opener() : m_frame->tree()->parent();
-    while (ancestorPart && shouldLoadAsEmptyDocument(ancestorPart->url())) {
-      ancestorPart = ancestorPart->tree()->parent();
-    }
-    
-    if (ancestorPart)
-      thisDomain = ancestorPart->document()->domain();
+  if (shouldLoadAsEmptyDocument(m_frame->loader()->url())) {
+    Frame* ancestorFrame = m_frame->loader()->opener()
+        ? m_frame->loader()->opener() : m_frame->tree()->parent();
+    while (ancestorFrame && shouldLoadAsEmptyDocument(ancestorFrame->loader()->url()))
+      ancestorFrame = ancestorFrame->tree()->parent();
+    if (ancestorFrame)
+      thisDomain = ancestorFrame->document()->domain();
   }
 
   // FIXME: this should check that URL scheme and port match too, probably
@@ -1264,9 +1279,10 @@ bool Window::isSafeScript(ExecState *exec) const
       printf("Unsafe JavaScript attempt to access frame with URL %s from frame with URL %s. Domains must match.\n", 
              thisDocument->URL().latin1(), actDocument->URL().latin1());
   }
-  String message = String::sprintf("Unsafe JavaScript attempt to access frame with URL %s from frame with URL %s. Domains must match.\n", 
+  String message = String::format("Unsafe JavaScript attempt to access frame with URL %s from frame with URL %s. Domains must match.\n", 
                   thisDocument->URL().latin1(), actDocument->URL().latin1());
-  m_frame->addMessageToConsole(message, 1, String());
+  if (Page* page = m_frame->page())
+      page->chrome()->addMessageToConsole(message, 1, String());
   
   return false;
 }
@@ -1336,8 +1352,10 @@ void Window::clear()
   clearProperties();
   setPrototype(JSDOMWindowProto::self()); // clear the prototype
 
-  // Now recreate a working global object for the next URL that will use us
-  interpreter()->initGlobalObject();
+  // Now recreate a working global object for the next URL that will use us; but only if we haven't been
+  // disconnected yet
+  if (m_frame)
+    interpreter()->initGlobalObject();
 
   // there's likely to be lots of garbage now
   Collector::collect();
@@ -1348,7 +1366,7 @@ void Window::setCurrentEvent(Event *evt)
   m_evt = evt;
 }
 
-static void setWindowFeature(const String& keyString, const String& valueString, WindowArgs& windowArgs)
+static void setWindowFeature(const String& keyString, const String& valueString, WindowFeatures& windowFeatures)
 {
     int value;
     
@@ -1359,31 +1377,31 @@ static void setWindowFeature(const String& keyString, const String& valueString,
         value = valueString.toInt();
     
     if (keyString == "left" || keyString == "screenx") {
-        windowArgs.xSet = true;
-        windowArgs.x = value;
+        windowFeatures.xSet = true;
+        windowFeatures.x = value;
     } else if (keyString == "top" || keyString == "screeny") {
-        windowArgs.ySet = true;
-        windowArgs.y = value;
+        windowFeatures.ySet = true;
+        windowFeatures.y = value;
     } else if (keyString == "width" || keyString == "innerwidth") {
-        windowArgs.widthSet = true;
-        windowArgs.width = value;
+        windowFeatures.widthSet = true;
+        windowFeatures.width = value;
     } else if (keyString == "height" || keyString == "innerheight") {
-        windowArgs.heightSet = true;
-        windowArgs.height = value;
+        windowFeatures.heightSet = true;
+        windowFeatures.height = value;
     } else if (keyString == "menubar")
-        windowArgs.menuBarVisible = value;
+        windowFeatures.menuBarVisible = value;
     else if (keyString == "toolbar")
-        windowArgs.toolBarVisible = value;
+        windowFeatures.toolBarVisible = value;
     else if (keyString == "location")
-        windowArgs.locationBarVisible = value;
+        windowFeatures.locationBarVisible = value;
     else if (keyString == "status")
-        windowArgs.statusBarVisible = value;
+        windowFeatures.statusBarVisible = value;
     else if (keyString == "resizable")
-        windowArgs.resizable = value;
+        windowFeatures.resizable = value;
     else if (keyString == "fullscreen")
-        windowArgs.fullscreen = value;
+        windowFeatures.fullscreen = value;
     else if (keyString == "scrollbars")
-        windowArgs.scrollBarsVisible = value;
+        windowFeatures.scrollbarsVisible = value;
 }
 
 // Though isspace() considers \t and \v to be whitespace, Win IE doesn't.
@@ -1392,7 +1410,7 @@ static bool isSeparator(::UChar c)
     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '=' || c == ',' || c == '\0';
 }
 
-static void parseWindowFeatures(const String& features, WindowArgs& windowArgs)
+static void parseWindowFeatures(const String& features, WindowFeatures& windowFeatures)
 {
     /*
      The IE rule is: all features except for channelmode and fullscreen default to YES, but
@@ -1402,31 +1420,31 @@ static void parseWindowFeatures(const String& features, WindowArgs& windowArgs)
      <http://msdn.microsoft.com/workshop/author/dhtml/reference/methods/open_0.asp>
      */
     
-    windowArgs.dialog = false;
-    windowArgs.fullscreen = false;
+    windowFeatures.dialog = false;
+    windowFeatures.fullscreen = false;
     
-    windowArgs.xSet = false;
-    windowArgs.ySet = false;
-    windowArgs.widthSet = false;
-    windowArgs.heightSet = false;
+    windowFeatures.xSet = false;
+    windowFeatures.ySet = false;
+    windowFeatures.widthSet = false;
+    windowFeatures.heightSet = false;
     
     if (features.length() == 0) {
-        windowArgs.menuBarVisible = true;
-        windowArgs.statusBarVisible = true;
-        windowArgs.toolBarVisible = true;
-        windowArgs.locationBarVisible = true;
-        windowArgs.scrollBarsVisible = true;
-        windowArgs.resizable = true;
+        windowFeatures.menuBarVisible = true;
+        windowFeatures.statusBarVisible = true;
+        windowFeatures.toolBarVisible = true;
+        windowFeatures.locationBarVisible = true;
+        windowFeatures.scrollbarsVisible = true;
+        windowFeatures.resizable = true;
         
         return;
     }
     
-    windowArgs.menuBarVisible = false;
-    windowArgs.statusBarVisible = false;
-    windowArgs.toolBarVisible = false;
-    windowArgs.locationBarVisible = false;
-    windowArgs.scrollBarsVisible = false;
-    windowArgs.resizable = false;
+    windowFeatures.menuBarVisible = false;
+    windowFeatures.statusBarVisible = false;
+    windowFeatures.toolBarVisible = false;
+    windowFeatures.locationBarVisible = false;
+    windowFeatures.scrollbarsVisible = false;
+    windowFeatures.resizable = false;
     
     // Tread lightly in this code -- it was specifically designed to mimic Win IE's parsing behavior.
     int keyBegin, keyEnd;
@@ -1473,29 +1491,29 @@ static void parseWindowFeatures(const String& features, WindowArgs& windowArgs)
 
         String keyString(buffer.substring(keyBegin, keyEnd - keyBegin));
         String valueString(buffer.substring(valueBegin, valueEnd - valueBegin));
-        setWindowFeature(keyString, valueString, windowArgs);
+        setWindowFeature(keyString, valueString, windowFeatures);
     }
 }
 
-static void constrainToVisible(const FloatRect& screen, WindowArgs& windowArgs)
+static void constrainToVisible(const FloatRect& screen, WindowFeatures& windowFeatures)
 {
-    windowArgs.x += screen.x();
-    if (windowArgs.x < screen.x() || windowArgs.x >= screen.right())
-        windowArgs.x = screen.x(); // only safe choice until size is determined
+    windowFeatures.x += screen.x();
+    if (windowFeatures.x < screen.x() || windowFeatures.x >= screen.right())
+        windowFeatures.x = screen.x(); // only safe choice until size is determined
     
-    windowArgs.y += screen.y();
-    if (windowArgs.y < screen.y() || windowArgs.y >= screen.bottom())
-        windowArgs.y = screen.y(); // only safe choice until size is determined
+    windowFeatures.y += screen.y();
+    if (windowFeatures.y < screen.y() || windowFeatures.y >= screen.bottom())
+        windowFeatures.y = screen.y(); // only safe choice until size is determined
     
-    if (windowArgs.height > screen.height()) // should actually check workspace
-        windowArgs.height = screen.height();
-    if (windowArgs.height < 100)
-        windowArgs.height = 100;
+    if (windowFeatures.height > screen.height()) // should actually check workspace
+        windowFeatures.height = screen.height();
+    if (windowFeatures.height < 100)
+        windowFeatures.height = 100;
     
-    if (windowArgs.width > screen.width()) // should actually check workspace
-        windowArgs.width = screen.width();
-    if (windowArgs.width < 100)
-        windowArgs.width = 100;
+    if (windowFeatures.width > screen.width()) // should actually check workspace
+        windowFeatures.width = screen.width();
+    if (windowFeatures.width < 100)
+        windowFeatures.width = 100;
 }
 
 JSValue *WindowFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const List &args)
@@ -1508,6 +1526,7 @@ JSValue *WindowFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const Li
     return jsUndefined();
 
   FrameView *widget = frame->view();
+  Page* page = frame->page();
   JSValue *v = args[0];
   UString s = v->toString(exec);
   String str = s;
@@ -1521,6 +1540,30 @@ JSValue *WindowFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const Li
     frame->runJavaScriptAlert(str);
     exec->dynamicInterpreter()->resumeTimeoutCheck();
     return jsUndefined();
+  case Window::AToB:
+  case Window::BToA: {
+    if (args.size() < 1)
+        return throwError(exec, SyntaxError, "Not enough arguments");
+    if (v->isNull())
+        return jsString();
+    if (!s.is8Bit()) {
+        setDOMException(exec, INVALID_CHARACTER_ERR);
+        return jsUndefined();
+    }
+    
+    Vector<char> in(s.size());
+    for (int i = 0; i < s.size(); ++i)
+        in[i] = static_cast<char>(s.data()[i].unicode());
+    Vector<char> out;
+
+    if (id == Window::AToB) {
+        if (!base64Decode(in, out))
+            return throwError(exec, GeneralError, "Cannot decode base64");
+    } else
+        base64Encode(in, out);
+    
+    return jsString(String(out.data(), out.size()));
+  }
   case Window::Confirm: {
     if (frame && frame->document())
       frame->document()->updateRendering();
@@ -1549,62 +1592,58 @@ JSValue *WindowFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const Li
       if (!allowPopUp(exec, window) && (frameName.isEmpty() || !frame->tree()->find(frameName)))
           return jsUndefined();
       
-      WindowArgs windowArgs;
+      WindowFeatures windowFeatures;
       String features = args[2]->isUndefinedOrNull() ? UString() : args[2]->toString(exec);
-      parseWindowFeatures(features, windowArgs);
-      constrainToVisible(screenRect(widget), windowArgs);
+      parseWindowFeatures(features, windowFeatures);
+      constrainToVisible(screenRect(page->mainFrame()->view()), windowFeatures);
       
       // prepare arguments
       KURL url;
-      Frame* activePart = Window::retrieveActive(exec)->m_frame;
-      if (!str.isEmpty() && activePart)
-          url = activePart->document()->completeURL(str.deprecatedString());
+      Frame* activeFrame = Window::retrieveActive(exec)->m_frame;
+      if (!str.isEmpty() && activeFrame)
+          url = activeFrame->document()->completeURL(str.deprecatedString());
 
-      ResourceRequest request;
-      request.setURL(url);
-      request.frameName = frameName.deprecatedString();
-      if (request.frameName == "_top") {
+      ResourceRequest resRequest(url);
+      FrameLoadRequest frameRequest(resRequest, frameName);
+      if (frameRequest.frameName() == "_top") {
           while (frame->tree()->parent())
               frame = frame->tree()->parent();
           
           const Window* window = Window::retrieveWindow(frame);
           if (!url.url().startsWith("javascript:", false) || (window && window->isSafeScript(exec))) {
               bool userGesture = static_cast<ScriptInterpreter *>(exec->dynamicInterpreter())->wasRunByUserGesture();
-              frame->scheduleLocationChange(url.url(), activePart->referrer(), false/*don't lock history*/, userGesture);
+              frame->loader()->scheduleLocationChange(url.url(), activeFrame->loader()->outgoingReferrer(), false/*don't lock history*/, userGesture);
           }
           return Window::retrieve(frame);
       }
-      if (request.frameName == "_parent") {
+      if (frameRequest.frameName() == "_parent") {
           if (frame->tree()->parent())
               frame = frame->tree()->parent();
           
           const Window* window = Window::retrieveWindow(frame);
           if (!url.url().startsWith("javascript:", false) || (window && window->isSafeScript(exec))) {
               bool userGesture = static_cast<ScriptInterpreter *>(exec->dynamicInterpreter())->wasRunByUserGesture();
-              frame->scheduleLocationChange(url.url(), activePart->referrer(), false/*don't lock history*/, userGesture);
+              frame->loader()->scheduleLocationChange(url.url(), activeFrame->loader()->outgoingReferrer(), false/*don't lock history*/, userGesture);
           }
           return Window::retrieve(frame);
       }
-      // FIXME: is this needed?
-      request.m_responseMIMEType = "text/html";
       
       // request window (new or existing if framename is set)
-      Frame* newFrame = 0;
-      request.setReferrer(activePart->referrer());
-      frame->browserExtension()->createNewWindow(request, windowArgs, newFrame);
+      frameRequest.resourceRequest().setHTTPReferrer(activeFrame->loader()->outgoingReferrer());
+      Frame* newFrame = frame->loader()->createWindow(frameRequest, windowFeatures);
       if (!newFrame)
           return jsUndefined();
-      newFrame->setOpener(frame);
-      newFrame->setOpenedByJS(true);
+      newFrame->loader()->setOpener(frame);
+      newFrame->loader()->setOpenedByJavaScript();
       
       if (!newFrame->document()) {
           Document* oldDoc = frame->document();
           if (oldDoc && oldDoc->baseURL() != 0)
-              newFrame->begin(oldDoc->baseURL());
+              newFrame->loader()->begin(oldDoc->baseURL());
           else
-              newFrame->begin();
-          newFrame->write("<HTML><BODY>");
-          newFrame->end();          
+              newFrame->loader()->begin();
+          newFrame->loader()->write("<HTML><BODY>");
+          newFrame->loader()->end();          
           if (oldDoc) {
               newFrame->document()->setDomain(oldDoc->domain(), true);
               newFrame->document()->setBaseURL(oldDoc->baseURL());
@@ -1614,7 +1653,7 @@ JSValue *WindowFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const Li
           const Window* window = Window::retrieveWindow(newFrame);
           if (!url.url().startsWith("javascript:", false) || (window && window->isSafeScript(exec))) {
               bool userGesture = static_cast<ScriptInterpreter *>(exec->dynamicInterpreter())->wasRunByUserGesture();
-              newFrame->scheduleLocationChange(url.url(), activePart->referrer(), false, userGesture);
+              newFrame->loader()->scheduleLocationChange(url.url(), activeFrame->loader()->outgoingReferrer(), false, userGesture);
           }
       }
       return Window::retrieve(newFrame); // global object
@@ -1634,45 +1673,45 @@ JSValue *WindowFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const Li
       widget->setContentsPos(args[0]->toInt32(exec), args[1]->toInt32(exec));
     return jsUndefined();
   case Window::MoveBy:
-    if (args.size() >= 2 && widget) {
-      FloatRect r = frame->page()->windowRect();
+    if (args.size() >= 2 && page) {
+      FloatRect r = page->chrome()->windowRect();
       r.move(args[0]->toNumber(exec), args[1]->toNumber(exec));
       // Security check (the spec talks about UniversalBrowserWrite to disable this check...)
-      if (screenRect(widget).contains(r))
-        frame->page()->setWindowRect(r);
+      if (screenRect(page->mainFrame()->view()).contains(r))
+        page->chrome()->setWindowRect(r);
     }
     return jsUndefined();
   case Window::MoveTo:
-    if (args.size() >= 2 && widget) {
-      FloatRect r = frame->page()->windowRect();
-      FloatRect sr = screenRect(widget);
+    if (args.size() >= 2 && page) {
+      FloatRect r = page->chrome()->windowRect();
+      FloatRect sr = screenRect(page->mainFrame()->view());
       r.setLocation(sr.location());
       r.move(args[0]->toNumber(exec), args[1]->toNumber(exec));
       // Security check (the spec talks about UniversalBrowserWrite to disable this check...)
       if (sr.contains(r))
-        frame->page()->setWindowRect(r);
+        page->chrome()->setWindowRect(r);
     }
     return jsUndefined();
   case Window::ResizeBy:
-    if (args.size() >= 2 && widget) {
-      FloatRect r = frame->page()->windowRect();
+    if (args.size() >= 2 && page) {
+      FloatRect r = page->chrome()->windowRect();
       FloatSize dest = r.size() + FloatSize(args[0]->toNumber(exec), args[1]->toNumber(exec));
-      FloatRect sg = screenRect(widget);
+      FloatRect sg = screenRect(page->mainFrame()->view());
       // Security check: within desktop limits and bigger than 100x100 (per spec)
       if (r.x() + dest.width() <= sg.right() && r.y() + dest.height() <= sg.bottom()
            && dest.width() >= 100 && dest.height() >= 100)
-        frame->page()->setWindowRect(FloatRect(r.location(), dest));
+        page->chrome()->setWindowRect(FloatRect(r.location(), dest));
     }
     return jsUndefined();
   case Window::ResizeTo:
-    if (args.size() >= 2 && widget) {
-      FloatRect r = frame->page()->windowRect();
+    if (args.size() >= 2 && page) {
+      FloatRect r = page->chrome()->windowRect();
       FloatSize dest = FloatSize(args[0]->toNumber(exec), args[1]->toNumber(exec));
-      FloatRect sg = screenRect(widget);
+      FloatRect sg = screenRect(page->mainFrame()->view());
       // Security check: within desktop limits and bigger than 100x100 (per spec)
       if (r.x() + dest.width() <= sg.right() && r.y() + dest.height() <= sg.bottom() &&
            dest.width() >= 100 && dest.height() >= 100)
-        frame->page()->setWindowRect(FloatRect(r.location(), dest));
+        page->chrome()->setWindowRect(FloatRect(r.location(), dest));
     }
     return jsUndefined();
   case Window::SetTimeout:
@@ -1734,39 +1773,17 @@ JSValue *WindowFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const Li
     frame->unfocusWindow();
     return jsUndefined();
   case Window::Close:
-    /* From http://developer.netscape.com/docs/manuals/js/client/jsref/window.htm :
-       The close method closes only windows opened by JavaScript using the open method.
-       If you attempt to close any other window, a confirm is generated, which
-       lets the user choose whether the window closes.
-       This is a security feature to prevent "mail bombs" containing self.close().
-       However, if the window has only one document (the current one) in its
-       session history, the close is allowed without any confirm. This is a
-       special case for one-off windows that need to open other windows and
-       then dispose of themselves.
-    */
-    if (!frame->openedByJS())
-    {
-      // To conform to the SPEC, we only ask if the window
-      // has more than one entry in the history (NS does that too).
-      History history(exec, frame);
-      if ( history.get( exec, lengthPropertyName )->toInt32(exec) <= 1
-           // FIXME: How are we going to handle this?
-           )
-        (const_cast<Window*>(window))->scheduleClose();
-    }
-    else
-    {
-      (const_cast<Window*>(window))->scheduleClose();
-    }
+    // Do not close windows that have history unless they were opened by JavaScript.
+    if (frame->loader()->openedByJavaScript() || frame->loader()->getHistoryLength() <= 1)
+      const_cast<Window*>(window)->scheduleClose();
     return jsUndefined();
   case Window::CaptureEvents:
   case Window::ReleaseEvents:
-        // If anyone implements these, they need the safescript security check.
-        if (!window->isSafeScript(exec))
-            return jsUndefined();
-
-    // Do nothing for now. These are NS-specific legacy calls.
-    break;
+    // If anyone implements these, they need the safe script security check.
+    if (!window->isSafeScript(exec))
+        return jsUndefined();
+    // Not implemented.
+    return jsUndefined();
   case Window::AddEventListener:
         if (!window->isSafeScript(exec))
             return jsUndefined();
@@ -1802,10 +1819,10 @@ void Window::updateLayout() const
 
 void ScheduledAction::execute(Window *window)
 {
-    if (!window->m_frame || !window->m_frame->jScript())
+    if (!window->m_frame || !window->m_frame->scriptProxy())
         return;
 
-    ScriptInterpreter *interpreter = window->m_frame->jScript()->interpreter();
+    ScriptInterpreter *interpreter = window->m_frame->scriptProxy()->interpreter();
 
     interpreter->setProcessingTimerCallback(true);
   
@@ -1823,12 +1840,13 @@ void ScheduledAction::execute(Window *window)
                 String message = exception->get(exec, messagePropertyName)->toString(exec);
                 int lineNumber = exception->get(exec, "line")->toInt32(exec);
                 if (Interpreter::shouldPrintExceptions())
-                    printf("(timer):%s\n", message.deprecatedString().utf8().data());
-                window->m_frame->addMessageToConsole(message, lineNumber, String());
+                    printf("(timer):%s\n", message.utf8().data());
+                if (Page* page = window->m_frame->page())
+                    page->chrome()->addMessageToConsole(message, lineNumber, String());
             }
         }
     } else
-        window->m_frame->executeScript(0, m_code);
+        window->m_frame->loader()->executeScript(0, m_code);
   
     // Update our document's rendering following the execution of the timeout callback.
     // FIXME: Why? Why not other documents, for example?
@@ -1850,12 +1868,16 @@ void Window::clearAllTimeouts()
 int Window::installTimeout(ScheduledAction* a, int t, bool singleShot)
 {
     int timeoutId = ++lastUsedTimeoutId;
-    DOMWindowTimer* timer = new DOMWindowTimer(timeoutId, this, a);
+    int nestLevel = timerNestingLevel + 1;
+    DOMWindowTimer* timer = new DOMWindowTimer(timeoutId, nestLevel, this, a);
     ASSERT(!m_timeouts.get(timeoutId));
     m_timeouts.set(timeoutId, timer);
-    // Use a minimum interval of 10 ms to match other browsers.
+    // Use a minimum interval of 10 ms to match other browsers, but only once we've
+    // nested enough to notice that we're repeating.
     // Faster timers might be "better", but they're incompatible.
-    double interval = t <= 10 ? 0.010 : t * 0.001;
+    double interval = max(0.001, t * 0.001);
+    if (interval < cMinimumTimerInterval && nestLevel >= cMaxTimerNestingLevel)
+        interval = cMinimumTimerInterval;
     if (singleShot)
         timer->startOneShot(interval);
     else
@@ -1887,6 +1909,7 @@ PausedTimeouts* Window::pauseTimeouts()
         int timeoutId = it->first;
         DOMWindowTimer* timer = it->second;
         t[i].timeoutId = timeoutId;
+        t[i].nestingLevel = timer->nestingLevel();
         t[i].nextFireInterval = timer->nextFireInterval();
         t[i].repeatInterval = timer->repeatInterval();
         t[i].action = timer->takeAction();
@@ -1907,7 +1930,7 @@ void Window::resumeTimeouts(PausedTimeouts* timeouts)
     PausedTimeout* array = timeouts->takeTimeouts();
     for (size_t i = 0; i != count; ++i) {
         int timeoutId = array[i].timeoutId;
-        DOMWindowTimer* timer = new DOMWindowTimer(timeoutId, this, array[i].action);
+        DOMWindowTimer* timer = new DOMWindowTimer(timeoutId, array[i].nestingLevel, this, array[i].action);
         m_timeouts.set(timeoutId, timer);
         timer->start(array[i].nextFireInterval, array[i].repeatInterval);
     }
@@ -1928,7 +1951,14 @@ void Window::timerFired(DOMWindowTimer* timer)
 {
     // Simple case for non-one-shot timers.
     if (timer->isActive()) {
+        int timeoutId = timer->timeoutId();
+
         timer->action()->execute(this);
+        if (m_timeouts.contains(timeoutId) && timer->repeatInterval() && timer->repeatInterval() < cMinimumTimerInterval) {
+            timer->setNestingLevel(timer->nestingLevel() + 1);
+            if (timer->nestingLevel() >= cMaxTimerNestingLevel)
+                timer->augmentRepeatInterval(cMinimumTimerInterval - timer->repeatInterval());
+        }
         return;
     }
 
@@ -2037,7 +2067,7 @@ UString FrameArray::toString(ExecState *) const
 
 ////////////////////// Location Object ////////////////////////
 
-const ClassInfo Location::info = { "Location", 0, 0, 0 };
+const ClassInfo Location::info = { "Location", 0, &LocationTable, 0 };
 /*
 @begin LocationTable 12
   assign        Location::Assign        DontDelete|Function 1
@@ -2049,7 +2079,6 @@ const ClassInfo Location::info = { "Location", 0, 0, 0 };
   port          Location::Port          DontDelete
   protocol      Location::Protocol      DontDelete
   search        Location::Search        DontDelete
-  [[==]]        Location::EqualEqual    DontDelete|ReadOnly
   toString      Location::ToString      DontDelete|Function 0
   replace       Location::Replace       DontDelete|Function 1
   reload        Location::Reload        DontDelete|Function 0
@@ -2062,7 +2091,7 @@ Location::Location(Frame *p) : m_frame(p)
 
 JSValue *Location::getValueProperty(ExecState *exec, int token) const
 {
-  KURL url = m_frame->url();
+  KURL url = m_frame->loader()->url();
   switch (token) {
   case Hash:
     return jsString(url.ref().isNull() ? "" : "#" + url.ref());
@@ -2080,8 +2109,7 @@ JSValue *Location::getValueProperty(ExecState *exec, int token) const
   case Href:
     if (!url.hasPath())
       return jsString(url.prettyURL() + "/");
-    else
-      return jsString(url.prettyURL());
+    return jsString(url.prettyURL());
   case Pathname:
     return jsString(url.path().isEmpty() ? "/" : url.path());
   case Port:
@@ -2116,7 +2144,7 @@ void Location::put(ExecState *exec, const Identifier &p, JSValue *v, int attr)
     return;
 
   DeprecatedString str = v->toString(exec);
-  KURL url = m_frame->url();
+  KURL url = m_frame->loader()->url();
   const HashEntry *entry = Lookup::findEntry(&LocationTable, p);
   if (entry)
     switch (entry->value) {
@@ -2167,11 +2195,11 @@ void Location::put(ExecState *exec, const Identifier &p, JSValue *v, int attr)
   }
 
   const Window* window = Window::retrieveWindow(m_frame);
-  Frame* activePart = Window::retrieveActive(exec)->frame();
+  Frame* activeFrame = Window::retrieveActive(exec)->frame();
   if (!url.url().startsWith("javascript:", false) || (window && window->isSafeScript(exec))) {
     bool userGesture = static_cast<ScriptInterpreter *>(exec->dynamicInterpreter())->wasRunByUserGesture();
     // We want a new history item if this JS was called via a user gesture
-    m_frame->scheduleLocationChange(url.url(), activePart->referrer(), !userGesture, userGesture);
+    m_frame->loader()->scheduleLocationChange(url.url(), activeFrame->loader()->outgoingReferrer(), !userGesture, userGesture);
   }
 }
 
@@ -2180,12 +2208,14 @@ JSValue *Location::toPrimitive(ExecState *exec, JSType) const
   return jsString(toString(exec));
 }
 
-UString Location::toString(ExecState *) const
+UString Location::toString(ExecState* exec) const
 {
-  if (!m_frame->url().hasPath())
-    return m_frame->url().prettyURL()+"/";
-  else
-    return m_frame->url().prettyURL();
+  if (!m_frame || !Window::retrieveWindow(m_frame)->isSafeScript(exec))
+    return UString();
+
+  if (!m_frame->loader()->url().hasPath())
+    return m_frame->loader()->url().prettyURL()+"/";
+  return m_frame->loader()->url().prettyURL();
 }
 
 JSValue *LocationFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const List &args)
@@ -2209,7 +2239,7 @@ JSValue *LocationFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const 
         const Window* window = Window::retrieveWindow(frame);
         if (!str.startsWith("javascript:", false) || (window && window->isSafeScript(exec))) {
           bool userGesture = static_cast<ScriptInterpreter *>(exec->dynamicInterpreter())->wasRunByUserGesture();
-          frame->scheduleLocationChange(p->document()->completeURL(str), p->referrer(), true /*lock history*/, userGesture);
+          frame->loader()->scheduleLocationChange(p->document()->completeURL(str), p->loader()->outgoingReferrer(), true /*lock history*/, userGesture);
         }
       }
       break;
@@ -2217,9 +2247,9 @@ JSValue *LocationFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const 
     case Location::Reload:
     {
       const Window* window = Window::retrieveWindow(frame);
-      if (!frame->url().url().startsWith("javascript:", false) || (window && window->isSafeScript(exec))) {
+      if (!frame->loader()->url().url().startsWith("javascript:", false) || (window && window->isSafeScript(exec))) {
         bool userGesture = static_cast<ScriptInterpreter *>(exec->dynamicInterpreter())->wasRunByUserGesture();
-        frame->scheduleRefresh(userGesture);
+        frame->loader()->scheduleRefresh(userGesture);
       }
       break;
     }
@@ -2232,7 +2262,7 @@ JSValue *LocationFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const 
             if (!dstUrl.startsWith("javascript:", false) || (window && window->isSafeScript(exec))) {
                 bool userGesture = static_cast<ScriptInterpreter *>(exec->dynamicInterpreter())->wasRunByUserGesture();
                 // We want a new history item if this JS was called via a user gesture
-                frame->scheduleLocationChange(dstUrl, p->referrer(), !userGesture, userGesture);
+                frame->loader()->scheduleLocationChange(dstUrl, p->loader()->outgoingReferrer(), !userGesture, userGesture);
             }
         }
         break;
@@ -2246,7 +2276,7 @@ JSValue *LocationFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const 
 
 ////////////////////// Selection Object ////////////////////////
 
-const ClassInfo Selection::info = { "Selection", 0, 0, 0 };
+const ClassInfo Selection::info = { "Selection", 0, &SelectionTable, 0 };
 /*
 @begin SelectionTable 19
   anchorNode                Selection::AnchorNode               DontDelete|ReadOnly
@@ -2259,7 +2289,7 @@ const ClassInfo Selection::info = { "Selection", 0, 0, 0 };
   extentOffset              Selection::ExtentOffset             DontDelete|ReadOnly
   isCollapsed               Selection::IsCollapsed              DontDelete|ReadOnly
   type                      Selection::_Type                    DontDelete|ReadOnly
-  [[==]]                    Selection::EqualEqual               DontDelete|ReadOnly
+  rangeCount                Selection::RangeCount               DontDelete|ReadOnly
   toString                  Selection::ToString                 DontDelete|Function 0
   collapse                  Selection::Collapse                 DontDelete|Function 2
   collapseToEnd             Selection::CollapseToEnd            DontDelete|Function 0
@@ -2269,6 +2299,8 @@ const ClassInfo Selection::info = { "Selection", 0, 0, 0 };
   setPosition               Selection::SetPosition              DontDelete|Function 2
   modify                    Selection::Modify                   DontDelete|Function 3
   getRangeAt                Selection::GetRangeAt               DontDelete|Function 1
+  removeAllRanges           Selection::RemoveAllRanges          DontDelete|Function 0
+  addRange                  Selection::AddRange                 DontDelete|Function 1
 @end
 */
 KJS_IMPLEMENT_PROTOFUNC(SelectionFunc)
@@ -2278,32 +2310,34 @@ Selection::Selection(Frame *p) : m_frame(p)
 
 JSValue *Selection::getValueProperty(ExecState *exec, int token) const
 {
-    SelectionController s = m_frame->selection();
+    SelectionController* s = m_frame->selectionController();
     const Window* window = Window::retrieveWindow(m_frame);
     if (!window)
         return jsUndefined();
         
     switch (token) {
     case AnchorNode:
-        return toJS(exec, s.anchorNode());
+        return toJS(exec, s->anchorNode());
     case BaseNode:
-        return toJS(exec, s.baseNode());
+        return toJS(exec, s->baseNode());
     case AnchorOffset:
-        return jsNumber(s.anchorOffset());
+        return jsNumber(s->anchorOffset());
     case BaseOffset:
-        return jsNumber(s.baseOffset());
+        return jsNumber(s->baseOffset());
     case FocusNode:
-        return toJS(exec, s.focusNode());
+        return toJS(exec, s->focusNode());
     case ExtentNode:
-        return toJS(exec, s.extentNode());
+        return toJS(exec, s->extentNode());
     case FocusOffset:
-        return jsNumber(s.focusOffset());
+        return jsNumber(s->focusOffset());
     case ExtentOffset:
-        return jsNumber(s.extentOffset());
+        return jsNumber(s->extentOffset());
     case IsCollapsed:
-        return jsBoolean(s.isCollapsed());
+        return jsBoolean(s->isCollapsed());
     case _Type:
-        return jsString(s.type());
+        return jsString(s->type());
+    case RangeCount:
+        return jsNumber(s->rangeCount());
     default:
         ASSERT(0);
         return jsUndefined();
@@ -2325,7 +2359,7 @@ JSValue *Selection::toPrimitive(ExecState *exec, JSType) const
 
 UString Selection::toString(ExecState *) const
 {
-    return UString((m_frame->selection()).toString());
+    return UString(m_frame->selectionController()->toString());
 }
 
 JSValue *SelectionFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const List &args)
@@ -2335,37 +2369,41 @@ JSValue *SelectionFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const
     Selection *selection = static_cast<Selection *>(thisObj);
     Frame *frame = selection->frame();
     if (frame) {
-        SelectionController s = frame->selection();
+        SelectionController* s = frame->selectionController();
         
         switch (id) {
             case Selection::Collapse:
-                s.collapse(toNode(args[0]), args[1]->toInt32(exec));
+                s->collapse(toNode(args[0]), args[1]->toInt32(exec));
                 break;
             case Selection::CollapseToEnd:
-                s.collapseToEnd();
+                s->collapseToEnd();
                 break;
             case Selection::CollapseToStart:
-                s.collapseToStart();
+                s->collapseToStart();
                 break;
             case Selection::Empty:
-                s.empty();
+                s->empty();
                 break;
             case Selection::SetBaseAndExtent:
-                s.setBaseAndExtent(toNode(args[0]), args[1]->toInt32(exec), toNode(args[2]), args[3]->toInt32(exec));
+                s->setBaseAndExtent(toNode(args[0]), args[1]->toInt32(exec), toNode(args[2]), args[3]->toInt32(exec));
                 break;
             case Selection::SetPosition:
-                s.setPosition(toNode(args[0]), args[1]->toInt32(exec));
+                s->setPosition(toNode(args[0]), args[1]->toInt32(exec));
                 break;
             case Selection::Modify:
-                s.modify(args[0]->toString(exec), args[1]->toString(exec), args[2]->toString(exec));
+                s->modify(args[0]->toString(exec), args[1]->toString(exec), args[2]->toString(exec));
                 break;
             case Selection::GetRangeAt:
-                return toJS(exec, s.getRangeAt(args[0]->toInt32(exec)).get());
+                return toJS(exec, s->getRangeAt(args[0]->toInt32(exec)).get());
+            case Selection::RemoveAllRanges:
+                s->removeAllRanges();
+                break;
+            case Selection::AddRange:
+                s->addRange(toRange(args[0]));
+                break;
             case Selection::ToString:
-                return jsString(s.toString());
+                return jsString(s->toString());
         }
-        
-        frame->setSelection(s);
     }
 
     return jsUndefined();
@@ -2373,7 +2411,7 @@ JSValue *SelectionFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const
 
 ////////////////////// BarInfo Object ////////////////////////
 
-const ClassInfo BarInfo::info = { "BarInfo", 0, 0, 0 };
+const ClassInfo BarInfo::info = { "BarInfo", 0, &BarInfoTable, 0 };
 /*
 @begin BarInfoTable 1
   visible                BarInfo::Visible                        DontDelete|ReadOnly
@@ -2391,17 +2429,17 @@ JSValue *BarInfo::getValueProperty(ExecState *exec, int token) const
     ASSERT(token == Visible);
     switch (m_type) {
     case Locationbar:
-        return jsBoolean(m_frame->locationbarVisible());
-    case Menubar: 
-        return jsBoolean(m_frame->locationbarVisible());
-    case Personalbar:
-        return jsBoolean(m_frame->personalbarVisible());
-    case Scrollbars: 
-        return jsBoolean(m_frame->scrollbarsVisible());
-    case Statusbar:
-        return jsBoolean(m_frame->statusbarVisible());
+        return jsBoolean(m_frame->page()->chrome()->toolbarsVisible());
     case Toolbar:
-        return jsBoolean(m_frame->toolbarVisible());
+        return jsBoolean(m_frame->page()->chrome()->toolbarsVisible());
+    case Personalbar:
+        return jsBoolean(m_frame->page()->chrome()->toolbarsVisible());
+    case Menubar: 
+        return jsBoolean(m_frame->page()->chrome()->menubarVisible());
+    case Scrollbars: 
+        return jsBoolean(m_frame->page()->chrome()->scrollbarsVisible());
+    case Statusbar:
+        return jsBoolean(m_frame->page()->chrome()->statusbarVisible());
     default:
         return jsBoolean(false);
     }
@@ -2417,7 +2455,7 @@ bool BarInfo::getOwnPropertySlot(ExecState *exec, const Identifier& propertyName
 
 ////////////////////// History Object ////////////////////////
 
-const ClassInfo History::info = { "History", 0, 0, 0 };
+const ClassInfo History::info = { "History", 0, &HistoryTable, 0 };
 /*
 @begin HistoryTable 4
   length        History::Length         DontDelete|ReadOnly
@@ -2435,18 +2473,8 @@ bool History::getOwnPropertySlot(ExecState *exec, const Identifier& propertyName
 
 JSValue *History::getValueProperty(ExecState *, int token) const
 {
-  switch (token) {
-  case Length:
-  {
-    BrowserExtension *ext = m_frame->browserExtension();
-    if (!ext)
-      return jsNumber(0);
-
-    return jsNumber(ext->getHistoryLength());
-  }
-  default:
-    return jsUndefined();
-  }
+    ASSERT(token == Length);
+    return m_frame ? jsNumber(m_frame->loader()->getHistoryLength()) : jsNumber(0);
 }
 
 UString History::toString(ExecState *exec) const
@@ -2475,7 +2503,8 @@ JSValue *HistoryFunc::callAsFunction(ExecState *exec, JSObject *thisObj, const L
     return jsUndefined();
   }
 
-  history->m_frame->scheduleHistoryNavigation(steps);
+  if (Frame* frame = history->m_frame)
+      frame->loader()->scheduleHistoryNavigation(steps);
   return jsUndefined();
 }
 
@@ -2494,7 +2523,9 @@ PausedTimeouts::~PausedTimeouts()
 
 void DOMWindowTimer::fired()
 {
+    timerNestingLevel = m_nestingLevel;
     m_object->timerFired(this);
+    timerNestingLevel = 0;
 }
 
 } // namespace KJS

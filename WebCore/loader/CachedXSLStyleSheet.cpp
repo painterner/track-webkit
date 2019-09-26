@@ -32,25 +32,25 @@
 #include "Cache.h"
 #include "CachedResourceClient.h"
 #include "CachedResourceClientWalker.h"
-#include "Decoder.h"
+#include "TextResourceDecoder.h"
 #include "loader.h"
 #include <wtf/Vector.h>
 
 namespace WebCore {
 
-#ifdef KHTML_XSLT
+#ifdef XSLT_SUPPORT
 
 CachedXSLStyleSheet::CachedXSLStyleSheet(DocLoader* dl, const String &url, CachePolicy cachePolicy, time_t _expireDate)
     : CachedResource(url, XSLStyleSheet, cachePolicy, _expireDate)
+    , m_decoder(new TextResourceDecoder("text/xsl"))
 {
     // It's XML we want.
     // FIXME: This should accept more general xml formats */*+xml, image/svg+xml for example.
     setAccept("text/xml, application/xml, application/xhtml+xml, text/xsl, application/rss+xml, application/atom+xml");
     
     // load the file
-    Cache::loader()->load(dl, this, false);
+    cache()->loader()->load(dl, this, false);
     m_loading = true;
-    m_decoder = new Decoder;
 }
 
 void CachedXSLStyleSheet::ref(CachedResourceClient *c)
@@ -58,21 +58,12 @@ void CachedXSLStyleSheet::ref(CachedResourceClient *c)
     CachedResource::ref(c);
     
     if (!m_loading)
-        c->setStyleSheet(m_url, m_sheet);
+        c->setXSLStyleSheet(m_url, m_sheet);
 }
 
-void CachedXSLStyleSheet::deref(CachedResourceClient *c)
+void CachedXSLStyleSheet::setEncoding(const String& chs)
 {
-    Cache::flush();
-    CachedResource::deref(c);
-    if (canDelete() && m_free)
-        delete this;
-}
-
-void CachedXSLStyleSheet::setCharset( const DeprecatedString &chs )
-{
-    if (!chs.isEmpty())
-        m_decoder->setEncodingName(chs.latin1(), Decoder::EncodingFromHTTPHeader);
+    m_decoder->setEncoding(chs, TextResourceDecoder::EncodingFromHTTPHeader);
 }
 
 void CachedXSLStyleSheet::data(Vector<char>& data, bool allDataReceived)
@@ -82,6 +73,7 @@ void CachedXSLStyleSheet::data(Vector<char>& data, bool allDataReceived)
 
     setSize(data.size());
     m_sheet = String(m_decoder->decode(data.data(), size()));
+    m_sheet += m_decoder->flush();
     m_loading = false;
     checkNotify();
 }
@@ -93,7 +85,7 @@ void CachedXSLStyleSheet::checkNotify()
     
     CachedResourceClientWalker w(m_clients);
     while (CachedResourceClient *c = w.next())
-        c->setStyleSheet(m_url, m_sheet);
+        c->setXSLStyleSheet(m_url, m_sheet);
 }
 
 

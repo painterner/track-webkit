@@ -21,15 +21,18 @@
  * Boston, MA 02111-1307, USA.
  *
  */
+
 #include "config.h"
 #include "RenderWidget.h"
 
-#include "AXObjectCache.h" 
+#include "AXObjectCache.h"
 #include "Document.h"
 #include "Element.h"
+#include "Event.h"
 #include "EventNames.h"
 #include "FrameView.h"
 #include "GraphicsContext.h"
+#include "RenderLayer.h"
 #include "RenderView.h"
 
 using namespace std;
@@ -38,10 +41,11 @@ namespace WebCore {
 
 using namespace EventNames;
 
-// Returns 1 since a replaced element can have the caret positioned 
-// at its beginning (0), or at its end (1).
-// NOTE: Yet, "select" elements can have any number of "option" elements
-// as children, so this "0 or 1" idea does not really hold up.
+static HashMap<const Widget*, RenderWidget*>& widgetRendererMap()
+{
+    static HashMap<const Widget*, RenderWidget*>* staticWidgetRendererMap = new HashMap<const Widget*, RenderWidget*>;
+    return *staticWidgetRendererMap;
+}
 
 RenderWidget::RenderWidget(Node* node)
       : RenderReplaced(node)
@@ -54,9 +58,9 @@ RenderWidget::RenderWidget(Node* node)
 
     view()->addWidget(this);
 
-    // this is no real reference counting, its just there
-    // to make sure that we're not deleted while we're recursed
-    // in an eventFilter of the widget
+    // Reference counting is used to prevent the widget from being
+    // destroyed while inside the Widget code, which might not be
+    // able to handle that.
     ref();
 }
 
@@ -68,8 +72,8 @@ void RenderWidget::destroy()
     // both RenderBox::destroy() and RenderObject::destroy().
     // Fix originally made for <rdar://problem/4228818>.
 
-    if (RenderView *c = view())
-        c->removeWidget(this);
+    if (RenderView* v = view())
+        v->removeWidget(this);
 
     document()->axObjectCache()->remove(this);
 
@@ -78,18 +82,18 @@ void RenderWidget::destroy()
     if (m_widget) {
         if (m_view)
             m_view->removeChild(m_widget);
-        m_widget->setClient(0);
+        widgetRendererMap().remove(m_widget);
     }
 
     RenderLayer* layer = m_layer;
     RenderArena* arena = renderArena();
-    
+
     if (layer)
         layer->clearClipRect();
-    
+
     setNode(0);
     deref(arena);
-    
+
     if (layer)
         layer->destroy(arena);
 }
@@ -103,7 +107,7 @@ RenderWidget::~RenderWidget()
 void RenderWidget::resizeWidget(Widget* widget, int w, int h)
 {
     if (element() && (widget->width() != w || widget->height() != h)) {
-        RenderArena *arena = ref();
+        RenderArena* arena = ref();
         element()->ref();
         widget->resize(w, h);
         element()->deref();
@@ -115,12 +119,12 @@ void RenderWidget::setWidget(Widget* widget)
 {
     if (widget != m_widget) {
         if (m_widget) {
-            m_widget->setClient(0);
+            widgetRendererMap().remove(m_widget);
             deleteWidget();
         }
         m_widget = widget;
         if (m_widget) {
-            m_widget->setClient(this);
+            widgetRendererMap().add(m_widget, this);
             // if we've already received a layout, apply the calculated space to the
             // widget immediately, but we have to have really been full constructed (with a non-null
             // style pointer).
@@ -128,15 +132,13 @@ void RenderWidget::setWidget(Widget* widget)
                 resizeWidget(m_widget,
                     m_width - borderLeft() - borderRight() - paddingLeft() - paddingRight(),
                     m_height - borderTop() - borderBottom() - paddingTop() - paddingBottom());
-            else
-                setPos(xPos(), -500000);
             if (style()) {
                 if (style()->visibility() != VISIBLE)
                     m_widget->hide();
                 else
                     m_widget->show();
             }
-            m_view->addChild(m_widget, -500000, 0);
+            m_view->addChild(m_widget);
         }
     }
 }
@@ -149,18 +151,10 @@ void RenderWidget::layout()
     setNeedsLayout(false);
 }
 
-void RenderWidget::sendConsumedMouseUp(Widget*)
+void RenderWidget::setStyle(RenderStyle* newStyle)
 {
-    RenderArena* arena = ref();
-    EventTargetNodeCast(node())->dispatchSimulatedMouseEvent(mouseupEvent);
-    deref(arena);
-}
-
-void RenderWidget::setStyle(RenderStyle *_style)
-{
-    RenderReplaced::setStyle(_style);
+    RenderReplaced::setStyle(newStyle);
     if (m_widget) {
-        m_widget->setFont(style()->font());
         if (style()->visibility() != VISIBLE)
             m_widget->hide();
         else
@@ -168,22 +162,22 @@ void RenderWidget::setStyle(RenderStyle *_style)
     }
 }
 
-void RenderWidget::paint(PaintInfo& i, int tx, int ty)
+void RenderWidget::paint(PaintInfo& paintInfo, int tx, int ty)
 {
-    if (!shouldPaint(i, tx, ty))
+    if (!shouldPaint(paintInfo, tx, ty))
         return;
 
     tx += m_x;
     ty += m_y;
 
-    if (shouldPaintBackgroundOrBorder() && i.phase != PaintPhaseOutline && i.phase != PaintPhaseSelfOutline) 
-        paintBoxDecorations(i, tx, ty);
+    if (hasBoxDecorations() && paintInfo.phase != PaintPhaseOutline && paintInfo.phase != PaintPhaseSelfOutline)
+        paintBoxDecorations(paintInfo, tx, ty);
 
-    if (!m_view || i.phase != PaintPhaseForeground || style()->visibility() != VISIBLE)
+    if (!m_view || paintInfo.phase != PaintPhaseForeground || style()->visibility() != VISIBLE)
         return;
 
 #if PLATFORM(MAC)
-    if (style()->highlight() != nullAtom && !i.p->paintingDisabled())
+    if (style()->highlight() != nullAtom && !paintInfo.context->paintingDisabled())
         paintCustomHighlight(tx - m_x, ty - m_y, style()->highlight(), true);
 #endif
 
@@ -195,47 +189,12 @@ void RenderWidget::paint(PaintInfo& i, int tx, int ty)
 
         // Tell the widget to paint now.  This is the only time the widget is allowed
         // to paint itself.  That way it will composite properly with z-indexed layers.
-        m_widget->paint(i.p, i.r);
+        m_widget->paint(paintInfo.context, paintInfo.rect);
     }
 
     // Paint a partially transparent wash over selected widgets.
     if (isSelected() && !document()->printing())
-        i.p->fillRect(selectionRect(), selectionBackgroundColor());
-}
-
-void RenderWidget::focusIn(Widget*)
-{
-    RenderArena* arena = ref();
-    RefPtr<Node> elem = element();
-    if (elem)
-        elem->document()->setFocusNode(elem);
-    deref(arena);
-}
-
-void RenderWidget::focusOut(Widget*)
-{
-    RenderArena* arena = ref();
-    RefPtr<Node> elem = element();
-    if (elem && elem == elem->document()->focusNode())
-        elem->document()->setFocusNode(0);
-    deref(arena);
-}
-
-void RenderWidget::scrollToVisible(Widget* widget)
-{
-    if (RenderLayer* layer = enclosingLayer())
-        layer->scrollRectToVisible(absoluteBoundingBoxRect());
-}
-
-bool RenderWidget::isVisible(Widget* widget)
-{
-    return style()->visibility() == VISIBLE;
-}
-
-Element* RenderWidget::element(Widget* widget)
-{
-    Node* n = node();
-    return n->isElementNode() ? static_cast<Element*>(n) : 0;
+        paintInfo.context->fillRect(selectionRect(), selectionBackgroundColor());
 }
 
 void RenderWidget::deref(RenderArena *arena)
@@ -248,26 +207,29 @@ void RenderWidget::updateWidgetPosition()
 {
     if (!m_widget)
         return;
-    
-    int x, y, width, height;
+
+    int x;
+    int y;
     absolutePosition(x, y);
     x += borderLeft() + paddingLeft();
     y += borderTop() + paddingTop();
-    width = m_width - borderLeft() - borderRight() - paddingLeft() - paddingRight();
-    height = m_height - borderTop() - borderBottom() - paddingTop() - paddingBottom();
-    IntRect newBounds(x,y,width,height);
+
+    int width = m_width - borderLeft() - borderRight() - paddingLeft() - paddingRight();
+    int height = m_height - borderTop() - borderBottom() - paddingTop() - paddingBottom();
+
+    IntRect newBounds(x, y, width, height);
     IntRect oldBounds(m_widget->frameGeometry());
     if (newBounds != oldBounds) {
         // The widget changed positions.  Update the frame geometry.
         if (checkForRepaintDuringLayout()) {
-            RenderView* c = view();
-            if (!c->printingMode()) {
-                c->repaintViewRectangle(oldBounds);
-                c->repaintViewRectangle(newBounds);
+            RenderView* v = view();
+            if (!v->printingMode()) {
+                v->repaintViewRectangle(oldBounds);
+                v->repaintViewRectangle(newBounds);
             }
         }
 
-        RenderArena *arena = ref();
+        RenderArena* arena = ref();
         element()->ref();
         m_widget->setFrameGeometry(newBounds);
         element()->deref();
@@ -275,11 +237,10 @@ void RenderWidget::updateWidgetPosition()
     }
 }
 
-void RenderWidget::setSelectionState(SelectionState s) 
+void RenderWidget::setSelectionState(SelectionState state)
 {
-    if (selectionState() != s) {
-        RenderReplaced::setSelectionState(s);
-        m_selectionState = s;
+    if (selectionState() != state) {
+        RenderReplaced::setSelectionState(state);
         if (m_widget)
             m_widget->setIsSelected(isSelected());
     }
@@ -289,4 +250,10 @@ void RenderWidget::deleteWidget()
 {
     delete m_widget;
 }
+
+RenderWidget* RenderWidget::find(const Widget* widget)
+{
+    return widgetRendererMap().get(widget);
 }
+
+} // namespace WebCore

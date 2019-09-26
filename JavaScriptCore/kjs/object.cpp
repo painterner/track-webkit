@@ -34,7 +34,7 @@
 
 // maximum global call stack size. Protects against accidental or
 // malicious infinite recursions. Define to -1 if you want no limit.
-#if PLATFORM(DARWIN)
+#if PLATFORM(DARWIN) || PLATFORM(WIN_OS)
 // Given OS X stack sizes we run out of stack at about 350 levels.
 // If we improve our stack usage, we can bump this number.
 #define KJS_MAX_STACK 100
@@ -297,7 +297,7 @@ bool JSObject::hasProperty(ExecState *exec, unsigned propertyName) const
 }
 
 // ECMA 8.6.2.5
-bool JSObject::deleteProperty(ExecState */*exec*/, const Identifier &propertyName)
+bool JSObject::deleteProperty(ExecState* /*exec*/, const Identifier &propertyName)
 {
   unsigned attributes;
   JSValue *v = _prop.get(propertyName, attributes);
@@ -428,7 +428,7 @@ bool JSObject::implementsCall() const
   return false;
 }
 
-JSValue *JSObject::callAsFunction(ExecState */*exec*/, JSObject */*thisObj*/, const List &/*args*/)
+JSValue *JSObject::callAsFunction(ExecState* /*exec*/, JSObject* /*thisObj*/, const List &/*args*/)
 {
   assert(false);
   return NULL;
@@ -504,7 +504,7 @@ void JSObject::getPropertyNames(ExecState* exec, PropertyNameArray& propertyName
      static_cast<JSObject*>(_proto)->getPropertyNames(exec, propertyNames);
 }
 
-bool JSObject::toBoolean(ExecState */*exec*/) const
+bool JSObject::toBoolean(ExecState*) const
 {
   return true;
 }
@@ -525,7 +525,7 @@ UString JSObject::toString(ExecState *exec) const
   return prim->toString(exec);
 }
 
-JSObject *JSObject::toObject(ExecState */*exec*/) const
+JSObject *JSObject::toObject(ExecState*) const
 {
   return const_cast<JSObject*>(this);
 }

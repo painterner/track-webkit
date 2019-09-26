@@ -24,7 +24,6 @@
 
 #include "CSSRule.h"
 #include "CSSStyleSheet.h"
-#include "DeprecatedStringList.h"
 #include "ExceptionCode.h"
 #include "MediaQuery.h"
 #include "cssparser.h"
@@ -189,8 +188,9 @@ void MediaList::setMediaText(const String& value, ExceptionCode& ec)
     MediaList tempMediaList;
     CSSParser p(true);
 
-    DeprecatedStringList list = DeprecatedStringList::split(',', value.deprecatedString());
-    for (DeprecatedStringList::Iterator it = list.begin(); it != list.end(); ++it) {
+    Vector<String> list = value.split(',');
+    Vector<String>::const_iterator end = list.end();
+    for (Vector<String>::const_iterator it = list.begin(); it != end; ++it) {
         String medium = (*it).stripWhiteSpace();
         if (!medium.isEmpty()) {
             if (!p.parseMediaQuery(&tempMediaList, medium)) {
@@ -210,11 +210,11 @@ void MediaList::setMediaText(const String& value, ExceptionCode& ec)
     }
     // ",,,," falls straight through, but is not valid unless fallback
     if (!m_fallback && list.begin() == list.end()) {
-        String s = value.deprecatedString().stripWhiteSpace();
+        String s = value.stripWhiteSpace();
         if (!s.isEmpty()) {
             ec = SYNTAX_ERR;
             return;
-            }
+        }
     }
     
     ec = 0;

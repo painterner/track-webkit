@@ -47,6 +47,7 @@ typedef union {
     short shortValue;
     int intValue;
     long longValue;
+    long long longLongValue;
     float floatValue;
     double doubleValue;
 } ObjcValue;
@@ -55,9 +56,15 @@ typedef enum {
     ObjcVoidType,
     ObjcObjectType,
     ObjcCharType,
+    ObjcUnsignedCharType,
     ObjcShortType,
+    ObjcUnsignedShortType,
     ObjcIntType,
+    ObjcUnsignedIntType,
     ObjcLongType,
+    ObjcUnsignedLongType,
+    ObjcLongLongType,
+    ObjcUnsignedLongLongType,
     ObjcFloatType,
     ObjcDoubleType,
     ObjcInvalidType
@@ -71,8 +78,6 @@ JSValue *convertObjcValueToValue(ExecState *exec, void *buffer, ObjcValueType ty
 ObjcValueType objcValueTypeForType(const char *type);
 
 bool convertJSMethodNameToObjc(const char *JSName, char *buffer, size_t bufferSize);
-
-void *createObjcInstanceForValue(JSValue *value, const RootObject *origin, const RootObject *current);
 
 JSObject *throwError(ExecState *, ErrorType, NSString *message);
 

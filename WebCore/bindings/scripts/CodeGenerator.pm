@@ -2,6 +2,7 @@
 # KDOM IDL parser
 #
 # Copyright (C) 2005 Nikolas Zimmermann <wildfox@kde.org>
+# Copyright (C) 2006 Samuel Weinig <sam.weinig@gmail.com>
 # 
 # This file is part of the KDE project
 # 
@@ -31,377 +32,243 @@ my $useLayerOnTop = 0;
 
 my $codeGenerator = 0;
 
-# Used to map between modules & namespaces
-my %moduleNamespaceHash;
+my $verbose = 0;
 
-# Used to map between modules and their implementation namespaces
-my %moduleImplementationNamespaceHash;
+my %primitiveTypeHash = ("int" => 1, "short" => 1, "long" => 1, 
+                         "unsigned int" => 1, "unsigned short" => 1,
+                         "unsigned long" => 1, "float" => 1,
+                         "double" => 1, "boolean" => 1, "void" => 1);
+
+my %podTypeHash = ("RGBColor" => 1, "SVGLength" => 1, "SVGPoint" => 1, "SVGRect" => 1, "SVGNumber" => 1, "SVGMatrix" => 1);
+ 
+my %stringTypeHash = ("DOMString" => 1, "AtomicString" => 1);
+
+my %nonPointerTypeHash = ("DOMTimeStamp" => 1, "CompareHow" => 1, "SVGPaintType" => 1);
+
+my %svgAnimatedTypeHash = ("SVGAnimatedAngle" => 1, "SVGAnimatedBoolean" => 1,
+                           "SVGAnimatedEnumeration" => 1, "SVGAnimatedInteger" => 1,
+                           "SVGAnimatedLength" => 1, "SVGAnimatedLengthList" => 1,
+                           "SVGAnimatedNumber" => 1, "SVGAnimatedNumberList" => 1,
+                           "SVGAnimatedPreserveAspectRatio" => 1,
+                           "SVGAnimatedRect" => 1, "SVGAnimatedString" => 1,
+                           "SVGAnimatedTransformList" => 1);
 
 # Helpers for 'ScanDirectory'
 my $endCondition = 0;
 my $foundFilename = "";
 my @foundFilenames = ();
+my $ignoreParent = 1;
+my $defines = "";
 
 # Default constructor
 sub new
 {
-  my $object = shift;
-  my $reference = { };
+    my $object = shift;
+    my $reference = { };
 
-  $useDirectories = shift;
-  $useGenerator = shift;
-  $useOutputDir = shift;
-  $useLayerOnTop = shift;
+    $useDirectories = shift;
+    $useGenerator = shift;
+    $useOutputDir = shift;
+    $useLayerOnTop = shift;
 
-  bless($reference, $object);
-  return $reference;
+    bless($reference, $object);
+    return $reference;
 }
 
 sub StripModule($)
 {
-	my $object = shift;
-	my $name = shift;
-	$name =~ s/[a-zA-Z0-9]*:://;
-	return $name;
+    my $object = shift;
+    my $name = shift;
+    $name =~ s/[a-zA-Z0-9]*:://;
+    return $name;
 }
 
 sub ProcessDocument
 {
-  my $object = shift;
-  $useDocument = shift;
-  
-  my $ifaceName = $useGenerator;
-  $ifaceName =~ s/\b(\w)/\U$1/g; # Make first letter of each word uppercase
-  $ifaceName = "CodeGenerator$ifaceName";
+    my $object = shift;
+    $useDocument = shift;
+    $defines = shift;
 
-  # Dynamically load external code generation perl module...
-  require $ifaceName . ".pm";
-  $codeGenerator = $ifaceName->new($object, $useOutputDir, $useLayerOnTop);
+    my $ifaceName = "CodeGenerator" . $useGenerator;
 
-#  print " | *** Starting to generate code using \"$ifaceName\"...\n |\n";
-
-  # Start the actual code generation!
-  $codeGenerator->GenerateModule($useDocument);
-
-  my $arrayRef = $useDocument->classes;
-  foreach(@$arrayRef) {
-    my $class = $_;
-
-    print "Generating code for IDL interface \"" . $class->name . "\"...\n";
-    $codeGenerator->GenerateInterface($class);
-  }
-
-  $codeGenerator->finish();
-
-#  print " | *** Finished generation!\n";
-}
-
-# Helper for all CodeGenerator***.pm modules
-sub FindTopBaseClass
-{
-  # If you are processing the 'Attr' interface, it has the single
-  # parent interface 'Node', which is the topmost base class. Return it.
-  #
-  # It gets trickier for ie. the 'PlatformMouseEvent' interface, whose parent is
-  # the 'UIEvent' interface, whose parent is the 'Event' interface. Return it.
-  my $object = shift;
-  my $interface = StripModule(shift);
-  my $topBaseClass = "";
-  
-  # Loop until we found the top most base class for 'interface'
-  while($interface ne "") {
-    # Step #1: Find the IDL file associated with 'interface'
-    $endCondition = 0; $foundFilename = "";
-
-    foreach(@{$useDirectories}) {
-      if($foundFilename eq "") {
-        $object->ScanDirectory("$interface.idl", $_, $_, 0);
-      }
-    }
-
-    if($foundFilename ne "") {
-      print "  |  |>  Parsing parent IDL \"$foundFilename\" for interface \"$interface\"\n";
-
-      # Step #2: Parse the found IDL file (in quiet mode).
-      my $parser = IDLParser->new(1);
-      my $document = $parser->Parse($foundFilename);
-
-      # Step #3: Check wheter the parsed IDL file has parents
-      foreach(@{$document->classes}) {
-        my $class = $_;
-
-        my $useInterface = $interface;
-
-        if($class->name eq $useInterface) {
-          my @parents = @{$class->parents};
-          my $parentsMax = @{$class->parents};
-
-          $interface = "";
-
-          # Exception: For the DOM 'Node' is our topmost baseclass, not EventTarget.
-          if(($parentsMax > 0) and ($parents[0] ne "events::EventTarget")) {
-            $interface = StripModule($parents[0]);
-          } elsif(!$class->noDPtrFlag) { # Include 'module' ...
-            $topBaseClass = $document->module . "::" . $class->name;
-          }
-        }  
-      }
-    } else {
-      die("Could NOT find specified parent interface \"$interface\"!\n");
-    }
-  }
-
-  return $topBaseClass;
-}
-
-# Helper for all IDLCodeGenerator***.pm modules
-sub ClassHasWriteableAttributes
-{
-  # Determine wheter a given interface has any writeable attributes...
-  my $object = shift;
-  my $interface = StripModule(shift);
-  my $hasWriteableAttributes = 0;
-  
-  # Step #1: Find the IDL file associated with 'interface'
-  $endCondition = 0; $foundFilename = "";
-
-  foreach(@{$useDirectories}) {
-    if($foundFilename eq "") {
-      $object->ScanDirectory("$interface.idl", $_, $_, 0);
-    }
-  }
-
-  # Step #2: Parse the found IDL file (in quiet mode).
-  my $parser = IDLParser->new(1);
-  my $document = $parser->Parse($foundFilename);
-
-  # Step #3: Check wheter the parsed IDL file has parents
-  foreach(@{$document->classes}) {
-    my $class = $_;
-
-    if($class->name eq $interface) {
-      foreach(@{$class->attributes}) {
-        if($_->type !~ /^readonly\ attribute$/) {
-          $hasWriteableAttributes = 1;
+    # Dynamically load external code generation perl module
+    require $ifaceName . ".pm";
+    $codeGenerator = $ifaceName->new($object, $useOutputDir, $useLayerOnTop);
+    unless (defined($codeGenerator)) {
+        my $classes = $useDocument->classes;
+        foreach my $class (@$classes) {
+            print "Skipping $useGenerator code generation for IDL interface \"" . $class->name . "\".\n" if $verbose;
         }
-      }
+        return;
     }
-  }
 
-  return $hasWriteableAttributes;
+    # Start the actual code generation!
+    $codeGenerator->GenerateModule($useDocument, $defines);
+
+    my $classes = $useDocument->classes;
+    foreach my $class (@$classes) {
+        print "Generating $useGenerator bindings code for IDL interface \"" . $class->name . "\"...\n" if $verbose;
+        $codeGenerator->GenerateInterface($class, $defines);
+    }
+
+    $codeGenerator->finish();
 }
 
-# Helper for all IDLCodeGenerator***.pm modules
-sub AllClassesWhichInheritFrom
+sub AddMethodsConstantsAndAttributesFromParentClasses
 {
-  # Determine which interfaces inherit from the passed one...
-  my $object = shift;
+    # For the passed interface, recursively parse all parent
+    # IDLs in order to find out all inherited properties/methods.
 
-  my $interface = shift;
-  $interface =~ s/([a-zA-Z0-9]*::)*//; # Strip namespace(s).
+    my $object = shift;
+    my $dataNode = shift;
 
-  # Step #1: Loop through all included directories to scan for all IDL files...
-  my @allIDLFiles = ();
-  foreach(@{$useDirectories}) {
-    $endCondition = 0;
-    @foundFilenames = ();
+    my @parents = @{$dataNode->parents};
+    my $parentsMax = @{$dataNode->parents};
 
-    $object->ScanDirectory("allidls", $_, $_, 1);
-    foreach(@foundFilenames) {
-      push(@allIDLFiles, $_);
-    }
-  }
+    my $constantsRef = $dataNode->constants;
+    my $functionsRef = $dataNode->functions;
+    my $attributesRef = $dataNode->attributes;
 
-  # Step #2: Loop through all found IDL files...
-  my %classDataCache;
-  foreach(@allIDLFiles) {
-    # Step #3: Parse the found IDL file (in quiet mode).
-    my $parser = IDLParser->new(1);
-    my $document = $parser->Parse($_);
+    # Exception: For the DOM 'Node' is our topmost baseclass, not EventTargetNode.
+    return if $parentsMax eq 1 and $parents[0] eq "EventTargetNode";
 
-    # Step #4: Cache the parsed IDL datastructures.
-    my $cacheHandle = $_; $cacheHandle =~ s/.*\/(.*)\.idl//;
-    $classDataCache{$1} = $document;
-  }
-
-  my %classDataCacheCopy = %classDataCache; # Protect!
-
-  # Step #5: Loop through all cached IDL documents...
-  my @classList = ();
-  while(my($name, $document) = each %classDataCache) {
-    $endCondition = 0;
-
-    # Step #6: Check wheter the parsed IDL file has parents...
-    $object->RecursiveInheritanceHelper($document, $interface, \@classList, \%classDataCacheCopy);
-  }
-
-  # Step #7: Return list of all classes which inherit from me!
-  return \@classList;
-}
-
-# Helper for all IDLCodeGenerator***.pm modules
-sub AllClasses
-{
-  # Determines all interfaces within a project...
-  my $object = shift;
-
-  # Step #1: Loop through all included directories to scan for all IDL files...
-  my @allIDLFiles = ();
-  foreach(@{$useDirectories}) {
-    $endCondition = 0;
-    @foundFilenames = ();
-
-    $object->ScanDirectory("allidls", $_, $_, 1);
-    foreach(@foundFilenames) {
-      push(@allIDLFiles, $_);
-    }
-  }
-
-  # Step #2: Loop through all found IDL files...
-  my @classList = ();
-  foreach(@allIDLFiles) {
-    # Step #3: Parse the found IDL file (in quiet mode).
-    my $parser = IDLParser->new(1);
-    my $document = $parser->Parse($_);
-
-    # Step #4: Check if class is a baseclass...
-    foreach(@{$document->classes}) {
-      my $class = $_;
-
-      my $identifier = $class->name;
-      my $namespace = $moduleNamespaceHash{$document->module};
-      $identifier = $namespace . "::" . $identifier if($namespace ne "");
-
-      my @array = grep { /^$identifier$/ } @$classList;
-
-      my $arraySize = @array;
-      if($arraySize eq 0) {
-        push(@classList, $identifier);
-      }
-    }
-  }
-
-  # Step #7: Return list of all base classes!
-  return \@classList;
-}
-
-# Internal helper for 'AllClassesWhichInheritFrom'
-sub RecursiveInheritanceHelper
-{
-  my $object = shift;
-
-  my $document = shift;
-  my $interface = shift;
-  my $classList = shift;
-  my $classDataCache = shift;
-
-  if($endCondition eq 1) {
-    return 1;
-  }
-
-  foreach(@{$document->classes}) {
-    my $class = $_;
-
-    foreach(@{$class->parents}) {
-      my $cacheHandle = StripModule($_);
-
-      if($cacheHandle eq $interface) {
-        my $identifier = $document->module . "::" . $class->name;
-        my @array = grep { /^$identifier$/ } @$classList; my $arraySize = @array;
-        push(@$classList, $identifier) if($arraySize eq 0);
-
-        $endCondition = 1;
-        return $endCondition;
-      } else { 
-        my %cache = %{$classDataCache};
-
-        my $checkDocument = $cache{$cacheHandle};
-        $endCondition = $object->RecursiveInheritanceHelper($checkDocument, $interface,
-                                  $classList, $classDataCache);
-        if($endCondition eq 1) {
-          my $identifier = $document->module . "::" . $class->name;
-          my @array = grep { /^$identifier$/ } @$classList; my $arraySize = @array;
-          push(@$classList, $identifier) if($arraySize eq 0);
-
-          return $endCondition;
+    foreach (@{$dataNode->parents}) {
+        if ($ignoreParent) {
+            # Ignore first parent class, already handled by the generation itself.
+            $ignoreParent = 0;
+            next;
         }
-      }
-    }
-  }
 
-  return $endCondition;
+        my $interface = $object->StripModule($_);
+
+        # Step #1: Find the IDL file associated with 'interface'
+        $endCondition = 0;
+        $foundFilename = "";
+
+        foreach (@{$useDirectories}) {
+            $object->ScanDirectory("$interface.idl", $_, $_, 0) if ($foundFilename eq "");
+        }
+
+        if ($foundFilename ne "") {
+            print "  |  |>  Parsing parent IDL \"$foundFilename\" for interface \"$interface\"\n" if $verbose;
+
+            # Step #2: Parse the found IDL file (in quiet mode).
+            my $parser = IDLParser->new(1);
+            my $document = $parser->Parse($foundFilename, $defines);
+
+            foreach my $class (@{$document->classes}) {
+                # Step #3: Enter recursive parent search
+                AddMethodsConstantsAndAttributesFromParentClasses($object, $class);
+
+                # Step #4: Collect constants & functions & attributes of this parent-class
+                my $constantsMax = @{$class->constants};
+                my $functionsMax = @{$class->functions};
+                my $attributesMax = @{$class->attributes};
+
+                print "  |  |>  -> Inheriting $constantsMax constants, $functionsMax functions, $attributesMax attributes...\n  |  |>\n" if $verbose;
+
+                # Step #5: Concatenate data
+                push(@$constantsRef, $_) foreach (@{$class->constants});
+                push(@$functionsRef, $_) foreach (@{$class->functions});
+                push(@$attributesRef, $_) foreach (@{$class->attributes});
+            }
+        } else {
+            die("Could NOT find specified parent interface \"$interface\"!\n");
+        }
+    }
 }
 
-# Helper for all CodeGenerator***.pm modules
+# Helpers for all CodeGenerator***.pm modules
+sub IsPodType
+{
+    my $object = shift;
+    my $type = shift;
+
+    return 1 if $podTypeHash{$type};
+    return 0;
+}
+
 sub IsPrimitiveType
 {
-  my $object = shift;
+    my $object = shift;
+    my $type = shift;
 
-  my $type = shift;
+    return 1 if $primitiveTypeHash{$type};
+    return 0;
+}
 
-  if(($type =~ /^int$/) or ($type =~ /^short$/) or ($type =~ /^long$/) or
-     ($type =~ /^unsigned int$/) or ($type =~ /^unsigned short$/) or ($type =~ /^unsigned long$/) or
-     ($type =~ /^float$/) or ($type =~ /^double$/) or ($type =~ /^boolean$/) or ($type =~ /^void$/)) {
-    return 1;
-  }
+sub IsStringType
+{
+    my $object = shift;
+    my $type = shift;
 
-  return 0;
+    return 1 if $stringTypeHash{$type};
+    return 0;
+}
+
+sub IsNonPointerType
+{
+    my $object = shift;
+    my $type = shift;
+
+    return 1 if $nonPointerTypeHash{$type} or $primitiveTypeHash{$type};
+    return 0;
+}
+
+sub IsSVGAnimatedType
+{
+    my $object = shift;
+    my $type = shift;
+
+    return 1 if $svgAnimatedTypeHash{$type};
+    return 0; 
 }
 
 # Internal Helper
 sub ScanDirectory
 {
-  my $object = shift;
+    my $object = shift;
 
-  my $interface = shift;
-  my $directory = shift;
-  my $useDirectory = shift;
-  my $reportAllFiles = shift;
+    my $interface = shift;
+    my $directory = shift;
+    my $useDirectory = shift;
+    my $reportAllFiles = shift;
 
-  if(($endCondition eq 1) and ($reportAllFiles eq 0)) {
-    return;
-  }
+    return if ($endCondition eq 1) and ($reportAllFiles eq 0);
 
-  chdir($directory) or die "[ERROR] Can't enter directory $directory: \"$!\"\n";
-  opendir(DIR, ".") or die "[ERROR] Can't open directory $directory: \"$!\"\n";
+    my $sourceRoot = $ENV{SOURCE_ROOT} || "";
+    $thisDir = "$sourceRoot/$directory";
 
-  my @names = readdir(DIR) or die "[ERROR] Cant't read directory $directory: \"$!\"\n";
-  closedir(DIR);
+    opendir(DIR, $thisDir) or die "[ERROR] Can't open directory $thisDir: \"$!\"\n";
 
-  foreach(@names) {
-    my $name = $_;
+    my @names = readdir(DIR) or die "[ERROR] Cant't read directory $thisDir \"$!\"\n";
+    closedir(DIR);
 
-    # Skip if we already found the right file or
-    # if we encounter 'exotic' stuff (ie. '.', '..', '.svn')
-    if(($endCondition eq 1) or ($name =~ /^\./)) {
-      next;
+    foreach my $name (@names) {
+        # Skip if we already found the right file or
+        # if we encounter 'exotic' stuff (ie. '.', '..', '.svn')
+        next if ($endCondition eq 1) or ($name =~ /^\./);
+
+        # Recurisvely enter directory
+        if (-d "$thisDir/$name") {
+            $object->ScanDirectory($interface, "$directory/$name", $useDirectory, $reportAllFiles);
+            next;
+        }
+
+        # Check wheter we found the desired file
+        my $condition = ($name eq $interface);
+        $condition = 1 if ($interface eq "allidls") and ($name =~ /\.idl$/);
+
+        if ($condition) {
+            $foundFilename = "$thisDir/$name";
+
+            if ($reportAllFiles eq 0) {
+                $endCondition = 1;
+            } else {
+                push(@foundFilenames, $foundFilename);
+            }
+        }
     }
-
-    # Recurisvely enter directory...
-    if(-d $name) {
-      $object->ScanDirectory($interface, $name, $useDirectory, $reportAllFiles);
-      next;
-    }
-
-    # Check wheter we found the desired file...
-    my $condition = ($name eq $interface);
-    if(($interface eq "allidls") and
-       ($name =~ /\.idl$/)) {
-      $condition = 1;
-    }
-
-    if($condition) {
-      $foundFilename = "$useDirectory/$directory/$name";
-
-      if($reportAllFiles eq 0) {
-        $endCondition = 1;
-      } else {
-        push(@foundFilenames, $foundFilename);
-      }
-    }
-
-    chdir($useDirectory) or die "[ERROR] Can't change directory to $useDirectory: \"$!\"\n";
-  }
 }
 
 1;

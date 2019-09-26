@@ -28,7 +28,7 @@
 #define Element_h
 
 #include "Attr.h"
-#include "ScrollBar.h"
+#include "ScrollTypes.h"
 #include "Timer.h"
 
 namespace WebCore {
@@ -68,7 +68,7 @@ public:
     void scrollIntoView (bool alignToTop = true);
     void scrollIntoViewIfNeeded(bool centerIfNeeded = true);
 
-    void scrollByUnits(int units, ScrollGranularity granularity);
+    void scrollByUnits(int units, ScrollGranularity);
     void scrollByLines(int lines);
     void scrollByPages(int pages);
 
@@ -77,6 +77,8 @@ public:
     int offsetWidth();
     int offsetHeight();
     Element* offsetParent();
+    int clientLeft();
+    int clientTop();
     int clientWidth();
     int clientHeight();
     int scrollLeft();
@@ -152,6 +154,7 @@ public:
     virtual String toString() const;
 
     virtual bool isURLAttribute(Attribute *attr) const;
+    virtual String target() const { return String(); }
         
     virtual void focus();
     virtual void updateFocusAppearance();
@@ -165,8 +168,13 @@ public:
 #endif
 
     Node* insertAdjacentElement(const String& where, Node* newChild, int& exception);
-    bool contains(const Element*) const;
+    bool contains(const Node*) const;
+
+    String innerText() const;
+    String outerText() const;
  
+    String title() const;
+
 protected:
     virtual void createAttributeMap() const;
     String openTagStartToString() const;

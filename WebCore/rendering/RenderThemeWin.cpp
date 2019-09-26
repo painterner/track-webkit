@@ -26,7 +26,6 @@
 #include <cairo-win32.h>
 #include "Document.h"
 #include "GraphicsContext.h"
-#include "RenderPopupMenuWin.h"
 
 /* 
  * The following constants are used to determine how a widget is drawn using
@@ -147,31 +146,6 @@ Color RenderThemeWin::platformInactiveSelectionForegroundColor() const
     return Color::white;
 }
 
-void RenderThemeWin::addIntrinsicMargins(RenderStyle* style) const
-{
-    // Cut out the intrinsic margins completely if we end up using a small font size
-    if (style->fontSize() < 11)
-        return;
-    
-    // Intrinsic margin value.
-    const int m = 2;
-    
-    // FIXME: Using width/height alone and not also dealing with min-width/max-width is flawed.
-    if (style->width().isIntrinsicOrAuto()) {
-        if (style->marginLeft().quirk())
-            style->setMarginLeft(Length(m, Fixed));
-        if (style->marginRight().quirk())
-            style->setMarginRight(Length(m, Fixed));
-    }
-
-    if (style->height().isAuto()) {
-        if (style->marginTop().quirk())
-            style->setMarginTop(Length(m, Fixed));
-        if (style->marginBottom().quirk())
-            style->setMarginBottom(Length(m, Fixed));
-    }
-}
-
 bool RenderThemeWin::supportsFocus(EAppearance appearance)
 {
     switch (appearance) {
@@ -196,10 +170,10 @@ unsigned RenderThemeWin::determineState(RenderObject* o)
         result = TFS_READONLY; // Readonly is supported on textfields.
     else if (supportsFocus(o->style()->appearance()) && isFocused(o))
         result = TS_FOCUSED;
+    else if (isPressed(o)) // Active overrides hover.
+        result = TS_ACTIVE;
     else if (isHovered(o))
         result = TS_HOVER;
-    else if (isPressed(o))
-        result = TS_ACTIVE;
     if (isChecked(o))
         result += 4; // 4 unchecked states, 4 checked states.
     return result;
@@ -234,42 +208,17 @@ ThemeData RenderThemeWin::getThemeData(RenderObject* o)
 
 void RenderThemeWin::adjustButtonStyle(CSSStyleSelector*, RenderStyle* style, Element*) const
 {
-    addIntrinsicMargins(style);
 }
 
+// May need to add stuff to these later, so keep the graphics context retrieval/release in some helpers.
 static HDC prepareForDrawing(GraphicsContext* g)
 {
-    cairo_surface_t* surface = cairo_get_target(g->platformContext());
-    HDC hdc = cairo_win32_surface_get_dc(surface);
-    SaveDC(hdc);
-    
-    // FIXME: We need to make sure a clip is really set on the HDC.  See what Mozilla does with
-    // UpdateSurfaceClip on its GraphicsContext. (Cairo may not have put its clip into native form yet.)
-
-    // Call SetWorldTransform to honor the current Cairo transform.
-    SetGraphicsMode(hdc, GM_ADVANCED); // We need this call for themes to honor world transforms.
-    cairo_matrix_t mat;
-    cairo_get_matrix(g->platformContext(), &mat);
-    XFORM xform;
-    xform.eM11 = mat.xx;
-    xform.eM12 = mat.xy;
-    xform.eM21 = mat.yx;
-    xform.eM22 = mat.yy;
-    xform.eDx = mat.x0;
-    xform.eDy = mat.y0;
-    SetWorldTransform(hdc, &xform);
-
-    return hdc;
+    return g->getWindowsContext();
 }
-
-static void doneDrawing(GraphicsContext* g)
+ 
+static void doneDrawing(GraphicsContext* g, HDC hdc)
 {
-    cairo_surface_t* surface = cairo_get_target(g->platformContext());
-    HDC hdc = cairo_win32_surface_get_dc(surface);
-    RestoreDC(hdc, -1);
-
-    // We call this whenever we do drawing outside of cairo.    
-    cairo_surface_mark_dirty(surface);
+    g->releaseWindowsContext(hdc);
 }
 
 bool RenderThemeWin::paintButton(RenderObject* o, const RenderObject::PaintInfo& i, const IntRect& r)
@@ -289,10 +238,10 @@ bool RenderThemeWin::paintButton(RenderObject* o, const RenderObject::PaintInfo&
     ThemeData themeData = getThemeData(o);
     
     // Now paint the button.
-    HDC hdc = prepareForDrawing(i.p);  
+    HDC hdc = prepareForDrawing(i.context);  
     RECT widgetRect = r;
     drawThemeBG(m_buttonTheme, hdc, themeData.m_part, themeData.m_state, &widgetRect, NULL);
-    doneDrawing(i.p);
+    doneDrawing(i.context, hdc);
 
     return false;
 }
@@ -321,7 +270,6 @@ void RenderThemeWin::setRadioSize(RenderStyle* style) const
 
 void RenderThemeWin::adjustTextFieldStyle(CSSStyleSelector*, RenderStyle* style, Element*) const
 {
-    addIntrinsicMargins(style);
 }
 
 bool RenderThemeWin::paintTextField(RenderObject* o, const RenderObject::PaintInfo& i, const IntRect& r)
@@ -341,27 +289,21 @@ bool RenderThemeWin::paintTextField(RenderObject* o, const RenderObject::PaintIn
     ThemeData themeData = getThemeData(o);
     
     // Now paint the text field.
-    HDC hdc = prepareForDrawing(i.p);
+    HDC hdc = prepareForDrawing(i.context);
     RECT widgetRect = r;
     drawThemeBG(m_textFieldTheme, hdc, themeData.m_part, themeData.m_state, &widgetRect, NULL);
-    doneDrawing(i.p);
+    doneDrawing(i.context, hdc);
 
     return false;
 }
 
 void RenderThemeWin::adjustTextAreaStyle(CSSStyleSelector*, RenderStyle* style, Element*) const
 {
-    addIntrinsicMargins(style);
 }
 
 bool RenderThemeWin::paintTextArea(RenderObject* o, const RenderObject::PaintInfo& i, const IntRect& r)
 {
     return paintTextField(o, i, r);
-}
-
-RenderPopupMenu* RenderThemeWin::createPopupMenu(RenderArena* arena, Document* doc, RenderMenuList* menuList)
-{
-    return new (arena) RenderPopupMenuWin(doc, menuList);
 }
 
 }
